@@ -1,0 +1,40 @@
+--- a/src/plugins/platforms/ohos/qohosplatformtheme.cpp
++++ b/src/plugins/platforms/ohos/qohosplatformtheme.cpp
+@@ -832,17 +832,28 @@
+ QOhosOptional<QPixmap> tryGetFilePixmapByFilenameExtension(
+     QtOhos::JsState &jsState, const std::string &filenameExtension)
+ {
+-    std::string ohosDotFilenameExtension = "." + filenameExtension;
+-    auto uniformDataType = jsState.eval<QNapi::String>(
+-        "@kit.ArkData.uniformTypeDescriptor.getUniformDataTypeByFilenameExtension(*)",
+-        {ohosDotFilenameExtension});
+-
+-    auto resourceValue = jsState.eval(
+-        "@kit.FileManagerServiceKit.fileManagerService.getFileIconSync(*)", {uniformDataType});
+-    if (resourceValue.IsObject()) {
+-        return tryGetFilePixmapByResourceObject(jsState, QNapi::checkedCast<QNapi::Object>(resourceValue));
+-    } else {
+-        qOhosPrintfWarning("%s: got unhandled resource result type, ignore it", Q_FUNC_INFO);
+-        return makeEmptyQOhosOptional();
++    try {
++        std::string ohosDotFilenameExtension = "." + filenameExtension;
++        auto uniformDataType = jsState.eval<QNapi::String>(
++            "@kit.ArkData.uniformTypeDescriptor.getUniformDataTypeByFilenameExtension(*)",
++            {ohosDotFilenameExtension});
++
++        auto resourceValue = jsState.eval(
++            "@kit.FileManagerServiceKit.fileManagerService.getFileIconSync(*)", {uniformDataType});
++        if (resourceValue.IsObject()) {
++            return tryGetFilePixmapByResourceObject(
++                jsState, QNapi::checkedCast<QNapi::Object>(resourceValue));
++        }
++        qOhosPrintfWarning("%s: got unhandled resource result type, ignore it", Q_FUNC_INFO);
++    } catch (const std::exception &error) {
++        // FileManagerServiceKit is optional and is not part of every OHOS
++        // SDK/product. A missing system icon must not abort the UI thread.
++        qOhosPrintfWarning(
++            "%s: system file icon lookup unavailable for extension '%s': %s",
++            Q_FUNC_INFO, filenameExtension.c_str(), error.what());
+     }
++    return makeEmptyQOhosOptional();
+ }

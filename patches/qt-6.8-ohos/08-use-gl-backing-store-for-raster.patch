@@ -1,0 +1,28 @@
+--- a/src/plugins/platforms/ohos/qohosplatformintegration.cpp
++++ b/src/plugins/platforms/ohos/qohosplatformintegration.cpp
+@@
+-    case QSurface::RasterSurface:
+-    case QSurface::OpenGLSurface:
+-        result = std::make_unique<QOhosPlatformBackingStore>(
+-            window,
+-            QOhosPlatformBackingStore::CreateInfo{
+-                .debugDrawFlushedRegion = QtOhos::isDebugDrawQtRasterBackingStoreFlushedRegionEnabled(),
+-                .enableVsync = QtOhos::isVsyncOnSoftwareBackingStoreEnabled(),
+-            });
++    case QSurface::RasterSurface:
++        // QOpenGLWidget keeps the top-level QWidget as RasterSurface while
++        // asking QWidgetRepaintManager to composite OpenGL child textures.
++        // The generic OHOS QRhi backing store enters Qt's GLES compositor,
++        // whose pipeline is not usable with the gl4es compatibility layer.
++        // Use the same explicit OpenGL compositor as RasterGLSurface so the
++        // platform override of rhiFlush() is selected for the top-level.
++        result = makeGlOhosPlatformBackingStore(window);
++        break;
++    case QSurface::OpenGLSurface:
++        result = std::make_unique<QOhosPlatformBackingStore>(
++            window,
++            QOhosPlatformBackingStore::CreateInfo{
++                .debugDrawFlushedRegion = QtOhos::isDebugDrawQtRasterBackingStoreFlushedRegionEnabled(),
++                .enableVsync = QtOhos::isVsyncOnSoftwareBackingStoreEnabled(),
++            });
+        break;

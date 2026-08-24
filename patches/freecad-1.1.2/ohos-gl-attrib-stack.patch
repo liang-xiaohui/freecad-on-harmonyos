@@ -1,0 +1,166 @@
+--- a/src/Gui/View3DInventorViewer.cpp	2026-07-23 21:43:36.000000000 +0800
++++ b/src/Gui/View3DInventorViewer.cpp	2026-08-23 18:39:03.676216249 +0800
+@@ -2405,9 +2405,11 @@
+     gl.apply(this->getSoRenderManager()->getSceneGraph());
+     gl.apply(this->foregroundroot);
+ 
++#if !defined(FREECAD_OHOS)
+     if (this->axiscrossEnabled) {
+         this->drawAxisCross();
+     }
++#endif
+ 
+     fbo->release();
+ }
+@@ -2463,9 +2465,11 @@
+         it->paintGL();
+     }
+ 
++#if !defined(FREECAD_OHOS)
+     if (naviCubeEnabled) {
+         naviCube->drawNaviCube();
+     }
++#endif
+ 
+     glPopAttrib();
+ }
+@@ -2602,9 +2606,11 @@
+         glra->apply(this->foregroundroot);
+     }
+ 
++#if !defined(FREECAD_OHOS)
+     if (this->axiscrossEnabled) {
+         this->drawAxisCross();
+     }
++#endif
+ 
+ #if defined(ENABLE_GL_DEPTH_RANGE)
+     // using the main portion of z-buffer again (for frontbuffer highlighting)
+@@ -2656,9 +2662,11 @@
+         fpsCounter->move(xOffset, height() - fpsCounter->height() - 5);
+     }
+ 
++#if !defined(FREECAD_OHOS)
+     if (naviCubeEnabled) {
+         naviCube->drawNaviCube();
+     }
++#endif
+ 
+     // Workaround for inconsistent QT behavior related to handling custom OpenGL widgets that
+     // leave non opaque alpha values in final output.
+@@ -2674,11 +2682,23 @@
+     // https://bugreports.qt.io/browse/QTBUG-119214
+     // https://github.com/FreeCAD/FreeCAD/issues/8341
+     // https://github.com/FreeCAD/FreeCAD/issues/6177
++#if defined(FREECAD_OHOS)
++    GLboolean colorMask[4];
++    GLfloat clearColor[4];
++    glGetBooleanv(GL_COLOR_WRITEMASK, colorMask);
++    glGetFloatv(GL_COLOR_CLEAR_VALUE, clearColor);
++#else
+     glPushAttrib(GL_COLOR_BUFFER_BIT);
++#endif
+     glColorMask(false, false, false, true);
+     glClearColor(0, 0, 0, 1);
+     glClear(GL_COLOR_BUFFER_BIT);
++#if defined(FREECAD_OHOS)
++    glColorMask(colorMask[0], colorMask[1], colorMask[2], colorMask[3]);
++    glClearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
++#else
+     glPopAttrib();
++#endif
+ }
+ 
+ void View3DInventorViewer::setSeekMode(bool on)
+@@ -4341,7 +4361,15 @@
+     glMatrixMode(GL_MODELVIEW);
+     glPushMatrix();
+     glLoadIdentity();
++#if defined(FREECAD_OHOS)
++    // gl4es' emulated attribute stack is unstable on the OHOS external EGL
++    // context. Save the small set of states changed by this background pass.
++    const GLboolean depthTestEnabled = glIsEnabled(GL_DEPTH_TEST);
++    const GLboolean lightingEnabled = glIsEnabled(GL_LIGHTING);
++    const GLboolean texture2dEnabled = glIsEnabled(GL_TEXTURE_2D);
++#else
+     glPushAttrib(GL_ENABLE_BIT);
++#endif
+     glDisable(GL_DEPTH_TEST);
+     glDisable(GL_LIGHTING);
+     glDisable(GL_TEXTURE_2D);
+@@ -4355,7 +4383,28 @@
+     glColor3f(float(col.redF()), float(col.greenF()), float(col.blueF()));
+     glVertex2f(1, -1);
+     glEnd();
++#if defined(FREECAD_OHOS)
++    if (depthTestEnabled) {
++        glEnable(GL_DEPTH_TEST);
++    }
++    else {
++        glDisable(GL_DEPTH_TEST);
++    }
++    if (lightingEnabled) {
++        glEnable(GL_LIGHTING);
++    }
++    else {
++        glDisable(GL_LIGHTING);
++    }
++    if (texture2dEnabled) {
++        glEnable(GL_TEXTURE_2D);
++    }
++    else {
++        glDisable(GL_TEXTURE_2D);
++    }
++#else
+     glPopAttrib();
++#endif
+     glPopMatrix();
+     glMatrixMode(GL_PROJECTION);
+     glPopMatrix();
+--- a/src/Gui/Inventor/SoFCBackgroundGradient.cpp	2026-07-23 21:43:36.000000000 +0800
++++ b/src/Gui/Inventor/SoFCBackgroundGradient.cpp	2026-08-23 18:38:04.508211249 +0800
+@@ -105,7 +105,15 @@
+     glMatrixMode(GL_MODELVIEW);
+     glPushMatrix();
+     glLoadIdentity();
++#if defined(FREECAD_OHOS)
++    // gl4es' emulated attribute stack is unstable on the OHOS external EGL
++    // context. Save the small set of states changed by this background pass.
++    const GLboolean depthTestEnabled = glIsEnabled(GL_DEPTH_TEST);
++    const GLboolean lightingEnabled = glIsEnabled(GL_LIGHTING);
++    const GLboolean texture2dEnabled = glIsEnabled(GL_TEXTURE_2D);
++#else
+     glPushAttrib(GL_ENABLE_BIT);
++#endif
+     glDisable(GL_DEPTH_TEST);
+     glDisable(GL_LIGHTING);
+     glDisable(GL_TEXTURE_2D);
+@@ -179,7 +187,28 @@
+     }  // end of radial gradient
+     glEnd();
+ 
++#if defined(FREECAD_OHOS)
++    if (depthTestEnabled) {
++        glEnable(GL_DEPTH_TEST);
++    }
++    else {
++        glDisable(GL_DEPTH_TEST);
++    }
++    if (lightingEnabled) {
++        glEnable(GL_LIGHTING);
++    }
++    else {
++        glDisable(GL_LIGHTING);
++    }
++    if (texture2dEnabled) {
++        glEnable(GL_TEXTURE_2D);
++    }
++    else {
++        glDisable(GL_TEXTURE_2D);
++    }
++#else
+     glPopAttrib();
++#endif
+     glPopMatrix();  // restore modelview
+     glMatrixMode(GL_PROJECTION);
+     glPopMatrix();

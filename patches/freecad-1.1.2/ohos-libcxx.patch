@@ -1,0 +1,16 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -50,6 +50,12 @@ endif()
+ 
+ project(FreeCAD)
+ 
++# The libc++ bundled with the OHOS Clang 15 SDK ships C++20 ranges behind
++# its experimental feature switch.
++if(CMAKE_SYSTEM_NAME STREQUAL "OHOS")
++    add_compile_definitions(_LIBCPP_ENABLE_EXPERIMENTAL)
++endif()
++
+ set(PACKAGE_VERSION_MAJOR "1")
+ set(PACKAGE_VERSION_MINOR "1")
+ set(PACKAGE_VERSION_PATCH "2") # number of patch release (e.g. "4" for the 0.18.4 release)

@@ -1,0 +1,260 @@
+--- a/src/plugins/platforms/ohos/qohosplatformbackingstoregl.cpp
++++ b/src/plugins/platforms/ohos/qohosplatformbackingstoregl.cpp
+@@ -4,12 +4,13 @@
+ #include <qohosplatformbackingstoregl.h>
+ 
+ #include <QtGui/private/qhighdpiscaling_p.h>
+-#include <QtGui/private/qopenglpaintdevice_p.h>
++#include <QtOpenGL/private/qopenglpaintdevice_p.h>
+ #include <QtGui/qopenglcontext.h>
+-#include <QtGui/qopenglframebufferobject.h>
++#include <QtOpenGL/qopenglframebufferobject.h>
+ #include <QtGui/qopenglfunctions.h>
+-#include <QtGui/qopengltextureblitter.h>
++#include <QtOpenGL/qopengltextureblitter.h>
+ #include <memory>
++#include <rhi/qrhi.h>
+ #include <qohosplatformscreen.h>
+ #include <qohosplatformwindow.h>
+ #include <render/qohosview.h>
+@@ -83,6 +84,77 @@
+     unbindTextureBlitter(blitter);
+ }
+ 
++QRect toBottomLeftRect(const QRect &topLeftRect, int sourceHeight)
++{
++    return QRect(topLeftRect.x(), sourceHeight - topLeftRect.bottom() - 1,
++                 topLeftRect.width(), topLeftRect.height());
++}
++
++bool hasUsableCurrentContext(QOpenGLContext &context)
++{
++    if (QOpenGLContext::currentContext() != &context)
++        return false;
++
++    auto *functions = context.functions();
++    if (functions == nullptr)
++        return false;
++
++    // OHOS can report a valid QOpenGLContext while the OpenGL wrapper has not
++    // installed the per-context entry points yet.  Do not let Qt's generic
++    // QRhi path touch that state: it assumes a non-null pipeline and crashes
++    // in QPlatformBackingStore::rhiFlush().
++    return functions->glGetString(GL_VERSION) != nullptr;
++}
++
++void blitTextureList(
++    QOpenGLTextureBlitter &blitter,
++    const QPlatformTextureList &textures,
++    const QRect &targetWindowRect)
++{
++    auto blitTexture = [&](int index) {
++        auto *texture = textures.texture(index);
++        if (texture == nullptr)
++            return;
++
++        const GLuint textureId = static_cast<GLuint>(texture->nativeTexture().object);
++        if (textureId == 0)
++            return;
++
++        const QRect rectInWindow = textures.geometry(index);
++        if (!rectInWindow.isValid() || rectInWindow.isEmpty())
++            return;
++
++        QRect clipRect = textures.clipRect(index);
++        if (clipRect.isEmpty())
++            clipRect = QRect(QPoint(), rectInWindow.size());
++        clipRect = clipRect.intersected(QRect(QPoint(), rectInWindow.size()));
++        if (clipRect.isEmpty())
++            return;
++
++        const QRect clippedRectInWindow = rectInWindow & clipRect.translated(rectInWindow.topLeft());
++        if (clippedRectInWindow.isEmpty())
++            return;
++
++        const QRect sourceRect = toBottomLeftRect(clipRect, rectInWindow.height());
++        const QMatrix4x4 target = QOpenGLTextureBlitter::targetTransform(
++            clippedRectInWindow, targetWindowRect);
++        const QMatrix3x3 source = QOpenGLTextureBlitter::sourceTransform(
++            sourceRect, rectInWindow.size(), QOpenGLTextureBlitter::OriginBottomLeft);
++        blitter.blit(textureId, target, source);
++    };
++
++    // Match Qt's OpenGL compositor ordering: ordinary widget textures first,
++    // the raster backing store in the middle, and StacksOnTop textures last.
++    for (int i = 0; i < textures.count(); ++i) {
++        if (!textures.flags(i).testFlag(QPlatformTextureList::StacksOnTop))
++            blitTexture(i);
++    }
++    for (int i = 0; i < textures.count(); ++i) {
++        if (textures.flags(i).testFlag(QPlatformTextureList::StacksOnTop))
++            blitTexture(i);
++    }
++}
++
+ struct RenderContextData
+ {
+     QWindow *qWindow;
+@@ -129,6 +201,10 @@
+     void flush(
+         QWindow *targetWindow, const QRegion &relToParentWindowRegion,
+         const QPoint &relToRootWindowOffset) override;
++    FlushResult rhiFlush(
++        QWindow *targetWindow, qreal sourceDevicePixelRatio,
++        const QRegion &region, const QPoint &offset,
++        QPlatformTextureList *textures, bool translucentBackground) override;
+     void resize(const QSize &size, const QRegion &staticContents) override;
+ 
+     void beginPaint(const QRegion &) override;
+@@ -177,14 +253,21 @@
+ 
+     auto dstWindowCtxData = optDstWidnowCtxData.value();
+ 
+-    unbindFrameBufferObject(*m_framebuffer);
+-    m_glContext->makeCurrent(dstWindowCtxData.qWindow);
++    if (!m_framebuffer || !m_glContext->makeCurrent(dstWindowCtxData.qWindow)
++        || !hasUsableCurrentContext(*m_glContext)) {
++        return;
++    }
+ 
+     if (!m_blitter) {
+         m_blitter = std::make_unique<QOpenGLTextureBlitter>();
+-        m_blitter->create();
++        if (!m_blitter->create()) {
++            m_blitter.reset();
++            return;
++        }
+     }
+ 
++    unbindFrameBufferObject(*m_framebuffer);
++
+     auto dstSize = dstWindowCtxData.unscaledWindowGeometry.size();
+ 
+     auto srcRect = QRect(
+@@ -197,6 +280,70 @@
+     m_glContext->swapBuffers(dstWindowCtxData.qWindow);
+ }
+ 
++QPlatformBackingStore::FlushResult QOhosPlatformBackingStoreGL::rhiFlush(
++    QWindow *targetWindow, qreal sourceDevicePixelRatio,
++    const QRegion &region, const QPoint &offset,
++    QPlatformTextureList *textures, bool translucentBackground)
++{
++    Q_UNUSED(sourceDevicePixelRatio);
++    Q_UNUSED(region);
++    Q_UNUSED(offset);
++    Q_UNUSED(translucentBackground);
++
++    // This backing store deliberately does not create QPlatformBackingStore's
++    // QRhi support.  The base implementation would index an empty RHI state
++    // and enter QBackingStoreDefaultCompositor with a null pipeline.
++    if (targetWindow == nullptr || textures == nullptr || !m_framebuffer || !m_glContext)
++        return FlushFailed;
++
++    auto optTarget = RenderContextData::tryCreateForQWindow(targetWindow);
++    if (!optTarget.hasValue())
++        return FlushFailed;
++    const auto target = optTarget.value();
++
++    if (!m_glContext->makeCurrent(target.qWindow) || !hasUsableCurrentContext(*m_glContext))
++        return FlushFailed;
++
++    const QSize targetSize = target.unscaledWindowGeometry.size();
++    if (!targetSize.isValid() || targetSize.isEmpty())
++        return FlushFailed;
++
++    if (!m_blitter) {
++        m_blitter = std::make_unique<QOpenGLTextureBlitter>();
++        if (!m_blitter->create()) {
++            m_blitter.reset();
++            return FlushFailed;
++        }
++    }
++    if (!m_blitter->isCreated())
++        return FlushFailed;
++
++    m_framebuffer->release();
++    setViewportAndClearColorBuffer(*m_glContext, targetSize, QColor(Qt::transparent));
++
++    const QRect targetWindowRect(QPoint(), targetSize);
++    auto *functions = m_glContext->functions();
++    functions->glDisable(GL_BLEND);
++    m_blitter->bind();
++    blitTextureList(*m_blitter, *textures, targetWindowRect);
++
++    // The raster backing store is the middle layer in Qt's normal OpenGL
++    // compositor.  Keep alpha enabled so the QOpenGLWidget view remains
++    // visible through its transparent hole.
++    functions->glEnable(GL_BLEND);
++    functions->glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
++    m_blitter->setOpacity(1.0f);
++    m_blitter->blit(
++        m_framebuffer->texture(),
++        QOpenGLTextureBlitter::targetTransform(targetWindowRect, targetWindowRect),
++        QOpenGLTextureBlitter::OriginBottomLeft);
++    m_blitter->release();
++    functions->glDisable(GL_BLEND);
++
++    m_glContext->swapBuffers(target.qWindow);
++    return FlushSuccess;
++}
++
+ void QOhosPlatformBackingStoreGL::resize(const QSize &targetSize, const QRegion &)
+ {
+     m_pendingResizeRequest = targetSize;
+@@ -214,22 +361,39 @@
+     if (!m_glContext) {
+         m_glContext = std::make_unique<QOpenGLContext>(rootWindowCtxData.qWindow);
+         m_glContext->setFormat(rootWindowCtxData.qWindow->format());
+-        m_glContext->create();
++        if (!m_glContext->create()) {
++            m_glContext.reset();
++            return;
++        }
+     }
+ 
+-    m_glContext->makeCurrent(rootWindowCtxData.qWindow);
++    if (!m_glContext->makeCurrent(rootWindowCtxData.qWindow)
++        || !hasUsableCurrentContext(*m_glContext)) {
++        return;
++    }
+ 
+     auto targetFramebufferResolution = m_pendingResizeRequest.valueOr(
+         rootWindowCtxData.platformWindow->windowGeometry().size());
+     if (!m_framebuffer || m_framebuffer->size() != targetFramebufferResolution) {
++        if (!targetFramebufferResolution.isValid() || targetFramebufferResolution.isEmpty()) {
++            return;
++        }
+         m_framebuffer = std::make_unique<QOpenGLFramebufferObject>(targetFramebufferResolution);
++        if (!m_framebuffer->isValid()) {
++            m_framebuffer.reset();
++            return;
++        }
+         m_paintDevice = std::make_unique<QOpenGLPaintDevice>(targetFramebufferResolution);
+         if (QHighDpiScaling::isActive()) {
+-            auto pixelDensity = rootWindowCtxData.platformWindow->screen()->pixelDensity();
++            auto pixelDensity = rootWindowCtxData.platformWindow->screen()->devicePixelRatio();
+             m_paintDevice->setDevicePixelRatio(pixelDensity);
+         }
+ 
+-        m_framebuffer->bind();
++        if (!m_framebuffer->bind()) {
++            m_framebuffer.reset();
++            m_paintDevice.reset();
++            return;
++        }
+         setViewportAndClearColorBuffer(*m_glContext, targetFramebufferResolution, QColor(Qt::transparent));
+     }
+ }
+@@ -246,7 +410,10 @@
+ 
+     m_pendingResizeRequest = makeEmptyQOhosOptional();
+ 
+-    m_glContext->makeCurrent(window());
++    if (!m_glContext || !m_glContext->makeCurrent(window())
++        || !hasUsableCurrentContext(*m_glContext)) {
++        return;
++    }
+     m_framebuffer->bind();
+ }
+ 

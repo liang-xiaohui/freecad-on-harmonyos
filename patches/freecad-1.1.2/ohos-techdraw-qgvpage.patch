@@ -1,0 +1,13 @@
+diff --git a/src/Mod/TechDraw/Gui/QGVPage.cpp b/src/Mod/TechDraw/Gui/QGVPage.cpp
+--- a/src/Mod/TechDraw/Gui/QGVPage.cpp
++++ b/src/Mod/TechDraw/Gui/QGVPage.cpp
+@@ -276,7 +276,7 @@
+ void QGVPage::startBalloonPlacing(DrawView* parent)
+ {
+     balloonPlacing = true;
+     m_balloonParent = parent;
+-    const QPixmap pixmap = balloonCursor->pixmap();
+-(pixmap.isNull() ? QPixmap() : pixmap), balloonHotspot.x(), balloonHotspot.y()));
++    activateCursor(
++        QCursor(balloonCursor->pixmap(Qt::ReturnByValue), balloonHotspot.x(), balloonHotspot.y()));
+ }

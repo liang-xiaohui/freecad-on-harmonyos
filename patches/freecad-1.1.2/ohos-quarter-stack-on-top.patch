@@ -1,0 +1,15 @@
+--- a/src/Gui/Quarter/QuarterWidget.cpp
++++ b/src/Gui/Quarter/QuarterWidget.cpp
+@@ -180,6 +180,12 @@ public:
+         surfaceFormat.setProfile(QSurfaceFormat::NoProfile);
+         surfaceFormat.setOption(QSurfaceFormat::DeprecatedFunctions, false);
+
++        // The OHOS raster backing store is opaque. Qt normally composites a
++        // QOpenGLWidget below that backing store and relies on a transparent
++        // hole for the viewport; on OHOS the raster layer otherwise covers
++        // the successfully rendered FBO with the view's white background.
++        // Put the viewport texture after the raster layer in the compositor.
++        setAttribute(Qt::WA_AlwaysStackOnTop, true);
+ #else
+         surfaceFormat.setRenderableType(QSurfaceFormat::OpenGL);
+         surfaceFormat.setProfile(QSurfaceFormat::CompatibilityProfile);

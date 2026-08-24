@@ -1,0 +1,34 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 1111111..2222222 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -202,8 +202,12 @@ else()
+     #include_directories("${OPENGL_INCLUDE_DIR}")
+     if (NOT TARGET OpenGL::GL)
+       list(APPEND COIN_TARGET_INCLUDE_DIRECTORIES ${OPENGL_INCLUDE_DIR})
+-      list(APPEND COIN_TARGET_LINK_LIBRARIES ${OPENGL_gl_LIBRARY} ${OPENGL_glu_LIBRARY})
++      list(APPEND COIN_TARGET_LINK_LIBRARIES ${OPENGL_gl_LIBRARY})
++      if (OPENGL_glu_LIBRARY)
++        list(APPEND COIN_TARGET_LINK_LIBRARIES ${OPENGL_glu_LIBRARY})
++      endif()
+     else()
+-      list(APPEND COIN_TARGET_LINK_LIBRARIES OpenGL::GL OpenGL::GLU)
++      list(APPEND COIN_TARGET_LINK_LIBRARIES OpenGL::GL)
++      if (TARGET OpenGL::GLU)
++        list(APPEND COIN_TARGET_LINK_LIBRARIES OpenGL::GLU)
++      endif()
+     endif()
+   endif()
+ endif()
+@@ -575,7 +575,8 @@
+-if(NOT (HAVE_WGL OR HAVE_AGL OR HAVE_CGL OR HAVE_GLX))
++if(NOT (OHOS OR CMAKE_SYSTEM_NAME STREQUAL "HarmonyOS") AND
++   NOT (HAVE_WGL OR HAVE_AGL OR HAVE_CGL OR HAVE_GLX))
+  endif()
+  set(CMAKE_REQUIRED_LIBRARIES ${COIN_TARGET_LINK_LIBRARIES})
+ check_cxx_source_compiles("
+     #include <GL/gl.h>
+     #include <GL/glx.h>
+     int main() { (void)glXChooseVisual(0L, 0, 0L); glEnd(); return 0; }
+   " HAVE_GLX)
+ endif()

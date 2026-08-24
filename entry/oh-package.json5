@@ -1,0 +1,11 @@
+{
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "FreeCAD v1.1.2 GUI (Qt6) entry module",
+  "devDependencies": {
+    "@types/libqohos.so": "file:./src/main/qt"
+  },
+  "dependencies": {
+    "libfreecadacceptance.so": "file:./src/main/cpp/types/libfreecadacceptance"
+  }
+}

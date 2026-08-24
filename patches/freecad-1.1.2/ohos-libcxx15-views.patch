@@ -1,0 +1,44 @@
+diff --git a/src/Mod/Sketcher/App/Constraint.cpp b/src/Mod/Sketcher/App/Constraint.cpp
+--- a/src/Mod/Sketcher/App/Constraint.cpp
++++ b/src/Mod/Sketcher/App/Constraint.cpp
+@@ -234,22 +234,24 @@ void Constraint::Restore(XMLReader& reader)
+ 
+     if (reader.hasAttribute("ElementIds") && reader.hasAttribute("ElementPositions")) {
+         auto splitAndClean = [](std::string_view input) {
+-            const char delimiter = ' ';
+-
+-            auto tokens = input | std::views::split(delimiter)
+-                | std::views::transform([](auto&& subrange) {
+-                              // workaround due to lack of std::ranges::to in c++20
+-                              std::string token;
+-                              auto size = std::ranges::distance(subrange);
+-                              token.reserve(size);
+-                              for (char c : subrange) {
+-                                  token.push_back(c);
+-                              }
+-                              return token;
+-                          })
+-                | std::views::filter([](const std::string& s) { return !s.empty(); });
+-
+-            return std::vector<std::string>(tokens.begin(), tokens.end());
++            std::vector<std::string> tokens;
++            std::string_view::size_type tokenStart = 0;
++            while (tokenStart < input.size()) {
++                while (tokenStart < input.size() && input[tokenStart] == ' ') {
++                    ++tokenStart;
++                }
++                if (tokenStart == input.size()) {
++                    break;
++                }
++
++                auto tokenEnd = input.find(' ', tokenStart);
++                if (tokenEnd == std::string_view::npos) {
++                    tokenEnd = input.size();
++                }
++                tokens.emplace_back(input.substr(tokenStart, tokenEnd - tokenStart));
++                tokenStart = tokenEnd + 1;
++            }
++            return tokens;
+         };
+ 
+         const std::string elementIds = reader.getAttribute<const char*>("ElementIds");

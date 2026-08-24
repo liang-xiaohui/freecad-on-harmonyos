@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "app_name",
+      "value": "FreeCAD"
+    },
+    {
+      "name": "module_desc",
+      "value": "FreeCAD v1.1.2 GUI on HarmonyOS (Qt6)"
+    },
+    {
+      "name": "QAbility_desc",
+      "value": "FreeCAD GUI Qt application"
+    }
+  ]
+}

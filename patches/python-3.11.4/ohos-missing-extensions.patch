@@ -1,0 +1,18 @@
+diff --git a/Modules/socketmodule.c b/Modules/socketmodule.c
+index a87c097..b87d30a 100644
+--- a/Modules/socketmodule.c
++++ b/Modules/socketmodule.c
+@@ -7863,9 +7863,11 @@ socket_exec(PyObject *m)
+     PyModule_AddIntMacro(m, CAN_RAW_RECV_OWN_MSGS);
+ #endif
+-#ifdef HAVE_LINUX_CAN_RAW_FD_FRAMES
++#if defined(HAVE_LINUX_CAN_RAW_FD_FRAMES) && \
++    (defined(HAVE_LINUX_CAN_RAW_H) || defined(HAVE_NETCAN_CAN_H))
+     PyModule_AddIntMacro(m, CAN_RAW_FD_FRAMES);
+ #endif
+-#ifdef HAVE_LINUX_CAN_RAW_JOIN_FILTERS
++#if defined(HAVE_LINUX_CAN_RAW_JOIN_FILTERS) && \
++    (defined(HAVE_LINUX_CAN_RAW_H) || defined(HAVE_NETCAN_CAN_H))
+     PyModule_AddIntMacro(m, CAN_RAW_JOIN_FILTERS);
+ #endif
+ #ifdef HAVE_LINUX_CAN_BCM_H

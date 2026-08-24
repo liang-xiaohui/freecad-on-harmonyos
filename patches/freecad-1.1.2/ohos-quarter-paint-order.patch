@@ -1,0 +1,30 @@
+--- a/src/Gui/Quarter/QuarterWidget.cpp
++++ b/src/Gui/Quarter/QuarterWidget.cpp
+@@ -976,17 +976,22 @@ void QuarterWidget::paintEvent(QPaintEvent* event)
+     // Causes an OpenGL error on resize
+     //glDrawBuffer(w->format().swapBehavior() == QSurfaceFormat::DoubleBuffer ? GL_BACK : GL_FRONT);
+ 
+-    this->actualRedraw();
+-
+     //start the standard graphics view processing for all widgets and graphic items. As 
+     //QGraphicsView initaliizes a QPainter which changes the Opengl context in an unpredictable 
+     //manner we need to store the context and recreate it after Qt is done.
+ #if defined(FREECAD_OHOS)
+-    // QGraphicsView may switch the EGL context while it paints. Avoid the
+-    // GL4ES attribute stack here; restoring it after that switch is unsafe.
++    // The OHOS QPainter path clears the QOpenGLWidget FBO while the graphics
++    // view paints. Draw the Coin scene after that pass so the opaque white
++    // graphics-view background cannot cover the 3D viewport texture.
+     inherited::paintEvent(event);
+-    makeContextCurrent();
++    if (!makeContextCurrent()) {
++        PRIVATE(this)->autoredrawenabled = true;
++        deferPaintUntilContextIsReady();
++        return;
++    }
++    this->actualRedraw();
+ #else
++    this->actualRedraw();
+     glPushAttrib(GL_MULTISAMPLE_BIT_EXT);
+     inherited::paintEvent(event);
+     glPopAttrib();

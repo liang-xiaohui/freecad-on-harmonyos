@@ -1,0 +1,34 @@
+--- a/src/plugins/platforms/ohos/qohoseglplatformcontext.cpp
++++ b/src/plugins/platforms/ohos/qohoseglplatformcontext.cpp
+@@ -40,6 +40,12 @@
+     }
+ }
+ 
++void *loadedGl4esHandle()
++{
++    static void *handle = dlopen("libGL.so", RTLD_NOW | RTLD_NOLOAD);
++    return handle;
++}
++
+ }
+ 
+ QOhosEGLPlatformContext::QOhosEGLPlatformContext(const CreateInfo &createInfo)
+@@ -58,6 +64,20 @@
+ {
+ }
+ 
++QFunctionPointer QOhosEGLPlatformContext::getProcAddress(const char *procName)
++{
++    // OHOS eglGetProcAddress()/libGLESv2.so can return non-null wrapper stubs
++    // whose function slots are not initialized for the current EGL context.
++    // gl4es is loaded globally by the application before QPA startup and owns
++    // the valid compatibility entry points used by FreeCAD/Coin3D.
++    if (void *gl4esHandle = loadedGl4esHandle()) {
++        if (void *proc = dlsym(gl4esHandle, procName))
++            return reinterpret_cast<QFunctionPointer>(proc);
++    }
++
++    return QEGLPlatformContext::getProcAddress(procName);
++}
++
+ bool QOhosEGLPlatformContext::makeCurrent(QPlatformSurface *surface)

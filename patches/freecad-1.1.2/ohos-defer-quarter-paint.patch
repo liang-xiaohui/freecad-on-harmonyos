@@ -1,0 +1,137 @@
+--- a/src/Gui/Quarter/QuarterWidget.cpp
++++ b/src/Gui/Quarter/QuarterWidget.cpp
+@@ -55,12 +55,18 @@
+ #include <QGuiApplication>
+ #include <QMetaObject>
++#include <QOpenGLContext>
+ #include <QOpenGLDebugLogger>
+ #include <QOpenGLDebugMessage>
+ #include <QOpenGLWidget>
+ #include <QPaintEvent>
+ #include <QResizeEvent>
++#include <QTimer>
+ #include <QWindow>
+ 
++#if defined(FREECAD_OHOS)
++#include <EGL/egl.h>
++#endif
++
+ #include <Inventor/C/basic.h>
+ #include <Inventor/SbByteBuffer.h>
+ 
+@@ -859,6 +865,66 @@ void QuarterWidget::paintEvent(QPaintEvent* event)
+ {
+     ZoneScoped;
+ 
++    QOpenGLWidget* w = static_cast<QOpenGLWidget*>(this->viewport());
++#if defined(FREECAD_OHOS)
++    constexpr auto surfaceReadyProperty = "_freecad_ohos_surface_ready";
++    constexpr auto surfaceTimerProperty = "_freecad_ohos_surface_timer_started";
++    // ArkUI registers and sizes a new XComponent asynchronously. Block every
++    // first-frame paint until that work has had time to complete.
++    if (!w->property(surfaceReadyProperty).toBool()) {
++        if (!w->property(surfaceTimerProperty).toBool()) {
++            w->setProperty(surfaceTimerProperty, true);
++            QTimer::singleShot(250, w, [w]() {
++                w->setProperty(surfaceReadyProperty, true);
++                w->update();
++            });
++        }
++        return;
++    }
++#endif
++
++    const auto deferPaintUntilContextIsReady = [w]() {
++        QTimer::singleShot(16, w, [w]() { w->update(); });
++    };
++    const auto makeContextCurrent = [w]() {
++        if (!w->isValid() || !w->context()) {
++            return false;
++        }
++
++        w->makeCurrent();
++        if (QOpenGLContext::currentContext() != w->context()) {
++            return false;
++        }
++#if defined(FREECAD_OHOS)
++        // Before an OHOS XComponent surface exists, Qt can make the context
++        // current on the 1x1 startup pbuffer. GL4ES cannot render there.
++        if (eglGetCurrentContext() == EGL_NO_CONTEXT) {
++            return false;
++        }
++        const EGLDisplay display = eglGetCurrentDisplay();
++        const EGLSurface surface = eglGetCurrentSurface(EGL_DRAW);
++        if (display == EGL_NO_DISPLAY || surface == EGL_NO_SURFACE) {
++            return false;
++        }
++        EGLint surfaceWidth = 0;
++        EGLint surfaceHeight = 0;
++        if (eglQuerySurface(display, surface, EGL_WIDTH, &surfaceWidth) != EGL_TRUE
++            || eglQuerySurface(display, surface, EGL_HEIGHT, &surfaceHeight) != EGL_TRUE
++            || surfaceWidth <= 1 || surfaceHeight <= 1) {
++            return false;
++        }
++#endif
++        return true;
++    };
++
++    // Coin and GL4ES both issue GL calls during render-manager setup, so the
++    // context must be current before any initialization or activation below.
++    if (!makeContextCurrent()) {
++        qWarning() << "No current GL context found; deferring Quarter paint";
++        deferPaintUntilContextIsReady();
++        return;
++    }
++
+     if (updateDevicePixelRatio()) {
+         qreal dev_pix_ratio = devicePixelRatio();
+         int width = static_cast<int>(dev_pix_ratio * this->width());
+@@ -878,12 +945,6 @@ void QuarterWidget::paintEvent(QPaintEvent* event)
+ 
+     glMatrixMode(GL_PROJECTION);
+ 
+-    QOpenGLWidget* w = static_cast<QOpenGLWidget*>(this->viewport());
+-    if (!w->isValid()) {
+-        qWarning() << "No valid GL context found!";
+-        return;
+-    }
+-    //assert(w->isValid() && "No valid GL context found!");
+     // We might have to process the delay queue here since we don't know
+     // if paintGL() is called from Qt, and we might have some sensors
+     // waiting to trigger (the redraw sensor has a lower priority than a
+@@ -903,23 +963,31 @@ void QuarterWidget::paintEvent(QPaintEvent* event)
+         // context. Release this context temporarily
+         w->doneCurrent();
+         SoDB::getSensorManager()->processDelayQueue(false);
+-        w->makeCurrent();
++        if (!makeContextCurrent()) {
++            PRIVATE(this)->autoredrawenabled = true;
++            deferPaintUntilContextIsReady();
++            return;
++        }
+     }
+ 
+-    assert(w->isValid() && "No valid GL context found!");
+-
+     // Causes an OpenGL error on resize
+     //glDrawBuffer(w->format().swapBehavior() == QSurfaceFormat::DoubleBuffer ? GL_BACK : GL_FRONT);
+ 
+-    w->makeCurrent();
+     this->actualRedraw();
+ 
+     //start the standard graphics view processing for all widgets and graphic items. As 
+     //QGraphicsView initaliizes a QPainter which changes the Opengl context in an unpredictable 
+     //manner we need to store the context and recreate it after Qt is done.
++#if defined(FREECAD_OHOS)
++    // QGraphicsView may switch the EGL context while it paints. Avoid the
++    // GL4ES attribute stack here; restoring it after that switch is unsafe.
++    inherited::paintEvent(event);
++    makeContextCurrent();
++#else
+     glPushAttrib(GL_MULTISAMPLE_BIT_EXT);
+     inherited::paintEvent(event);
+     glPopAttrib();
++#endif
+ 
+     // Causes an OpenGL error on resize
+     //if (w->format().swapBehavior() == QSurfaceFormat::DoubleBuffer)

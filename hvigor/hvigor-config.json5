@@ -1,0 +1,11 @@
+{
+  "modelVersion": "5.0.0",
+  // 2026-08-22: 关闭 daemon 与并行（本机 hvigor worker 在并行/daemon 下崩溃，
+  // 见 docs/handoff-device-steps.md 排障节）。staging 大（143 .so + ~250MB rawfile），
+  // 串行构建更稳。命令行 --parallel/--daemon 会覆盖此处；建议直接不带这些参数。
+  "execution": {
+    "daemon": false,
+    "parallel": false
+  },
+  "dependencies": {}
+}

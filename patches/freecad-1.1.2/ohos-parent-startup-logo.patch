@@ -1,0 +1,16 @@
+diff --git a/src/Gui/StartupProcess.cpp b/src/Gui/StartupProcess.cpp
+--- a/src/Gui/StartupProcess.cpp
++++ b/src/Gui/StartupProcess.cpp
+@@ -431,7 +431,13 @@ void StartupPostProcess::setupLogo()
+         }
+         QPixmap px(path);
+         if (!px.isNull()) {
++#if defined(FREECAD_OHOS)
++            // Avoid exposing the status-bar logo as a transient top-level QWindow.
++            auto logo = new QLabel(mainWindow->statusBar());
++#else
+             auto logo = new QLabel();
++#endif
+             logo->setPixmap(px.scaledToHeight(32));
+             mainWindow->statusBar()->addPermanentWidget(logo, 0);
+             logo->setFrameShape(QFrame::NoFrame);

@@ -1,0 +1,30 @@
+diff --git a/src/tramp.c b/src/tramp.c
+index 828f675..b11a320 100644
+--- a/src/tramp.c
++++ b/src/tramp.c
+@@ -41,7 +41,8 @@
+ #include <stdio.h>
+ #include <unistd.h>
+ #include <stdlib.h>
+ #include <stdint.h>
++#include <dlfcn.h>
+ #include <fcntl.h>
+ #include <pthread.h>
+ #include <sys/mman.h>
+@@ -226,9 +227,16 @@ ffi_tramp_get_libffi (void)
+   fclose (fp);
+ 
+   if (!found)
+     return 0;
+ 
++  Dl_info info;
++  if (dladdr (tramp_globals.text, &info) != 0
++      && info.dli_fname != NULL)
++    {
++      snprintf (file, PATH_MAX, "%s", info.dli_fname);
++    }
++
+   tramp_globals.fd = open (file, O_RDONLY);
+   if (tramp_globals.fd == -1)
+     return 0;
+ 

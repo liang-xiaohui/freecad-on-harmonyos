@@ -1,0 +1,85 @@
+diff --git a/src/Base/CMakeLists.txt b/src/Base/CMakeLists.txt
+--- a/src/Base/CMakeLists.txt
++++ b/src/Base/CMakeLists.txt
+@@ -319,6 +319,10 @@ SET(FreeCADBase_SRCS
+     PreCompiled.h
+ )
+ 
++if(CMAKE_SYSTEM_NAME STREQUAL "OHOS")
++    list(APPEND FreeCADBase_SRCS PythonOhosCompat.cpp)
++endif()
++
+ IF (MSVC)
+     SET(FreeCADBase_SRCS
+         ${FreeCADBase_SRCS}
+diff --git a/src/Base/PythonOhosCompat.cpp b/src/Base/PythonOhosCompat.cpp
+new file mode 100644
+--- /dev/null
++++ b/src/Base/PythonOhosCompat.cpp
+@@ -0,0 +1,66 @@
++// Compatibility symbols required by the Python 3.11 runtime shipped in the OHOS SDK.
++
++#include <cerrno>
++#include <sys/syscall.h>
++#include <sys/uio.h>
++#include <unistd.h>
++
++#define FC_OHOS_EXPORT __attribute__((visibility("default")))
++
++extern "C" {
++
++FC_OHOS_EXPORT ssize_t preadv2(int fd,
++                               const struct iovec* iov,
++                               int iovcnt,
++                               off_t offset,
++                               int flags)
++{
++    ssize_t result = syscall(SYS_preadv2, fd, iov, iovcnt, offset, flags);
++    if (result == -1 && errno == ENOSYS && flags == 0)
++        return preadv(fd, iov, iovcnt, offset);
++    return result;
++}
++
++FC_OHOS_EXPORT ssize_t pwritev2(int fd,
++                                const struct iovec* iov,
++                                int iovcnt,
++                                off_t offset,
++                                int flags)
++{
++    ssize_t result = syscall(SYS_pwritev2, fd, iov, iovcnt, offset, flags);
++    if (result == -1 && errno == ENOSYS && flags == 0)
++        return pwritev(fd, iov, iovcnt, offset);
++    return result;
++}
++
++FC_OHOS_EXPORT char* gettext(const char* message)
++{
++    return const_cast<char*>(message);
++}
++
++FC_OHOS_EXPORT char* dgettext(const char*, const char* message)
++{
++    return const_cast<char*>(message);
++}
++
++FC_OHOS_EXPORT char* dcgettext(const char*, const char* message, int)
++{
++    return const_cast<char*>(message);
++}
++
++FC_OHOS_EXPORT char* textdomain(const char* domain)
++{
++    return const_cast<char*>(domain ? domain : "messages");
++}
++
++FC_OHOS_EXPORT char* bindtextdomain(const char*, const char* directory)
++{
++    return const_cast<char*>(directory ? directory : "");
++}
++
++FC_OHOS_EXPORT char* bind_textdomain_codeset(const char*, const char* codeset)
++{
++    return const_cast<char*>(codeset ? codeset : "UTF-8");
++}
++
++} // extern "C"

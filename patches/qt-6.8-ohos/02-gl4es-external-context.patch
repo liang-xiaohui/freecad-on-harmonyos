@@ -1,0 +1,33 @@
+--- a/src/plugins/platforms/ohos/qohoseglplatformcontext.cpp
++++ b/src/plugins/platforms/ohos/qohoseglplatformcontext.cpp
+@@ -13,22 +13,30 @@
+ namespace {
+ 
+ using ActivateExternalGl4esContext = void (*)(void *, void *);
++using InitializeGl4es = void (*)();
+ 
+ void activateExternalGl4esContext(EGLContext context, EGLContext shareContext)
+ {
+     static void *gl4esHandle = nullptr;
+     static ActivateExternalGl4esContext activate = nullptr;
++    static InitializeGl4es initialize = nullptr;
+     if (activate == nullptr) {
+         gl4esHandle = dlopen("libGL.so", RTLD_NOW | RTLD_NOLOAD);
+         if (gl4esHandle != nullptr) {
+             activate = reinterpret_cast<ActivateExternalGl4esContext>(
+                 dlsym(gl4esHandle, "gl4es_activate_external_context"));
++            initialize = reinterpret_cast<InitializeGl4es>(
++                dlsym(gl4esHandle, "gl_init"));
+         }
+     }
+     if (activate != nullptr) {
+         activate(
+             reinterpret_cast<void *>(context),
+             reinterpret_cast<void *>(shareContext));
++    } else if (initialize != nullptr) {
++        // Older gl4es builds lack the external-context API. Keep the fallback
++        // for those builds, but do not reset state on modern builds.
++        initialize();
+     }
+ }
+

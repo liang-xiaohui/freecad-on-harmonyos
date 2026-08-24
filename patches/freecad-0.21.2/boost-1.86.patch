@@ -1,0 +1,11 @@
+diff --git a/src/Mod/Part/App/Geometry.cpp b/src/Mod/Part/App/Geometry.cpp
+--- a/src/Mod/Part/App/Geometry.cpp
++++ b/src/Mod/Part/App/Geometry.cpp
+@@ -101,6 +101,7 @@
+ 
+ # include <cmath>
+ # include <ctime>
++# include <boost/random/mersenne_twister.hpp>
+ #endif //_PreComp_
+ 
+ #include <Base/Console.h>

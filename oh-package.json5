@@ -1,0 +1,7 @@
+{
+  "modelVersion": "5.0.0",
+  "name": "freecad-headless-acceptance",
+  "version": "0.1.0",
+  "description": "FreeCAD v1.1.2 headless acceptance harness for HarmonyOS",
+  "dependencies": {}
+}

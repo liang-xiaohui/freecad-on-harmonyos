@@ -1,0 +1,78 @@
+diff --git a/src/Base/Tools.cpp b/src/Base/Tools.cpp
+--- a/src/Base/Tools.cpp
++++ b/src/Base/Tools.cpp
+@@ -22,7 +22,11 @@
+  *                                                                         *
+  ***************************************************************************/
+ 
+-#include <unicode/unistr.h>
++#ifdef __OHOS__
++# include <unicode/utf8.h>
++#else
++# include <unicode/unistr.h>
++#endif
+ #include <unicode/uchar.h>
+ #include <vector>
+ #include <string>
+@@ -59,12 +63,14 @@ bool isValidSubsequentChar(UChar32 c)
+             || category == U_COMBINING_SPACING_MARK || category == U_CONNECTOR_PUNCTUATION);
+ }
+ 
++#ifndef __OHOS__
+ std::string unicodeCharToStdString(UChar32 c)
+ {
+     icu::UnicodeString uChar(c);
+     std::string utf8Char;
+     return uChar.toUTF8String(utf8Char);
+ }
++#endif
+ 
+ };  // namespace
+ 
+@@ -74,6 +80,38 @@ std::string Base::Tools::getIdentifier(const std::string& name)
+         return "_";
+     }
+ 
++#ifdef __OHOS__
++    const auto nameLength = static_cast<int32_t>(name.size());
++    std::stringstream result;
++    int32_t index = 0;
++    int32_t charStart = index;
++    UChar32 firstChar;
++    U8_NEXT(name.data(), index, nameLength, firstChar);
++
++    if (firstChar < 0 || !isValidFirstChar(firstChar)) {
++        result << "_";
++        if (firstChar >= 0 && isValidSubsequentChar(firstChar)) {
++            result.write(name.data() + charStart, index - charStart);
++        }
++    }
++    else {
++        result.write(name.data() + charStart, index - charStart);
++    }
++
++    while (index < nameLength) {
++        charStart = index;
++        UChar32 c;
++        U8_NEXT(name.data(), index, nameLength, c);
++        if (c >= 0 && isValidSubsequentChar(c)) {
++            result.write(name.data() + charStart, index - charStart);
++        }
++        else {
++            result << "_";
++        }
++    }
++
++    return result.str();
++#else
+     icu::UnicodeString uName = icu::UnicodeString::fromUTF8(name);
+     std::stringstream result;
+ 
+@@ -106,6 +144,7 @@ std::string Base::Tools::getIdentifier(const std::string& name)
+     }
+ 
+     return result.str();
++#endif
+ }
+ 
+ std::wstring Base::Tools::widen(const std::string& str)

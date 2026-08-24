@@ -1,0 +1,62 @@
+diff --git a/cMake/FreeCAD_Helpers/SetupQt.cmake b/cMake/FreeCAD_Helpers/SetupQt.cmake
+--- a/cMake/FreeCAD_Helpers/SetupQt.cmake
++++ b/cMake/FreeCAD_Helpers/SetupQt.cmake
+@@ -20,6 +20,18 @@ if(BUILD_GUI)
+     endif()
+ 
+-    list (APPEND FREECAD_QT_COMPONENTS OpenGL PrintSupport Svg UiTools Widgets LinguistTools)
++    list (APPEND FREECAD_QT_COMPONENTS OpenGL PrintSupport Svg Widgets)
++    if (CMAKE_SYSTEM_NAME STREQUAL "OHOS" AND FREECAD_QT_MAJOR_VERSION EQUAL 6)
++        # Link the target UiTools library by file path. Consuming the imported
++        # target would add QT_UITOOLS_LIB and its include directory to every
++        # FreeCADGui translation unit, needlessly forcing a full GUI rebuild.
++        find_package(Qt6 REQUIRED COMPONENTS UiTools)
++        get_target_property(QtUiTools_LIBRARIES Qt6::UiTools IMPORTED_LOCATION_RELEASE)
++        set(QtUiTools_INCLUDE_DIRS "")
++        set(QtUiTools_FOUND ${Qt6UiTools_FOUND})
++        set(QtUiTools_VERSION ${Qt6UiTools_VERSION})
++    else()
++        list (APPEND FREECAD_QT_COMPONENTS UiTools LinguistTools)
++    endif()
+ 
+     if(BUILD_DESIGNER_PLUGIN)
+         list (APPEND FREECAD_QT_COMPONENTS Designer)
+diff --git a/src/Gui/UiLoader.h b/src/Gui/UiLoader.h
+--- a/src/Gui/UiLoader.h
++++ b/src/Gui/UiLoader.h
+@@ -27,7 +27,7 @@
+ #endif
+ 
+ #if defined(HAVE_QT_UI_TOOLS)
+-# include <QUiLoader>
++# include <QtUiTools/QUiLoader>
+ #else
+ # include <QObject>
+ #endif
+diff --git a/src/Gui/Dialogs/DlgPreferencesImp.cpp b/src/Gui/Dialogs/DlgPreferencesImp.cpp
+--- a/src/Gui/Dialogs/DlgPreferencesImp.cpp
++++ b/src/Gui/Dialogs/DlgPreferencesImp.cpp
+@@ -492,6 +492,9 @@ PreferencePage* DlgPreferencesImp::createPreferencePage(
+     }
+ 
+     auto resetMargins = [](QWidget* widget) {
++        if (!widget) {
++            return;
++        }
+         widget->setContentsMargins(0, 0, 0, 0);
+         if (auto layout = widget->layout()) {
+             layout->setContentsMargins(0, 0, 0, 0);
+@@ -502,7 +505,12 @@ PreferencePage* DlgPreferencesImp::createPreferencePage(
+ 
+     // special handling for PreferenceUiForm to reset margins for forms too
+     if (auto uiFormPage = qobject_cast<PreferenceUiForm*>(page)) {
+-        resetMargins(uiFormPage->form());
++        auto form = uiFormPage->form();
++        if (!form) {
++            delete page;
++            return nullptr;
++        }
++        resetMargins(form);
+     }
+ 
+     page->setProperty(GroupNameProperty, QString::fromStdString(groupName));

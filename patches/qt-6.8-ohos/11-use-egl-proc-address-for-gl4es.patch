@@ -1,0 +1,39 @@
+--- a/src/plugins/platforms/ohos/qohoseglplatformcontext.cpp
++++ b/src/plugins/platforms/ohos/qohoseglplatformcontext.cpp
+@@ -14,12 +14,19 @@ namespace {
+ 
+ using ActivateExternalGl4esContext = void (*)(void *, void *);
+ using InitializeGl4es = void (*)();
++using SetGl4esGetProcAddress = void (*)(void *(*)(const char *));
++
++void *resolveCurrentGlesProcAddress(const char *name)
++{
++    return reinterpret_cast<void *>(eglGetProcAddress(name));
++}
+ 
+ void activateExternalGl4esContext(EGLContext context, EGLContext shareContext)
+ {
+     static void *gl4esHandle = nullptr;
+     static ActivateExternalGl4esContext activate = nullptr;
+     static InitializeGl4es initialize = nullptr;
++    static SetGl4esGetProcAddress setGetProcAddress = nullptr;
+     if (activate == nullptr) {
+         gl4esHandle = dlopen("libGL.so", RTLD_NOW | RTLD_NOLOAD);
+         if (gl4esHandle != nullptr) {
+@@ -27,8 +34,16 @@ void activateExternalGl4esContext(EGLContext context, EGLContext shareContext)
+                 dlsym(gl4esHandle, "gl4es_activate_external_context"));
+             initialize = reinterpret_cast<InitializeGl4es>(
+                 dlsym(gl4esHandle, "gl_init"));
++            setGetProcAddress = reinterpret_cast<SetGl4esGetProcAddress>(
++                dlsym(gl4esHandle, "set_getprocaddress"));
+         }
+     }
++    // libGLESv2 exports HarmonyOS dispatch stubs. Resolving GL4ES' GLES calls
++    // with dlsym caches those stubs, which report every entry as invalid when
++    // Coin first renders. eglGetProcAddress is context-aware and returns the
++    // active Mesa/Zink implementation after eglMakeCurrent has succeeded.
++    if (setGetProcAddress != nullptr)
++        setGetProcAddress(resolveCurrentGlesProcAddress);
+     if (activate != nullptr) {
+         activate(
+             reinterpret_cast<void *>(context),

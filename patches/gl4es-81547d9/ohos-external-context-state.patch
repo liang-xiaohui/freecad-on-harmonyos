@@ -1,0 +1,84 @@
+--- a/src/gl/init.c
++++ b/src/gl/init.c
+@@ -15,6 +15,7 @@
+ #include "loader.h"
+ #include "logs.h"
+ #include "fpe_cache.h"
++#include "glstate.h"
+ #include "init.h"
+ #include "envvars.h"
+ #if defined(__EMSCRIPTEN__) || defined(__APPLE__)
+@@ -59,6 +60,73 @@
+ 
+ static int inited = 0;
+ 
++typedef struct {
++    void *native_context;
++    void *gl4es_state;
++} external_context_state_t;
++
++static external_context_state_t *external_context_states = NULL;
++static int external_context_state_count = 0;
++static int external_context_state_capacity = 0;
++
++void *NewGLState(void *shared_glstate, int es2only);
++void ActivateGLState(void *new_glstate);
++
++static void *find_external_context_state(void *native_context)
++{
++    for (int i = 0; i < external_context_state_count; ++i)
++        if (external_context_states[i].native_context == native_context)
++            return external_context_states[i].gl4es_state;
++    return NULL;
++}
++
++EXPORT
++void gl4es_activate_external_context(void *native_context, void *shared_native_context)
++{
++    if (inited <= 0 || native_context == NULL)
++        return;
++
++    void *state = find_external_context_state(native_context);
++    if (state == NULL) {
++        if (external_context_state_count == 0) {
++            // initialize_gl4es() created the default state on the context that
++            // was current during initialization.
++            state = glstate;
++        } else {
++            void *shared_state = find_external_context_state(shared_native_context);
++            state = NewGLState(shared_state, 0);
++        }
++
++        if (external_context_state_count == external_context_state_capacity) {
++            external_context_state_capacity = external_context_state_capacity
++                ? external_context_state_capacity * 2
++                : 4;
++            external_context_states = realloc(
++                external_context_states,
++                external_context_state_capacity * sizeof(external_context_state_t));
++        }
++        external_context_states[external_context_state_count].native_context = native_context;
++        external_context_states[external_context_state_count].gl4es_state = state;
++        ++external_context_state_count;
++    }
++
++    ActivateGLState(state);
++
++    // Qt may have used the native GLES context directly since GL4ES last saw
++    // it. Force the next fixed-pipeline draw to restore the program, buffer
++    // bindings and vertex-array enables that GL4ES tracks internally. In
++    // particular, a Qt VBO left bound would make Coin's client pointers be
++    // interpreted as offsets into that unrelated buffer.
++    if (glstate != NULL && glstate->gleshard != NULL && glstate->vao != NULL) {
++        glstate->gleshard->program = 0;
++        glstate->gleshard->glprogram = NULL;
++        glstate->bind_buffer.array = ~0U;
++        glstate->bind_buffer.index = ~0U;
++        for (int i = 0; i < hardext.maxvattrib; ++i)
++            glstate->gleshard->vertexattrib[i].enabled = 2;
++    }
++}
++
+ EXPORT
+ void set_getmainfbsize(void (APIENTRY_GL4ES  *new_getMainFBSize)(int* w, int* h)) {
+     gl4es_getMainFBSize = (void*)new_getMainFBSize;

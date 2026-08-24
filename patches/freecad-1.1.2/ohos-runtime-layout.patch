@@ -1,0 +1,41 @@
+diff --git a/src/App/ApplicationDirectories.cpp b/src/App/ApplicationDirectories.cpp
+--- a/src/App/ApplicationDirectories.cpp
++++ b/src/App/ApplicationDirectories.cpp
+@@ -304,6 +304,12 @@
+ }
+ 
+ void ApplicationDirectories::configureResourceDirectory(const std::map<std::string,std::string>& mConfig) {
++    if (const char* configuredResource = std::getenv("FREECAD_APP_RESOURCE_DIR");
++        configuredResource != nullptr && *configuredResource != '\0') {
++        _resource = Base::FileInfo::stringToPath(configuredResource);
++        return;
++    }
++
+ #ifdef RESOURCEDIR
+     // #6892: Conda may inject null characters
+     fs::path path = sanitizePath(RESOURCEDIR);
+@@ -318,6 +324,12 @@
+ }
+ 
+ void ApplicationDirectories::configureLibraryDirectory(const std::map<std::string,std::string>& mConfig) {
++    if (const char* configuredLibrary = std::getenv("FREECAD_APP_LIBRARY_DIR");
++        configuredLibrary != nullptr && *configuredLibrary != '\0') {
++        _library = Base::FileInfo::stringToPath(configuredLibrary);
++        return;
++    }
++
+ #ifdef LIBRARYDIR
+     // #6892: Conda may inject null characters
+     fs::path path = sanitizePath(LIBRARYDIR);
+@@ -702,6 +714,11 @@
+ 
+ fs::path ApplicationDirectories::findHomePath(const char* sCall)
+ {
++    if (const char* configuredHome = std::getenv("FREECAD_APP_HOME");
++        configuredHome != nullptr && *configuredHome != '\0') {
++        return Base::FileInfo::stringToPath(configuredHome);
++    }
++
+     // We have three ways to start this application either use one of the two executables or
+     // import the FreeCAD.so module from a running Python session. In the latter case the
+     // Python interpreter is already initialized.

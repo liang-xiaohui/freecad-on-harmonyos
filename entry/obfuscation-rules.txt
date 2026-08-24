@@ -1,0 +1,1 @@
+# Keep the acceptance harness unobfuscated so device failures remain readable.

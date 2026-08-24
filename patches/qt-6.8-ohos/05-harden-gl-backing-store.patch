@@ -1,0 +1,76 @@
+--- a/src/plugins/platforms/ohos/qohosplatformbackingstoregl.cpp
++++ b/src/plugins/platforms/ohos/qohosplatformbackingstoregl.cpp
+@@ -177,14 +177,18 @@
+ 
+     auto dstWindowCtxData = optDstWidnowCtxData.value();
+ 
+-    unbindFrameBufferObject(*m_framebuffer);
+-    m_glContext->makeCurrent(dstWindowCtxData.qWindow);
++    if (!m_framebuffer || !m_glContext->makeCurrent(dstWindowCtxData.qWindow))
++        return;
+ 
+     if (!m_blitter) {
+         m_blitter = std::make_unique<QOpenGLTextureBlitter>();
+-        m_blitter->create();
++        if (!m_blitter->create()) {
++            m_blitter.reset();
++            return;
++        }
+     }
+ 
++    unbindFrameBufferObject(*m_framebuffer);
+     auto dstSize = dstWindowCtxData.unscaledWindowGeometry.size();
+ 
+     auto srcRect = QRect(
+         relToRootWindowOffset, dstWindowCtxData.platformWindow->windowGeometry().size());
+@@ -214,22 +218,36 @@
+     if (!m_glContext) {
+         m_glContext = std::make_unique<QOpenGLContext>(rootWindowCtxData.qWindow);
+         m_glContext->setFormat(rootWindowCtxData.qWindow->format());
+-        m_glContext->create();
++        if (!m_glContext->create()) {
++            m_glContext.reset();
++            return;
++        }
+     }
+ 
+-    m_glContext->makeCurrent(rootWindowCtxData.qWindow);
++    if (!m_glContext->makeCurrent(rootWindowCtxData.qWindow))
++        return;
+ 
+     auto targetFramebufferResolution = m_pendingResizeRequest.valueOr(
+         rootWindowCtxData.platformWindow->windowGeometry().size());
+     if (!m_framebuffer || m_framebuffer->size() != targetFramebufferResolution) {
++        if (!targetFramebufferResolution.isValid() || targetFramebufferResolution.isEmpty())
++            return;
+         m_framebuffer = std::make_unique<QOpenGLFramebufferObject>(targetFramebufferResolution);
++        if (!m_framebuffer->isValid()) {
++            m_framebuffer.reset();
++            return;
++        }
+         m_paintDevice = std::make_unique<QOpenGLPaintDevice>(targetFramebufferResolution);
+         if (QHighDpiScaling::isActive()) {
+-            auto pixelDensity = rootWindowCtxData.platformWindow->screen()->pixelDensity();
++            auto pixelDensity = rootWindowCtxData.platformWindow->screen()->devicePixelRatio();
+             m_paintDevice->setDevicePixelRatio(pixelDensity);
+         }
+ 
+-        m_framebuffer->bind();
++        if (!m_framebuffer->bind()) {
++            m_framebuffer.reset();
++            m_paintDevice.reset();
++            return;
++        }
+         setViewportAndClearColorBuffer(*m_glContext, targetFramebufferResolution, QColor(Qt::transparent));
+     }
+ }
+@@ -246,5 +264,8 @@
+ 
+     m_pendingResizeRequest = makeEmptyQOhosOptional();
+ 
+-    m_glContext->makeCurrent(window());
++    if (!m_glContext->makeCurrent(window()))
++        return;
+     m_framebuffer->bind();
+ }
+ 

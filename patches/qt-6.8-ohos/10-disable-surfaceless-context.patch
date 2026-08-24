@@ -1,0 +1,16 @@
+--- a/src/plugins/platforms/ohos/qohosplatformintegration.cpp
++++ b/src/plugins/platforms/ohos/qohosplatformintegration.cpp
+@@ -402,6 +402,14 @@ QPlatformOpenGLContext *QOhosPlatformIntegration::createPlatformOpenGLContext(Q
+     ctxCreateInfo.format = targetSurfaceFormat;
+     ctxCreateInfo.display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+     ctxCreateInfo.optionalShareContext = context->shareHandle();
++    // HarmonyOS advertises EGL_KHR_surfaceless_context, but its OpenGLWrapper
++    // does not install a usable GLES dispatch table when Qt performs the
++    // context-format probe with EGL_NO_SURFACE.  The call succeeds at the EGL
++    // layer while glGetString/glGetIntegerv are reported as invalid, and
++    // GL4ES later crashes while compiling Coin's first fixed-pipeline shader.
++    // Force QEGLPlatformContext to use its temporary pbuffer for that probe.
++    ctxCreateInfo.optionalFlags = QEGLPlatformContext::NoSurfaceless;
+ 
+     // Qt6: QOpenGLContext 通过 QPA 的 createPlatformOpenGLContext 获取平台上下文，
+     // 不再需要 setNativeHandle 绑定（该 API 已在 Qt6 移除）。

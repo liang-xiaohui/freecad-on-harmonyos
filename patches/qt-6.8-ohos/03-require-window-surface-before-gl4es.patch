@@ -1,0 +1,86 @@
+--- a/src/plugins/platforms/ohos/qohoseglplatformcontext.cpp
++++ b/src/plugins/platforms/ohos/qohoseglplatformcontext.cpp
+@@ -3,6 +3,7 @@
+ 
+ #include "qohoseglplatformcontext.h"
+ #include "qohosfloatingwindow.h"
++#include "qohosplatformoffscreensurface.h"
+ #include "qohosplatformwindow.h"
+ #include "render/qohosegl.h"
+ 
+@@ -122,6 +123,8 @@
+ 
+ EGLSurface QOhosEGLPlatformContext::eglSurfaceForPlatformSurface(QPlatformSurface *surface)
+ {
++    if (surface->surface()->surfaceClass() == QSurface::Offscreen)
++        return static_cast<QOhosPlatformOffscreenSurface *>(surface)->surface();
+ 
+     auto *ohosWindow = static_cast<QOhosFloatingWindow *>(surface);
+     auto *ohosWindowSurface = ohosWindow->ownedSurfaceOrNull();
+--- a/src/plugins/platforms/ohos/qohosplatformoffscreensurface.cpp
++++ b/src/plugins/platforms/ohos/qohosplatformoffscreensurface.cpp
+@@ -19,20 +19,26 @@
+     // HACK
+     // ANativeWindow *surfaceTexture = (ANativeWindow*)offscreenSurface->nativeHandle();
+ 
+-    EGLConfig config = q_configFromGLFormat(m_display, m_format, false);
++    EGLConfig config = q_configFromGLFormat(m_display, m_format, false, EGL_PBUFFER_BIT);
+     if (config != nullptr) {
+         const EGLint attributes[] = {
++            // FreeCAD rejects the process-wide 1x1 startup pbuffer. Keep Qt's
++            // per-context offscreen surface distinct from that bootstrap one.
++            EGL_WIDTH, 2,
++            EGL_HEIGHT, 2,
++            EGL_LARGEST_PBUFFER, EGL_FALSE,
+             EGL_NONE
+         };
+-        Q_UNUSED(attributes);
+-        //HACK
+-        //m_surface = eglCreateWindowSurface(m_display, config, surfaceTexture, attributes);
++        m_surface = eglCreatePbufferSurface(m_display, config, attributes);
++        if (m_surface != EGL_NO_SURFACE)
++            m_format = q_glFormatFromConfig(m_display, config);
+     }
+ }
+ 
+ QOhosPlatformOffscreenSurface::~QOhosPlatformOffscreenSurface()
+ {
+-    eglDestroySurface(m_display, m_surface);
++    if (m_surface != EGL_NO_SURFACE)
++        eglDestroySurface(m_display, m_surface);
+ }
+ 
+ QT_END_NAMESPACE
+--- a/src/plugins/platforms/ohos/qohosplatformintegration.cpp
++++ b/src/plugins/platforms/ohos/qohosplatformintegration.cpp
+@@ -13,6 +13,7 @@
+ #include "qohosplatformdrag.h"
+ #include "qohosplatformintegration.h"
+ #include "qohosplatformnativeinterface.h"
++#include "qohosplatformoffscreensurface.h"
+ #include "qohosplatformscreen.h"
+ #include "qohosplatformservices.h"
+ #include "qohosplatformwindow.h"
+@@ -40,6 +41,7 @@
+ #include <qpa/qwindowsysteminterface.h>
+ #include <qpa/qplatforminputcontextfactory_p.h>
+ #include <QtCore/qset.h>
++#include <QtGui/qoffscreensurface.h>
+ #include <QtGui/qopenglcontext.h>
+ 
+ 
+@@ -401,10 +403,12 @@
+ }
+ #endif // QT_NO_OPENGL
+ 
+-QPlatformOffscreenSurface *QOhosPlatformIntegration::createPlatformOffscreenSurface(QOffscreenSurface *) const
++QPlatformOffscreenSurface *QOhosPlatformIntegration::createPlatformOffscreenSurface(
++    QOffscreenSurface *surface) const
+ {
+     auto __dbg = make_QCScopedDebug("QOhosPlatformIntegration::createPlatformOffscreenSurface");
+-    return nullptr;
++    return new QOhosPlatformOffscreenSurface(
++        eglGetDisplay(EGL_DEFAULT_DISPLAY), surface->format(), surface);
+ }
+ 
+ bool QOhosPlatformIntegration::hasCapability(Capability cap) const

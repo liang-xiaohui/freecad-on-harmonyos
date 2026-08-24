@@ -1,0 +1,44 @@
+--- a/src/Gui/Application.cpp
++++ b/src/Gui/Application.cpp
+@@ -2523,9 +2523,19 @@ void Application::runApplication()
+ 
+     {
+         QSurfaceFormat defaultFormat;
++#if defined(FREECAD_OHOS)
++        // Qt for OHOS creates native EGL OpenGL ES contexts. Desktop OpenGL
++        // calls from FreeCAD and Coin3D are translated by GL4ES on top of the
++        // current ES context.
++        defaultFormat.setRenderableType(QSurfaceFormat::OpenGLES);
++        defaultFormat.setMajorVersion(2);
++        defaultFormat.setMinorVersion(0);
++        defaultFormat.setProfile(QSurfaceFormat::NoProfile);
++#else
+         defaultFormat.setRenderableType(QSurfaceFormat::OpenGL);
+         defaultFormat.setProfile(QSurfaceFormat::CompatibilityProfile);
+         defaultFormat.setOption(QSurfaceFormat::DeprecatedFunctions, true);
++#endif
+ #if defined(FC_OS_LINUX) || defined(FC_OS_BSD)
+         // QGuiApplication::platformName() doesn't yet work at this point, so we use the env var
+         if (getenv("WAYLAND_DISPLAY")) {
+--- a/src/Gui/Quarter/QuarterWidget.cpp
++++ b/src/Gui/Quarter/QuarterWidget.cpp
+@@ -165,9 +165,19 @@ public:
+         // request a compatibility profile. On llvmpipe, this still seems to
+         // "just work" even if out of spec; on proprietary Nvidia drivers, it
+         // does not.
++#if defined(FREECAD_OHOS)
++        // The OHOS QPA exposes native EGL OpenGL ES contexts. GL4ES provides
++        // the desktop compatibility API used by Coin3D on that ES context.
++        surfaceFormat.setRenderableType(QSurfaceFormat::OpenGLES);
++        surfaceFormat.setMajorVersion(2);
++        surfaceFormat.setMinorVersion(0);
++        surfaceFormat.setProfile(QSurfaceFormat::NoProfile);
++        surfaceFormat.setOption(QSurfaceFormat::DeprecatedFunctions, false);
++#else
+         surfaceFormat.setRenderableType(QSurfaceFormat::OpenGL);
+         surfaceFormat.setProfile(QSurfaceFormat::CompatibilityProfile);
+         surfaceFormat.setOption(QSurfaceFormat::DeprecatedFunctions, true);
++#endif
+ 
+ #if defined (_DEBUG) && 0
+         surfaceFormat.setOption(QSurfaceFormat::DebugContext);

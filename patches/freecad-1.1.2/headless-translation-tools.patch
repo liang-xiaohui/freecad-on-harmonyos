@@ -1,0 +1,13 @@
+diff --git a/cMake/FreeCAD_Helpers/SetupQt.cmake b/cMake/FreeCAD_Helpers/SetupQt.cmake
+--- a/cMake/FreeCAD_Helpers/SetupQt.cmake
++++ b/cMake/FreeCAD_Helpers/SetupQt.cmake
+@@ -92,4 +92,9 @@ configure_file(${CMAKE_SOURCE_DIR}/src/QtWidgets.h.cmake ${CMAKE_BINARY_DIR}/src/
+ function(qt_find_and_add_translation _qm_files _tr_dir _qm_dir)
++    if(NOT BUILD_GUI)
++        set("${_qm_files}" "" PARENT_SCOPE)
++        return()
++    endif()
++
+     file(GLOB _ts_files ${_tr_dir})
+     set_source_files_properties(${_ts_files} PROPERTIES OUTPUT_LOCATION ${_qm_dir})
+     qt_add_translation("${_qm_files}" ${_ts_files})

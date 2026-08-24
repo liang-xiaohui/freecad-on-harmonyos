@@ -1,0 +1,11 @@
+diff --git a/src/Mod/TechDraw/App/DrawTemplate.cpp b/src/Mod/TechDraw/App/DrawTemplate.cpp
+--- a/src/Mod/TechDraw/App/DrawTemplate.cpp
++++ b/src/Mod/TechDraw/App/DrawTemplate.cpp
+@@ -22,6 +22,7 @@
+ 
+ 
+ # include <sstream>
++# include <clocale>
+ # include <QCollator>
+ # include <QDateTime>
+ 

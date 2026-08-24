@@ -1,0 +1,11 @@
+--- a/src/plugins/platforms/ohos/qohosinputcontext.cpp
++++ b/src/plugins/platforms/ohos/qohosinputcontext.cpp
+@@ -517,7 +517,9 @@ void QOhosInputContext::onCursorRectangleChanged()
+ {
+     if (m_imConnectionState == ImConnectionState::Detached) {
+-        qOhosWarning(QtForOhos) << "Attempting to update cursor position when detached from controller";
++        // FreeCAD updates the input-method cursor frequently even when no
++        // editor is attached. Defer the update without flooding notifications.
+         m_updateCursorRectangleAfterAttaching = true;
+         return;
+     }

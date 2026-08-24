@@ -1,0 +1,14 @@
+diff --git a/src/Mod/Import/App/dxf/ImpExpDxf.h b/src/Mod/Import/App/dxf/ImpExpDxf.h
+--- a/src/Mod/Import/App/dxf/ImpExpDxf.h
++++ b/src/Mod/Import/App/dxf/ImpExpDxf.h
+@@ -149,6 +149,10 @@ private:
+             PolylineParametric  // Polyline imported as a Part::Compound of Part primitives
+         };
+ 
++        explicit GeometryBuilder(const TopoDS_Shape& inputShape)
++            : shape(inputShape)
++        {}
++
+         // The raw geometric shape.
+         TopoDS_Shape shape;
+         // The intended parametric type for the shape.
