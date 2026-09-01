@@ -189,13 +189,13 @@ echo "==> Package Python and FreeCAD GUI runtime as rawfiles"
         -x 'lib-dynload/*' 'config-3.11-*/*' '__pycache__/*' '*/__pycache__/*' '*.pyc')
 (cd "$FREECAD_PREFIX" && \
     zip -q -r "$RAW_STAGE/freecad-runtime.zip" Mod Ext share \
-        -x '*/__pycache__/*' '*.pyc')
+        -x '*/__pycache__/*' '*.pyc' '*.so' '*.so.*')
 # Sketcher/PartDesign/Import 的 Python 目录并入（来自 headless-qt6 构建）
 if [ -d "$HEADLESS_QT6_PREFIX/Mod" ]; then
 (cd "$HEADLESS_QT6_PREFIX" && \
         zip -q -r "$RAW_STAGE/freecad-runtime.zip" Mod \
             -i 'Mod/Sketcher/*' 'Mod/PartDesign/*' 'Mod/Import/*' \
-            -x '*/__pycache__/*' '*.pyc')
+            -x '*/__pycache__/*' '*.pyc' '*.so' '*.so.*')
 fi
 
 for entry in Mod/Import/InitGui.py Mod/PartDesign/InitGui.py Mod/Sketcher/InitGui.py; do
@@ -323,12 +323,17 @@ cp -R "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign" \
     "$FLEXIMIND_STAGE/Mod/"
 (cd "$FLEXIMIND_STAGE" && \
     zip -q -r "$RAW_STAGE/freecad-runtime.zip" FlexiMind Mod \
-        -x '*/__pycache__/*' '*.pyc')
+        -x '*/__pycache__/*' '*.pyc' '*.so' '*.so.*')
 rm -rf "$FLEXIMIND_STAGE"
 cp "$PROJECT_DIR/probes/freecad-headless/acceptance.py" \
     "$RAW_STAGE/freecad_headless_acceptance.py"
 unzip -tq "$RAW_STAGE/python311.zip" >/dev/null
 unzip -tq "$RAW_STAGE/freecad-runtime.zip" >/dev/null
+if unzip -Z1 "$RAW_STAGE/freecad-runtime.zip" |
+   grep -Eq '\.so([.]|$)'; then
+    echo "错误：freecad-runtime.zip 不得包含 native ELF" >&2
+    exit 1
+fi
 
 SEARCH_DIRS="
 $FREECAD_PREFIX/lib

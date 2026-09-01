@@ -162,12 +162,12 @@ if [ "$BUILD_START" = ON ]; then
     done
 fi
 
-echo "==> 检查 Python 绑定 ELF RUNPATH"
-# Bindings must be native HAP files (therefore signed), never extracted ELF
-# files under freecad-home.  Also reject build-host paths in their RUNPATH.
+echo "==> 检查 rawfile native ELF 与 Python 绑定 RUNPATH"
+# Every ELF must be a native HAP file so HarmonyOS signs it. Also reject
+# build-host paths in the Python bindings' RUNPATH.
 if unzip -Z1 "$RUNTIME_ZIP" |
-   grep -Eq '^Ext/(PySide6|shiboken6|pivy)/.*\.so([.]|$)'; then
-    echo "错误：freecad-runtime.zip 含未签名的 Python 绑定 ELF" >&2
+   grep -Eq '\.so([.]|$)'; then
+    echo "错误：freecad-runtime.zip 含未签名的 native ELF" >&2
     exit 1
 fi
 for package in PySide6 shiboken6 pivy; do
