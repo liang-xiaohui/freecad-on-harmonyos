@@ -1,0 +1,130 @@
+--- a/src/Gui/GuiApplication.cpp
++++ b/src/Gui/GuiApplication.cpp
+@@ -29,11 +29,19 @@
+ #include <QAbstractSpinBox>
+ #include <QByteArray>
+ #include <QComboBox>
++#include <QDialog>
++#include <QFrame>
+ #include <QTextStream>
+ #include <QFileInfo>
+ #include <QFileOpenEvent>
++#include <QHBoxLayout>
++#include <QLabel>
++#include <QLayout>
+ #include <QSessionManager>
++#include <QStyle>
+ #include <QTimer>
++#include <QToolButton>
++#include <QVariant>
+ 
+ 
+ #include <QLocalServer>
+@@ -53,6 +61,96 @@
+ 
+ using namespace Gui;
+ 
++namespace
++{
++#if defined(FREECAD_OHOS)
++void ensureOhosDialogTitleBar(QObject* receiver, QEvent* event)
++{
++    if (!event || event->type() != QEvent::Show) {
++        return;
++    }
++
++    auto* dialog = qobject_cast<QDialog*>(receiver);
++    if (!dialog || !dialog->isWindow()
++        || dialog->property("_freecad_ohos_dialog_titlebar").toBool()
++        || dialog->windowFlags().testFlag(Qt::FramelessWindowHint)) {
++        return;
++    }
++
++    const auto windowType = dialog->windowType();
++    if (windowType != Qt::Dialog && windowType != Qt::Sheet && windowType != Qt::Drawer) {
++        return;
++    }
++
++    QLayout* dialogLayout = dialog->layout();
++    if (!dialogLayout || dialogLayout->menuBar()) {
++        return;
++    }
++
++    dialog->setProperty("_freecad_ohos_dialog_titlebar", true);
++
++    auto* titleBar = new QFrame(dialog);
++    titleBar->setObjectName(QStringLiteral("FreeCADOhosDialogTitleBar"));
++    titleBar->setFrameShape(QFrame::StyledPanel);
++    titleBar->setFrameShadow(QFrame::Plain);
++    titleBar->setAutoFillBackground(true);
++    titleBar->setFixedHeight(36);
++    auto titlePalette = titleBar->palette();
++    titlePalette.setColor(QPalette::Window, titlePalette.color(QPalette::AlternateBase));
++    titleBar->setPalette(titlePalette);
++
++    auto* titleLayout = new QHBoxLayout(titleBar);
++    titleLayout->setContentsMargins(10, 0, 4, 0);
++    titleLayout->setSpacing(8);
++
++    const QIcon appIcon = QApplication::windowIcon();
++    if (!appIcon.isNull()) {
++        auto* iconLabel = new QLabel(titleBar);
++        iconLabel->setPixmap(appIcon.pixmap(20, 20));
++        iconLabel->setFixedSize(20, 20);
++        titleLayout->addWidget(iconLabel);
++    }
++
++    auto* titleLabel = new QLabel(titleBar);
++    QString title = dialog->windowTitle();
++    if (title.isEmpty()) {
++        title = QApplication::applicationDisplayName();
++    }
++    if (title.isEmpty()) {
++        title = QApplication::applicationName();
++    }
++    titleLabel->setText(title);
++    auto titleFont = titleLabel->font();
++    titleFont.setBold(true);
++    titleLabel->setFont(titleFont);
++    titleLayout->addWidget(titleLabel, 1);
++
++    auto* closeButton = new QToolButton(titleBar);
++    closeButton->setObjectName(QStringLiteral("FreeCADOhosDialogCloseButton"));
++    closeButton->setAutoRaise(true);
++    closeButton->setIcon(dialog->style()->standardIcon(QStyle::SP_TitleBarCloseButton));
++    closeButton->setToolTip(QApplication::translate("Gui::OHOSDialogTitleBar", "Close"));
++    closeButton->setFixedSize(30, 30);
++    titleLayout->addWidget(closeButton);
++
++    QObject::connect(dialog, &QWidget::windowTitleChanged, titleLabel, &QLabel::setText);
++    QObject::connect(closeButton, &QToolButton::clicked, dialog, &QWidget::close);
++
++    const int titleHeight = titleBar->height();
++    const int oldMinimumHeight = dialog->minimumHeight();
++    const int oldMaximumHeight = dialog->maximumHeight();
++    if (oldMinimumHeight > 0) {
++        dialog->setMinimumHeight(oldMinimumHeight + titleHeight);
++    }
++    if (oldMaximumHeight < QWIDGETSIZE_MAX) {
++        dialog->setMaximumHeight(oldMaximumHeight + titleHeight);
++    }
++    dialogLayout->setMenuBar(titleBar);
++    dialog->resize(dialog->width(), dialog->height() + titleHeight);
++}
++#endif
++}
++
+ GUIApplication::GUIApplication(int& argc, char** argv)
+     : GUIApplicationNativeEventAware(argc, argv)
+ {
+@@ -86,6 +184,10 @@ bool GUIApplication::notify(QObject* receiver, QEvent* event)
+         return false;
+     }
+ 
++#if defined(FREECAD_OHOS)
++    ensureOhosDialogTitleBar(receiver, event);
++#endif
++
+     // https://github.com/FreeCAD/FreeCAD/issues/16905
+     std::string exceptionWarning =
+ #if FC_DEBUG
