@@ -1,15 +1,18 @@
 --- a/src/Gui/Quarter/QuarterWidget.cpp
 +++ b/src/Gui/Quarter/QuarterWidget.cpp
-@@ -180,6 +180,12 @@ public:
+@@ -179,6 +179,15 @@ public:
+         surfaceFormat.setMinorVersion(0);
          surfaceFormat.setProfile(QSurfaceFormat::NoProfile);
          surfaceFormat.setOption(QSurfaceFormat::DeprecatedFunctions, false);
-
-+        // The OHOS raster backing store is opaque. Qt normally composites a
-+        // QOpenGLWidget below that backing store and relies on a transparent
-+        // hole for the viewport; on OHOS the raster layer otherwise covers
-+        // the successfully rendered FBO with the view's white background.
-+        // Put the viewport texture after the raster layer in the compositor.
-+        setAttribute(Qt::WA_AlwaysStackOnTop, true);
++
++        // NOTE: Qt::WA_AlwaysStackOnTop was tried here to work around an
++        // opaque raster backing store covering the viewport FBO, but it also
++        // puts the 3D viewport texture above every raster widget, which hides
++        // the Sketcher on-view parameter spinboxes. The white viewport came
++        // from the graphics-view background pass inside the FBO and is fixed
++        // by the paint-order change below, so the viewport must composite
++        // under the backing store again (stock Qt ordering).
++
  #else
          surfaceFormat.setRenderableType(QSurfaceFormat::OpenGL);
          surfaceFormat.setProfile(QSurfaceFormat::CompatibilityProfile);

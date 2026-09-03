@@ -1,6 +1,6 @@
 --- a/src/Gui/Quarter/QuarterWidget.cpp
 +++ b/src/Gui/Quarter/QuarterWidget.cpp
-@@ -976,17 +976,22 @@ void QuarterWidget::paintEvent(QPaintEvent* event)
+@@ -982,17 +982,23 @@ void QuarterWidget::paintEvent(QPaintEvent* event)
      // Causes an OpenGL error on resize
      //glDrawBuffer(w->format().swapBehavior() == QSurfaceFormat::DoubleBuffer ? GL_BACK : GL_FRONT);
  
@@ -22,6 +22,7 @@
 +        deferPaintUntilContextIsReady();
 +        return;
 +    }
++
 +    this->actualRedraw();
  #else
 +    this->actualRedraw();

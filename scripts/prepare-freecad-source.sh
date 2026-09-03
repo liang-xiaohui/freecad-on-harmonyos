@@ -140,7 +140,7 @@ for patch_file in "$OHOS_PATCH" "$PYTHON_COMPAT_PATCH" "$BOOST_COMPAT_PATCH" "$R
         continue
     fi
     if [ "$patch_file" = "$QUARTER_STACK_ON_TOP_PATCH" ] &&
-       grep -q 'setAttribute(Qt::WA_AlwaysStackOnTop, true)' \
+       grep -q 'WA_AlwaysStackOnTop was tried here' \
            "$SOURCE_DIR/src/Gui/Quarter/QuarterWidget.cpp" 2>/dev/null; then
         echo "FreeCAD patch already applied: $(basename "$patch_file")"
         continue
