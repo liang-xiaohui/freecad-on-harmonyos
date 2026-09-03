@@ -1,0 +1,19 @@
+--- a/src/gl/getter.c
++++ b/src/gl/getter.c
+@@ -941,6 +941,16 @@
+         case GL_POINT_DISTANCE_ATTENUATION :
+             memcpy(params, glstate->pointsprite.distance, 3*sizeof(GLfloat));
+             break;
++        case GL_LINE_WIDTH_RANGE:
++            // GL_LINE_WIDTH_RANGE (0x0B22) is GL1-only; on GLES2 the native
++            // call fails with GL_INVALID_ENUM and callers like Coin's
++            // SoGLLineWidthElement clamp widths using garbage values.
++            gles_glGetFloatv(GL_ALIASED_LINE_WIDTH_RANGE, params);
++            break;
++        case GL_LINE_WIDTH_GRANULARITY:
++            // Not queryable on GLES2; report the coarsest safe value.
++            params[0] = 1.0f;
++            break;
+         case GL_DEPTH_RANGE:
+             params[0] = glstate->depth.Near;
+             params[1] = glstate->depth.Far;

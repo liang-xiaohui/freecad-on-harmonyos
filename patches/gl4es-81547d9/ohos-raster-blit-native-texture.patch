@@ -1,0 +1,36 @@
+--- a/src/gl/raster.c
++++ b/src/gl/raster.c
+@@ -347,8 +347,12 @@ void bitmap_flush() {
+ 		gl4es_glTexSubImage2D(GL_TEXTURE_2D, 0, sx, sy, ex, ey, GL_RGBA, GL_UNSIGNED_BYTE, glstate->scratch);
+ 	}
+ 
++	// gl4es_blitTexture() binds through GLES directly, so it needs the
++	// backing GLES name rather than the public GL4ES texture name.
++	gltexture_t *bitmap_texture = gl4es_getTexture(GL_TEXTURE_2D, glstate->raster.bm_texture);
++	if (bitmap_texture)
+ 	gl4es_blitTexture(
+-		glstate->raster.bm_texture, 
++		bitmap_texture->glname,
+ 		sx, sy,
+ 		ex, ey,
+ 		glstate->raster.bm_tnwidth , glstate->raster.bm_tnheight,
+@@ -606,12 +610,16 @@ void render_raster_list(rasterlist_t* rast) {
+ 	if (rast->texture)
++	{
++		gltexture_t *texture = gl4es_getTexture(GL_TEXTURE_2D, rast->texture);
++		if (texture)
+ 		gl4es_blitTexture(
+-			rast->texture, 
++			texture->glname,
+ 			0.f, 0.f,
+ 			rast->width , rast->height,
+ 			rast->nwidth, rast->nheight,
+ 			rast->zoomx, rast->zoomy, 
+ 			0, 0,	//vp is default here
+ 			glstate->raster.rPos.x-rast->xorig, glstate->raster.rPos.y-rast->yorig,
+ 			(rast->bitmap)?BLIT_ALPHA:BLIT_COLOR
+ 		);
++	}
+   if (glstate->raster.rPos.x + rast->xmove >= 0 && glstate->raster.rPos.y + rast->ymove >= 0) {
+     glstate->raster.rPos.x += rast->xmove;
+     glstate->raster.rPos.y += rast->ymove;

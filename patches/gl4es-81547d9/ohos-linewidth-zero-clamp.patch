@@ -1,0 +1,13 @@
+--- a/src/gl/wrap/gles.c
++++ b/src/gl/wrap/gles.c
+@@ -1389,6 +1389,10 @@
+ #ifndef skip_glLineWidth
+ void APIENTRY_GL4ES gl4es_glLineWidth(GLfloat width) {
+     LOAD_GLES(glLineWidth);
++    // GLES2 rejects width <= 0 with GL_INVALID_VALUE. GL1 callers (e.g.
++    // FreeCAD GLPainter) legitimately pass 0 meaning "hairline"; clamp to
++    // the minimum useful width instead of poisoning the error state.
++    if (width < 1.0f) width = 1.0f;
+ #ifndef direct_glLineWidth
+     PUSH_IF_COMPILING(glLineWidth)
+ #endif

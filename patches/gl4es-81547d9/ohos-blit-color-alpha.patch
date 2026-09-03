@@ -1,0 +1,25 @@
+--- a/src/gl/blit.c
++++ b/src/gl/blit.c
+@@ -317,6 +317,10 @@
+     tex[2] = rw;  tex[3] = sh;
+     tex[4] = rw;  tex[5] = rh;
+     tex[6] = sw;  tex[7] = rh;
++    // Honor the caller's blend state for BLIT_COLOR (glDrawPixels semantics):
++    // Coin's SoImage enables GL_BLEND for icons with transparency, and an
++    // opaque blit would paint their transparent background as a solid quad.
++    int restore_blend = glstate->enable.blend;
+     gl4es_glDisable(GL_BLEND);
+     int alpha = 0;
+     switch (mode) {
+@@ -328,6 +332,11 @@
+             break;
+         case BLIT_COLOR:
+             //gl4es_glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
++            // Always use the alpha shader so fully transparent texels are
++            // discarded; re-enable blending if the caller had it on.
++            alpha = 1;
++            if (restore_blend)
++                gl4es_glEnable(GL_BLEND);
+             break;
+     }
+ 

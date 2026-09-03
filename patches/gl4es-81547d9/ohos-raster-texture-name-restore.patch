@@ -1,0 +1,26 @@
+--- a/src/gl/raster.c
++++ b/src/gl/raster.c
+@@ -266,7 +266,10 @@ void raster_to_texture(rasterlist_t *r)
+ 	GLuint old_tex_unit, old_tex;
+ 	old_tex_unit = glstate->texture.active;
+ 	if (old_tex_unit!=0) gl4es_glActiveTexture(GL_TEXTURE0);
+-	old_tex = glstate->texture.bound[0][ENABLED_TEX2D]->glname;
++	// gl4es_glBindTexture() accepts GL4ES' public texture name, not the
++	// backing GLES object name.  The two can diverge when Qt also allocates
++	// objects in the shared native context.
++	old_tex = glstate->texture.bound[0][ENABLED_TEX2D]->texture;
+ 
+ 	gl4es_glPixelStorei(GL_PACK_ALIGNMENT, 1);
+     gl4es_glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+@@ -318,7 +321,10 @@ void bitmap_flush() {
+ 	if(old_tex_unit)
+ 		gl4es_glActiveTexture(GL_TEXTURE0);
+ 
+-	GLuint old_tex = glstate->texture.bound[0][ENABLED_TEX2D]->glname;
++	// Preserve the GL4ES-visible name because the restore below goes through
++	// gl4es_glBindTexture().  Passing glname there can select or create an
++	// unrelated wrapper texture after native Qt and GL4ES names diverge.
++	GLuint old_tex = glstate->texture.bound[0][ENABLED_TEX2D]->texture;
+ 	GLuint old_active = glstate->enable.texture[0];
+ 
+ 	if(IS_TEX1D(old_active)) gl4es_glDisable(GL_TEXTURE_1D);

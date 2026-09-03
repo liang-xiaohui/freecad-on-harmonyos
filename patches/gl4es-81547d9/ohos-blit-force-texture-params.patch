@@ -1,0 +1,22 @@
+--- a/src/gl/blit.c
++++ b/src/gl/blit.c
+@@ -390,6 +390,19 @@
+     if(glstate->actual_tex2d[0] != texture)
+         gles_glBindTexture(GL_TEXTURE_2D, texture);
+ 
++    // The blit shaders sample the texture directly, bypassing gl4es's
++    // lazy sampler-parameter application (realize_1texture).  A texture
++    // whose native MIN_FILTER is still a mipmap filter (e.g. the driver
++    // default) is incomplete for sampling and renders as solid black, so
++    // force blit-safe parameters natively.
++    {
++        LOAD_GLES(glTexParameteri);
++        gles_glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
++        gles_glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
++        gles_glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
++        gles_glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
++    }
++
+     if(hardext.esversion==1) {
+         if(!IS_TEX2D(tmp))
+             gles_glEnable(GL_TEXTURE_2D);

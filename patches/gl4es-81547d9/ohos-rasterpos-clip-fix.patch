@@ -1,0 +1,29 @@
+--- a/src/gl/raster.c
++++ b/src/gl/raster.c
+@@ -37,8 +37,24 @@
+     GLfloat w2, h2;
+     w2=glstate->raster.viewport.width/2.0f;
+     h2=glstate->raster.viewport.height/2.0f;
+-    
+-    if ((transl[0] * w2 + w2) >= 0 && (transl[1] * h2 + h2) >= 0 && transl[2] >= 0) {
++
++    // homogeneous divide (upstream TODO): clip coords must be divided by w
++    // before the viewport mapping, or raster positions are scaled by w.
++    if (transl[3] != 0.0f && transl[3] != 1.0f) {
++      GLfloat invw = 1.0f / transl[3];
++      transl[0] *= invw;
++      transl[1] *= invw;
++      transl[2] *= invw;
++    }
++
++    // GL clip-volume test on NDC coords: a raster position is only invalid
++    // when the transformed point is actually clipped.  A z>=0 test here
++    // wrongly rejects the entire back half of the depth range (Coin passes
++    // negated z for markers/images), leaving rPos stale and drawing
++    // markers/icons at old, wrong positions.
++    if (transl[0] >= -1.0f && transl[0] <= 1.0f &&
++        transl[1] >= -1.0f && transl[1] <= 1.0f &&
++        transl[2] >= -1.0f && transl[2] <= 1.0f) {
+       glstate->raster.rPos.x = transl[0]*w2+w2;
+       glstate->raster.rPos.y = transl[1]*h2+h2;
+       glstate->raster.rPos.z = transl[2];
