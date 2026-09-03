@@ -1,0 +1,22 @@
+--- a/src/Gui/StartupProcess.cpp
++++ b/src/Gui/StartupProcess.cpp
+@@ -60,6 +60,7 @@
+ #include <App/Application.h>
+ #include <App/ApplicationDirectories.h>
+ #include <Base/Console.h>
++#include <cstdlib>
+
+
+ using namespace Gui;
+@@ -139,4 +140,11 @@
+     plugin = QString::fromStdString(App::Application::getHomePath());
+     plugin += QLatin1String("/plugins");
+     QCoreApplication::addLibraryPath(plugin);
++
++    // HAP native plugins are signed and remain in the native library root;
++    // the extracted FreeCAD home is writable but cannot load native code.
++    if (const char* nativeRoot = std::getenv("FREECAD_APP_LIBRARY_DIR");
++        nativeRoot != nullptr && *nativeRoot != '\0') {
++        QCoreApplication::addLibraryPath(QString::fromUtf8(nativeRoot) + QLatin1String("/plugins"));
++    }
+ }

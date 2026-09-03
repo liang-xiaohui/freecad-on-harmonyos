@@ -136,7 +136,7 @@ for qtlib in "$QT_PREFIX"/lib/libQt6*.so.6.8.3; do
     soname=${base%.8.3}   # libQt6Core.so.6
     copy_named_library "$qtlib" "$soname"
 done
-mkdir -p "$STAGE/plugins/platforms" "$STAGE/plugins/imageformats"
+mkdir -p "$STAGE/plugins/platforms" "$STAGE/plugins/imageformats" "$STAGE/plugins/iconengines"
 for plugin in libqohos.so libqoffscreen.so libqminimal.so; do
     [ -f "$QT_PREFIX/plugins/platforms/$plugin" ] && copy_named_library "$QT_PREFIX/plugins/platforms/$plugin" "plugins/platforms/$plugin"
 done
@@ -146,6 +146,12 @@ done
 [ -f "$QT_PREFIX/plugins/platforms/libqohos.so" ] && copy_named_library "$QT_PREFIX/plugins/platforms/libqohos.so" "libqohos.so"
 for plugin in "$QT_PREFIX"/plugins/imageformats/*.so; do
     [ -f "$plugin" ] && copy_named_library "$plugin" "plugins/imageformats/$(basename "$plugin")"
+done
+# Qt loads SVG-backed QIcon instances (including Sketcher Tasks buttons) via
+# the SVG icon engine, which is a separate plugin from the SVG image format
+# plugin.  Keep it beside the other Qt plugins in the HAP.
+for plugin in "$QT_PREFIX"/plugins/iconengines/*.so; do
+    [ -f "$plugin" ] && copy_named_library "$plugin" "plugins/iconengines/$(basename "$plugin")"
 done
 
 echo "==> Stage FreeCAD Qt app library + Coin + gl4es"

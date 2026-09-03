@@ -200,7 +200,7 @@ for rf in python311.zip freecad-runtime.zip freecad_headless_acceptance.py; do
 done
 
 echo "==> 检查 Qt 插件"
-for plug in libs/arm64-v8a/libqohos.so libs/arm64-v8a/plugins/platforms/libqohos.so libs/arm64-v8a/plugins/imageformats/libqsvg.so; do
+for plug in libs/arm64-v8a/libqohos.so libs/arm64-v8a/plugins/platforms/libqohos.so libs/arm64-v8a/plugins/imageformats/libqsvg.so libs/arm64-v8a/plugins/iconengines/libqsvgicon.so; do
     unzip -l "$HAP" | grep -q "$plug" && echo "    ✓ $plug" || { echo "    缺失：$plug" >&2; exit 1; }
 done
 

@@ -1,0 +1,22 @@
+--- a/src/Gui/Stylesheets/FreeCAD.qss
++++ b/src/Gui/Stylesheets/FreeCAD.qss
+@@ -1358,15 +1358,15 @@
+ QToolButton::menu-indicator {
+   subcontrol-position: right center;
+ }
+
+ QToolButton::menu-arrow {
+-  image: url(qss:@IconsLocationFolderName/arrow-down-lightgray.svg);
++  image: url(qss:@IconsLocationFolderName/arrow-down-lightgray.png);
+   height: 13px;
+ }
+
+ QToolButton::menu-arrow:open {
+-  image: url(qss:@IconsLocationFolderName/arrow-down-@StylesheetIconsColor.svg);
++  image: url(qss:@IconsLocationFolderName/arrow-down-@StylesheetIconsColor.png);
+ }
+
+ QToolButton::menu-arrow:hover {
+-  image: url(qss:@IconsLocationFolderName/arrow-down-@StylesheetIconsColor.svg);
++  image: url(qss:@IconsLocationFolderName/arrow-down-@StylesheetIconsColor.png);
+ }
