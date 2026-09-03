@@ -38,6 +38,7 @@ QUARTER_STACK_ON_TOP_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos-q
 QUARTER_PAINT_ORDER_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos-quarter-paint-order.patch"
 NATIVE_UITOOLS_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos-native-uitools.patch"
 EMBEDDED_DIALOG_TITLEBAR_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos-embedded-dialog-titlebar.patch"
+QSS_WIDGET_INDICATOR_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos-qss-widget-indicator-images.patch"
 
 if [ "$FREECAD_VERSION" != "1.1.2" ] && [ -z "${FREECAD_SHA256:-}" ]; then
     echo "FREECAD_SHA256 is required for version $FREECAD_VERSION" >&2
@@ -99,7 +100,7 @@ if grep -q '#if !defined(__MINGW32__) && !defined(FREECAD_OHOS)' "$UI_LOADER_HEA
     sed -i 's/#if !defined(__MINGW32__) && !defined(FREECAD_OHOS)/#if !defined(__MINGW32__)/' "$UI_LOADER_HEADER"
 fi
 
-for patch_file in "$OHOS_PATCH" "$PYTHON_COMPAT_PATCH" "$BOOST_COMPAT_PATCH" "$RPATH_PATCH" "$HEADLESS_SWIG_PATCH" "$HEADLESS_TRANSLATIONS_PATCH" "$HEADLESS_TRANSLATION_TOOLS_PATCH" "$SOURCE_LOCATION_PATCH" "$LIBCXX_PATCH" "$ICU_C_API_PATCH" "$QT512_PATCH" "$CLANG15_PATCH" "$LIBCXX15_VIEWS_PATCH" "$RUNTIME_LAYOUT_PATCH" "$TECHDRAW_CLOCALE_PATCH" "$TECHDRAW_QGVPAGE_PATCH" "$CAM_GLES_CONSTANTS_PATCH" "$STYLEPARAMETERS_NUMERIC_PATCH" "$GL_ATTRIB_STACK_PATCH" "$GUI_SPLASH_PATCH" "$GLES_SURFACE_FORMAT_PATCH" "$GUI_STARTUP_LOGO_PATCH" "$GUI_STYLESHEET_PROBES_PATCH" "$QUARTER_DEFER_PAINT_PATCH" "$LCS_RESTORE_NULL_GUARD_PATCH" "$QUARTER_STACK_ON_TOP_PATCH" "$QUARTER_PAINT_ORDER_PATCH" "$NATIVE_UITOOLS_PATCH" "$EMBEDDED_DIALOG_TITLEBAR_PATCH"; do
+for patch_file in "$OHOS_PATCH" "$PYTHON_COMPAT_PATCH" "$BOOST_COMPAT_PATCH" "$RPATH_PATCH" "$HEADLESS_SWIG_PATCH" "$HEADLESS_TRANSLATIONS_PATCH" "$HEADLESS_TRANSLATION_TOOLS_PATCH" "$SOURCE_LOCATION_PATCH" "$LIBCXX_PATCH" "$ICU_C_API_PATCH" "$QT512_PATCH" "$CLANG15_PATCH" "$LIBCXX15_VIEWS_PATCH" "$RUNTIME_LAYOUT_PATCH" "$TECHDRAW_CLOCALE_PATCH" "$TECHDRAW_QGVPAGE_PATCH" "$CAM_GLES_CONSTANTS_PATCH" "$STYLEPARAMETERS_NUMERIC_PATCH" "$GL_ATTRIB_STACK_PATCH" "$GUI_SPLASH_PATCH" "$GLES_SURFACE_FORMAT_PATCH" "$GUI_STARTUP_LOGO_PATCH" "$GUI_STYLESHEET_PROBES_PATCH" "$QUARTER_DEFER_PAINT_PATCH" "$LCS_RESTORE_NULL_GUARD_PATCH" "$QUARTER_STACK_ON_TOP_PATCH" "$QUARTER_PAINT_ORDER_PATCH" "$NATIVE_UITOOLS_PATCH" "$EMBEDDED_DIALOG_TITLEBAR_PATCH" "$QSS_WIDGET_INDICATOR_PATCH"; do
     [ -f "$patch_file" ] || continue
     # A prior OHOS compatibility patch may have extended this function's
     # guard. Treat the stronger equivalent condition as already applied.
@@ -150,6 +151,14 @@ for patch_file in "$OHOS_PATCH" "$PYTHON_COMPAT_PATCH" "$BOOST_COMPAT_PATCH" "$R
     if [ "$patch_file" = "$EMBEDDED_DIALOG_TITLEBAR_PATCH" ] &&
        grep -q '_freecad_ohos_dialog_titlebar' \
            "$SOURCE_DIR/src/Gui/GuiApplication.cpp" 2>/dev/null; then
+        echo "FreeCAD patch already applied: $(basename "$patch_file")"
+        continue
+    fi
+    if [ "$patch_file" = "$QSS_WIDGET_INDICATOR_PATCH" ] &&
+       grep -q 'QAbstractSpinBox::up-button' \
+           "$SOURCE_DIR/src/Gui/Stylesheets/FreeCAD.qss" 2>/dev/null &&
+       grep -q 'check-mark-@StylesheetIconsColor.png' \
+           "$SOURCE_DIR/src/Gui/Stylesheets/FreeCAD.qss" 2>/dev/null; then
         echo "FreeCAD patch already applied: $(basename "$patch_file")"
         continue
     fi

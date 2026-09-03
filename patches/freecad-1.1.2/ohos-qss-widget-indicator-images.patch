@@ -1,0 +1,121 @@
+--- a/src/Gui/Stylesheets/FreeCAD.qss
++++ b/src/Gui/Stylesheets/FreeCAD.qss
+@@ -287,11 +287,11 @@
+   background-color: @GeneralDisabledBackgroundColor;
+   border: 1px solid @CheckBoxBorderColor;
+ }
+ 
+ QCheckBox::indicator:checked {
+-  image:url(qss:@IconsLocationFolderName/check-mark-@StylesheetIconsColor.svg);
++  image:url(qss:@IconsLocationFolderName/check-mark-@StylesheetIconsColor.png);
+   border: 1px solid @CheckBoxBorderColor;
+ }
+ 
+ QCheckBox::indicator:checked:hover, QCheckBox::indicator:checked:pressed {
+   background-color: @CheckBoxBackgroundColor;
+@@ -299,25 +299,25 @@
+ }
+ 
+ QCheckBox::indicator:checked:disabled {
+   /* background-color: @PrimaryColor; */
+   border: 1px solid @CheckBoxBorderColor;
+-  image: url(qss:@IconsLocationFolderName/check-mark-lightgray.svg);
++  image: url(qss:@IconsLocationFolderName/check-mark-lightgray.png);
+   background-color: @GeneralDisabledBackgroundColor;
+ }
+ 
+ QCheckBox::indicator:indeterminate {
+   /* background-color: @PrimaryColor; */
+   border: 1px solid @CheckBoxBorderColor;
+-  image: url(qss:@IconsLocationFolderName/indeterminate-mark-@StylesheetIconsColor.svg);
++  image: url(qss:@IconsLocationFolderName/indeterminate-mark-@StylesheetIconsColor.png);
+ }
+ 
+ QCheckBox::indicator:indeterminate:disabled {
+   /* background-color: @PrimaryColor; */
+   border: 1px solid @CheckBoxBorderColor;
+   background-color: @GeneralDisabledBackgroundColor;
+-  image: url(qss:@IconsLocationFolderName/indeterminate-mark-lightgray.svg);
++  image: url(qss:@IconsLocationFolderName/indeterminate-mark-lightgray.png);
+ }
+ 
+ QCheckBox::indicator:indeterminate:hover, QCheckBox::indicator:indeterminate:pressed {
+   background-color: @CheckBoxBackgroundColor;
+   border: 1px solid @GeneralBorderHoverColor;
+@@ -970,11 +970,11 @@
+   border-radius: @InputFieldBorderRadius;
+   padding-left: 4px;
+   padding-right: 4px;
+ }
+ 
+-QAbstractSpinBox:up-button {
++QAbstractSpinBox::up-button {
+   background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 @ButtonTopBackgroundColor,stop:1 @ButtonBottomBackgroundColor);
+   subcontrol-origin: border;
+   subcontrol-position: top right;
+   border-top: 1px solid transparent;
+   border-right: 1px solid transparent;
+@@ -983,33 +983,33 @@
+   border-left: 1px solid @GeneralBorderColor;
+   margin:1px;
+   margin-bottom:-1px;
+ }
+ 
+-QAbstractSpinBox:up-button:hover{
++QAbstractSpinBox::up-button:hover{
+   background-color: @GeneralBackgroundHoverColor;
+ }
+ 
+-QAbstractSpinBox:up-button:disabled {
++QAbstractSpinBox::up-button:disabled {
+   background-color: @GeneralDisabledBackgroundColor;
+ }
+ 
+ QAbstractSpinBox::up-arrow:disabled, QAbstractSpinBox::up-arrow:off {
+-  image: url(qss:@IconsLocationFolderName/arrow-up-lightgray.svg);
++  image: url(qss:@IconsLocationFolderName/arrow-up-lightgray.png);
+ }
+ 
+ QAbstractSpinBox::up-arrow {
+-  image: url(qss:@IconsLocationFolderName/arrow-up-lightgray.svg);
++  image: url(qss:@IconsLocationFolderName/arrow-up-lightgray.png);
+   height: 8px;
+   width: 8px;
+ }
+ 
+ QAbstractSpinBox::up-arrow:hover {
+-  image: url(qss:@IconsLocationFolderName/arrow-up-@StylesheetIconsColor.svg);
++  image: url(qss:@IconsLocationFolderName/arrow-up-@StylesheetIconsColor.png);
+ }
+ 
+-QAbstractSpinBox:down-button {
++QAbstractSpinBox::down-button {
+   background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 @ButtonTopBackgroundColor,stop:1 @ButtonBottomBackgroundColor);
+   subcontrol-origin: border;
+   subcontrol-position: bottom right;
+   border-bottom: 1px solid transparent;
+   border-right: 1px solid transparent;
+@@ -1018,22 +1018,22 @@
+   border-left: 1px solid @GeneralBorderColor;
+   margin:1px;
+   margin-top:-1px;
+ }
+ 
+-QAbstractSpinBox:down-button:disabled {
++QAbstractSpinBox::down-button:disabled {
+   background-color: @GeneralDisabledBackgroundColor;
+ }
+ 
+ QAbstractSpinBox::down-arrow, QAbstractSpinBox::down-arrow:disabled, QAbstractSpinBox::down-arrow:off {
+-  image: url(qss:@IconsLocationFolderName/arrow-down-lightgray.svg);
++  image: url(qss:@IconsLocationFolderName/arrow-down-lightgray.png);
+   height: 8px;
+   width: 8px;
+ }
+ 
+ QAbstractSpinBox::down-arrow:hover {
+-  image: url(qss:@IconsLocationFolderName/arrow-down-@StylesheetIconsColor.svg);
++  image: url(qss:@IconsLocationFolderName/arrow-down-@StylesheetIconsColor.png);
+   height: 8px;
+   width: 8px;
+ }
