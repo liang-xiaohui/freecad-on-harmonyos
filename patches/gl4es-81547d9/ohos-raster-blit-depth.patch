@@ -1,0 +1,213 @@
+diff --git a/src/gl/state.h b/storage/Users/currentUser/CPPLib/sources/gl4es/81547d9/src/gl/state.h
+index 02a7d3d..39de837 100644
+--- a/src/gl/state.h
++++ b/src/gl/state.h
+@@ -124,6 +124,13 @@ typedef struct {
+ 
+ typedef struct {
+     rasterpos_t rPos;
++    // Pending depth for the next raster blit (glBitmap/glDrawPixels): real GL
++    // raster ops depth-test and depth-write at the raster position's z, so the
++    // raster path sets these before calling gl4es_blitTexture(). Internal
++    // blits (FBO copies, texture readback) leave blit_use_depth at 0 and keep
++    // the legacy "blit ignores depth" behavior.
++    int     blit_use_depth;
++    GLfloat blit_z;
+     viewport_t viewport;
+     viewport_t scissor;
+     GLfloat raster_scale[4];
+@@ -244,6 +251,8 @@ typedef struct {
+     GLuint          pixelshader_alpha;
+     GLuint          program;
+     GLuint          program_alpha;
++    GLint           zloc;
++    GLint           zloc_alpha;
+     GLfloat         vert[8], tex[8];
+ } glesblit_t;
+ 
+diff --git a/src/gl/blit.c b/storage/Users/currentUser/CPPLib/sources/gl4es/81547d9/src/gl/blit.c
+index 09acc6c..b8f8d32 100644
+--- a/src/gl/blit.c
++++ b/src/gl/blit.c
+@@ -32,7 +32,7 @@ void gl4es_blitTexture_gles1(GLuint texture,
+     GLfloat nwidth, GLfloat nheight, 
+     GLfloat zoomx, GLfloat zoomy, 
+     GLfloat vpwidth, GLfloat vpheight, 
+-    GLfloat x, GLfloat y, GLint mode) {
++    GLfloat x, GLfloat y, GLint mode, GLfloat z) {
+ 
+     LOAD_GLES(glClientActiveTexture);
+ 
+@@ -70,8 +70,9 @@ void gl4es_blitTexture_gles1(GLuint texture,
+         GLfloat dx = (customvp)?0.0f:glstate->raster.viewport.x;
+         GLfloat dy = (customvp)?0.0f:glstate->raster.viewport.y;
+         //TODO: do something with width / height of ViewPort?
+-        // then draw it
+-        gles_glDrawTexf(x+dx, y+dy, 0.0f, width, height);
++        // then draw it (glDrawTex takes a window-space z in [0,1]; the raster
++        // path passes NDC z, internal blits pass 0 and keep the legacy near z)
++        gles_glDrawTexf(x+dx, y+dy, (z != 0.0f) ? (z + 1.0f) * 0.5f : 0.0f, width, height);
+     } else {
+         LOAD_GLES(glVertexPointer);
+         LOAD_GLES(glTexCoordPointer);
+@@ -147,9 +148,10 @@ void gl4es_blitTexture_gles1(GLuint texture,
+ const char _blit_vsh[] = "#version 100                  \n" \
+ "attribute highp vec2 aPosition;                        \n" \
+ "attribute highp vec2 aTexCoord;                        \n" \
++"uniform highp float uZ;                                \n" \
+ "varying mediump vec2 vTexCoord;                        \n" \
+ "void main(){                                           \n" \
+-"gl_Position = vec4(aPosition.x, aPosition.y, 0.0, 1.0);\n" \
++"gl_Position = vec4(aPosition.x, aPosition.y, uZ, 1.0); \n" \
+ "vTexCoord = aTexCoord;                                 \n" \
+ "}                                                      \n";
+ 
+@@ -163,9 +165,10 @@ const char _blit_fsh[] = "#version 100                  \n" \
+ const char _blit_vsh_alpha[] = "#version 100            \n" \
+ "attribute highp vec2 aPosition;                        \n" \
+ "attribute highp vec2 aTexCoord;                        \n" \
++"uniform highp float uZ;                                \n" \
+ "varying mediump vec2 vTexCoord;                        \n" \
+ "void main(){                                           \n" \
+-"gl_Position = vec4(aPosition.x, aPosition.y, 0.0, 1.0);\n" \
++"gl_Position = vec4(aPosition.x, aPosition.y, uZ, 1.0); \n" \
+ "vTexCoord = aTexCoord;                                 \n" \
+ "}                                                      \n";
+ 
+@@ -184,7 +187,7 @@ void gl4es_blitTexture_gles2(GLuint texture,
+     GLfloat nwidth, GLfloat nheight, 
+     GLfloat zoomx, GLfloat zoomy, 
+     GLfloat vpwidth, GLfloat vpheight, 
+-    GLfloat x, GLfloat y, GLint mode) {
++    GLfloat x, GLfloat y, GLint mode, GLfloat z) {
+ 
+     LOAD_GLES(glDrawArrays);
+ 
+@@ -283,6 +286,7 @@ void gl4es_blitTexture_gles2(GLuint texture,
+         GLuint oldprog = glstate->gleshard->program;
+         gles_glUseProgram(glstate->blit->program);
+         gles_glUniform1i( gles_glGetUniformLocation( glstate->blit->program, "uTex" ), 0 );
++        glstate->blit->zloc = gles_glGetUniformLocation( glstate->blit->program, "uZ" );
+ 
+         glstate->blit->program_alpha = gles_glCreateProgram();
+         gles_glBindAttribLocation( glstate->blit->program_alpha, 0, "aPosition" );
+@@ -299,6 +303,7 @@ void gl4es_blitTexture_gles2(GLuint texture,
+         }
+         gles_glUseProgram(glstate->blit->program_alpha);
+         gles_glUniform1i( gles_glGetUniformLocation( glstate->blit->program_alpha, "uTex" ), 0 );
++        glstate->blit->zloc_alpha = gles_glGetUniformLocation( glstate->blit->program_alpha, "uZ" );
+         gles_glUseProgram(oldprog);
+     }
+ 
+@@ -348,6 +353,13 @@ void gl4es_blitTexture_gles2(GLuint texture,
+ 
+     realize_blitenv(alpha);
+ 
++    // Raster ops (glBitmap/glDrawPixels) draw at the raster position's depth;
++    // internal blits pass z=0 with depth test disabled, as before.
++    {
++        LOAD_GLES2(glUniform1f);
++        gles_glUniform1f(alpha ? glstate->blit->zloc_alpha : glstate->blit->zloc, z);
++    }
++
+ #if defined(FREECAD_OHOS_SKETCH_DIAG)
+     if (mode==BLIT_COLOR && freecad_sketch_diag_budget > 0) {
+         --freecad_sketch_diag_budget;
+@@ -446,11 +458,22 @@ void gl4es_blitTexture(GLuint texture,
+ 
+     GLint depthwrite = glstate->depth.mask;
+ 
+-    gl4es_glDisable(GL_DEPTH_TEST);
++    // The raster path (glBitmap/glDrawPixels) asks for real GL raster-op
++    // depth semantics: the caller's depth-test/depth-mask state applies and
++    // the quad is drawn at the raster position's z. Sketcher endpoint markers
++    // rely on this: without a depth write, a solid drawn after the sketch
++    // (e.g. a Pad following its sketch) overpaints the markers. Internal
++    // blits (FBO copies, texture readback) keep the legacy depthless path.
++    const int use_depth = glstate->raster.blit_use_depth;
++    const GLfloat blit_z = use_depth ? glstate->raster.blit_z : 0.0f;
++    glstate->raster.blit_use_depth = 0;
++
++    if (!use_depth)
++        gl4es_glDisable(GL_DEPTH_TEST);
+     gl4es_glDisable(GL_CULL_FACE);
+     gl4es_glDisable(GL_STENCIL_TEST);
+ 
+-    if(depthwrite)
++    if(depthwrite && !use_depth)
+         gl4es_glDepthMask(GL_FALSE);
+ 
+ #ifdef TEXSTREAM
+@@ -486,7 +509,7 @@ void gl4es_blitTexture(GLuint texture,
+ 
+         gl4es_blitTexture_gles1(texture, sx, sy, width, height, 
+                                 nwidth, nheight, zoomx, zoomy, 
+-                                vpwidth, vpheight, x, y, mode);
++                                vpwidth, vpheight, x, y, mode, blit_z);
+         if(!IS_TEX2D(tmp))
+             gles_glDisable(GL_TEXTURE_2D);
+         if(IS_CUBE_MAP(tmp))
+@@ -494,7 +517,7 @@ void gl4es_blitTexture(GLuint texture,
+     } else {
+         gl4es_blitTexture_gles2(texture, sx, sy, width, height, 
+             nwidth, nheight, zoomx, zoomy, 
+-            vpwidth, vpheight, x, y, mode);
++            vpwidth, vpheight, x, y, mode, blit_z);
+     }
+ 
+     // All the previous states are Pushed / Poped anyway...
+@@ -509,7 +532,7 @@ void gl4es_blitTexture(GLuint texture,
+     if (glstate->actual_tex2d[0] != texture) 
+         gles_glBindTexture(GL_TEXTURE_2D, glstate->actual_tex2d[0]);
+ 
+-    if(depthwrite)
++    if(depthwrite && !use_depth)
+         gl4es_glDepthMask(GL_TRUE);
+ 
+     gl4es_glPopAttrib();
+diff --git a/src/gl/raster.c b/storage/Users/currentUser/CPPLib/sources/gl4es/81547d9/src/gl/raster.c
+index 3ab4716..84d1a86 100644
+--- a/src/gl/raster.c
++++ b/src/gl/raster.c
+@@ -404,7 +404,11 @@ void bitmap_flush() {
+ 		     glstate->raster.bm_tnwidth, glstate->raster.bm_tnheight);
+ 	}
+ #endif
+-	if (bitmap_texture)
++	if (bitmap_texture) {
++	// Real GL bitmaps depth-test and depth-write at the raster position's z;
++	// request that from the blit (see gl4es_blitTexture).
++	glstate->raster.blit_use_depth = 1;
++	glstate->raster.blit_z = glstate->raster.rPos.z;
+ 	gl4es_blitTexture(
+ 		bitmap_texture->glname,
+ 		sx, sy,
+@@ -415,6 +419,7 @@ void bitmap_flush() {
+ 		sx, sy,
+ 		BLIT_ALPHA
+ 	);
++	}
+ 
+ 	glstate->raster.bm_drawing = 0;
+ 
+@@ -694,7 +699,11 @@ void render_raster_list(rasterlist_t* rast) {
+ 			     glstate->raster.rPos.z);
+ 		}
+ #endif
+-		if (texture)
++		if (texture) {
++		// Real GL pixel draws depth-test and depth-write at the raster
++		// position's z; request that from the blit (see gl4es_blitTexture).
++		glstate->raster.blit_use_depth = 1;
++		glstate->raster.blit_z = glstate->raster.rPos.z;
+ 		gl4es_blitTexture(
+ 			texture->glname,
+ 			0.f, 0.f,
+@@ -705,6 +714,7 @@ void render_raster_list(rasterlist_t* rast) {
+ 			glstate->raster.rPos.x-rast->xorig, glstate->raster.rPos.y-rast->yorig,
+ 			(rast->bitmap)?BLIT_ALPHA:BLIT_COLOR
+ 		);
++		}
+ 	}
+   if (glstate->raster.rPos.x + rast->xmove >= 0 && glstate->raster.rPos.y + rast->ymove >= 0) {
+     glstate->raster.rPos.x += rast->xmove;
