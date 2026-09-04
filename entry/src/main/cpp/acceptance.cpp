@@ -28,7 +28,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cxxabi.h>
+#include <exception>
 #include <fstream>
+#include <signal.h>
+#include <unwind.h>
 #include <mutex>
 #include <sstream>
 #include <stdexcept>
@@ -82,6 +86,90 @@ std::string libraryRoot()
 // is being initialized.  QAbilityStage performs that initialization before
 // QAbility::onCreate() can prepare the FreeCAD runtime, so keep this setup in
 // a small idempotent entry point that can run at the start of the stage.
+// Diagnostic: SIGABRT crashes (e.g. Preferences dialog) are invisible in
+// hilog. Log the active exception before the runtime aborts.
+void installTerminateProbe()
+{
+    std::set_terminate([]() {
+        std::type_info* type = __cxxabiv1::__cxa_current_exception_type();
+        if (type != nullptr) {
+            OH_LOG_Print(LOG_APP, LOG_ERROR, PROBE_LOG_DOMAIN, PROBE_LOG_TAG,
+                         "std::terminate, exception type=%{public}s", type->name());
+            try {
+                std::rethrow_exception(std::current_exception());
+            }
+            catch (const std::exception& error) {
+                OH_LOG_Print(LOG_APP, LOG_ERROR, PROBE_LOG_DOMAIN, PROBE_LOG_TAG,
+                             "std::terminate, what=%{public}s", error.what());
+            }
+            catch (...) {
+                OH_LOG_Print(LOG_APP, LOG_ERROR, PROBE_LOG_DOMAIN, PROBE_LOG_TAG,
+                             "std::terminate, non-std exception");
+            }
+        }
+        else {
+            OH_LOG_Print(LOG_APP, LOG_ERROR, PROBE_LOG_DOMAIN, PROBE_LOG_TAG,
+                         "std::terminate without active exception (plain abort?)");
+        }
+        std::abort();
+    });
+}
+
+// Diagnostic: the DFX crash report lands in /data/log/faultlog which the hdc
+// shell cannot read, so unwind fatal signals ourselves into hilog.
+struct CrashBacktraceState {
+    int count = 0;
+};
+
+_Unwind_Reason_Code crashBacktraceCallback(struct _Unwind_Context* context, void* arg)
+{
+    auto* state = static_cast<CrashBacktraceState*>(arg);
+    uintptr_t pc = _Unwind_GetIP(context);
+    if (pc == 0 || state->count >= 40) {
+        return _URC_END_OF_STACK;
+    }
+    Dl_info info;
+    if (dladdr(reinterpret_cast<void*>(pc), &info) != 0 && info.dli_fname != nullptr) {
+        const char* symbol = info.dli_sname != nullptr ? info.dli_sname : "?";
+        uintptr_t offset = info.dli_saddr != nullptr
+            ? pc - reinterpret_cast<uintptr_t>(info.dli_saddr)
+            : pc - reinterpret_cast<uintptr_t>(info.dli_fbase);
+        OH_LOG_Print(LOG_APP, LOG_ERROR, PROBE_LOG_DOMAIN, PROBE_LOG_TAG,
+                     "crash frame %{public}02d: %{public}s %{public}s+0x%{public}x",
+                     state->count, info.dli_fname, symbol, (unsigned int)offset);
+    }
+    else {
+        OH_LOG_Print(LOG_APP, LOG_ERROR, PROBE_LOG_DOMAIN, PROBE_LOG_TAG,
+                     "crash frame %{public}02d: pc=0x%{public}x",
+                     state->count, (unsigned int)pc);
+    }
+    ++state->count;
+    return _URC_NO_REASON;
+}
+
+void crashSignalHandler(int signo, siginfo_t* siginfo, void*)
+{
+    OH_LOG_Print(LOG_APP, LOG_ERROR, PROBE_LOG_DOMAIN, PROBE_LOG_TAG,
+                 "crash signal %{public}d addr=0x%{public}x, backtrace:",
+                 signo, (unsigned int)(uintptr_t)(siginfo != nullptr ? siginfo->si_addr : nullptr));
+    CrashBacktraceState state;
+    _Unwind_Backtrace(crashBacktraceCallback, &state);
+    signal(signo, SIG_DFL);
+    raise(signo);
+}
+
+void installCrashSignalProbe()
+{
+    struct sigaction action {};
+    action.sa_sigaction = crashSignalHandler;
+    action.sa_flags = SA_SIGINFO;
+    sigemptyset(&action.sa_mask);
+    sigaction(SIGABRT, &action, nullptr);
+    sigaction(SIGSEGV, &action, nullptr);
+    sigaction(SIGBUS, &action, nullptr);
+    sigaction(SIGILL, &action, nullptr);
+}
+
 void prepareOpenGLRuntime()
 {
     std::lock_guard<std::mutex> guard(openGLMutex);
@@ -132,6 +220,63 @@ void ensureDirectory(const std::string& path)
     requireDirectory(path);
 }
 
+// One-time migration: early OHOS builds shipped several view defaults as
+// "off" (Sketcher MakeInternals, 3D view ShowAxisCross), and a Preferences
+// dialog OK click persisted those explicit "false" values into user.cfg.
+// The defaults are now "on", but an explicitly stored false would still win.
+// Drop the stale entries once; afterwards the preferences are honored again.
+void dropStaleBoolPreferences(const std::string& home,
+                              const std::vector<const char*>& names,
+                              const char* reason)
+{
+    const std::string markerPath = home + "/.prefs-migrated-20260904";
+    {
+        struct stat markerStat {};
+        if (stat(markerPath.c_str(), &markerStat) == 0) {
+            return;  // migration already done once; user choice is honored now
+        }
+    }
+    // Stale entries can only live in user.cfg; if it does not exist yet there
+    // is nothing to migrate. Either way, never run this again so later
+    // explicit user choices are preserved.
+    const std::string cfgPath = home + "/user.cfg";
+    std::ifstream input(cfgPath);
+    if (!input) {
+        std::ofstream marker(markerPath, std::ios::trunc);
+        marker << "no user.cfg\n";
+        return;
+    }
+    std::ostringstream buffer;
+    buffer << input.rdbuf();
+    input.close();
+    std::string content = buffer.str();
+    bool changed = false;
+    for (const char* name : names) {
+        const std::string marker = std::string("Name=\"") + name + "\"";
+        const size_t pos = content.find(marker);
+        if (pos == std::string::npos) {
+            continue;
+        }
+        // Remove the whole <FCBool Name="..." .../> line.
+        const size_t lineBegin = content.rfind('\n', pos);
+        const size_t lineEnd = content.find('\n', pos);
+        if (lineEnd == std::string::npos) {
+            continue;
+        }
+        content = content.substr(0, lineBegin == std::string::npos ? 0 : lineBegin + 1) +
+                  content.substr(lineEnd + 1);
+        changed = true;
+    }
+    if (changed) {
+        std::ofstream output(cfgPath, std::ios::trunc);
+        output << content;
+        OH_LOG_Print(LOG_APP, LOG_INFO, PROBE_LOG_DOMAIN, PROBE_LOG_TAG,
+                     "dropped stale user.cfg entries: %{public}s", reason);
+    }
+    std::ofstream marker(markerPath, std::ios::trunc);
+    marker << (changed ? "migrated\n" : "nothing-to-migrate\n");
+}
+
 struct WritableRuntimePaths {
     std::string home;
     std::string data;
@@ -151,6 +296,9 @@ WritableRuntimePaths configureWritableRuntime(const std::string& outputDir)
     ensureDirectory(paths.data);
     ensureDirectory(paths.cache);
     ensureDirectory(paths.temp);
+    dropStaleBoolPreferences(paths.home,
+                             {"MakeInternals", "ShowAxisCross"},
+                             "MakeInternals/ShowAxisCross (old off-by-default values)");
 
     // FreeCAD may fall back to the process working directory when Qt cannot
     // resolve a platform standard path. The bundle directory is read-only on
@@ -309,9 +457,9 @@ std::string materializeRuntime(AcceptanceWork& acceptance)
     const bool reuseExisting = pythonInitialized.load(std::memory_order_acquire);
     copyRawFile(acceptance.resourceManager, "python311.zip", runtimeDir + "/lib/python311.zip",
                 reuseExisting);
-    // The FlexiMind worker/workbench archive can change without changing its
-    // byte size between HAP revisions. Refresh it on every launch so a
-    // persistent app filesDir cannot retain an older worker contract.
+    // The Python runtime archive can change without changing its byte size
+    // between HAP revisions. Refresh it on every launch so a persistent app
+    // filesDir cannot retain older modules.
     copyRawFile(acceptance.resourceManager, "freecad-runtime.zip",
                 runtimeDir + "/freecad-runtime.zip", false);
     copyRawFile(acceptance.resourceManager, "freecad_headless_acceptance.py",
@@ -828,6 +976,8 @@ napi_value prepareOpenGL(napi_env env, napi_callback_info info)
 napi_value setupFreecadEnv(napi_env env, napi_callback_info info)
 {
     std::lock_guard<std::mutex> runtimeGuard(runtimeMutex);
+    installTerminateProbe();
+    installCrashSignalProbe();
     size_t argc = 2;
     napi_value args[2] {};
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
@@ -1174,6 +1324,7 @@ void materializeFreecadRuntimeDirectory(const std::string& filesDir)
             removeTree(home + "/Mod");
             removeTree(home + "/Ext");
             removeTree(home + "/share");
+            removeTree(home + "/FlexiMind");
             if (!extractZipToDir(zipPath, home)) {
                 throw std::runtime_error("cannot extract freecad runtime zip (C++/zlib)");
             }
@@ -1189,21 +1340,21 @@ void materializeFreecadRuntimeDirectory(const std::string& filesDir)
 std::string writeGuiStartupScript(const std::string& filesDir)
 {
     const std::string home = filesDir + "/freecad-home";
-    const std::string directory = home + "/FlexiMind";
     ensureDirectory(home);
-    ensureDirectory(directory);
-    const std::string script = directory + "/harmonyos_startup.py";
+    const std::string script = home + "/harmonyos_startup.py";
     std::ofstream output(script, std::ios::trunc);
     if (!output || !(output <<
         "# Generated by FreeCAD HarmonyOS integration.\n"
         "try:\n"
         "    import FreeCAD\n"
-        "    FreeCAD.ParamGet('User parameter:BaseApp/Preferences/General').SetString('AutoloadModule', 'FlexiMindGripDesign')\n"
         "    import FreeCADGui\n"
-        "    FreeCADGui.activateWorkbench('FlexiMindGripDesign')\n"
+        "    general = FreeCAD.ParamGet('User parameter:BaseApp/Preferences/General')\n"
+        "    autoload = general.GetString('AutoloadModule', '')\n"
+        "    if autoload and autoload not in FreeCADGui.listWorkbenches():\n"
+        "        general.SetString('AutoloadModule', '')\n"
         "except Exception as exc:\n"
-        "    print('FlexiMind workbench startup failed: %s' % exc)\n")) {
-        throw std::runtime_error("cannot write FlexiMind GUI startup script");
+        "    print('FreeCAD startup preference cleanup failed: %s' % exc)\n")) {
+        throw std::runtime_error("cannot write FreeCAD GUI startup script");
     }
     return script;
 }
