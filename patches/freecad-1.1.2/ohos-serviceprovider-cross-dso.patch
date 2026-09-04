@@ -1,0 +1,35 @@
+--- a/src/Base/ServiceProvider.h
++++ b/src/Base/ServiceProvider.h
+@@ -30,7 +30,6 @@
+ #include <deque>
+ #include <map>
+ #include <string>
+-#include <any>
+ #include <list>
+ 
+ namespace Base
+@@ -84,12 +83,22 @@ class BaseExport ServiceProvider
+     struct ServiceDescriptor
+     {
+         std::string name;
+-        std::any instance;
++        // NOTE: upstream stores the instance as std::any and extracts it with
++        // std::any_cast. That breaks on OHOS: libc++'s default type_info
++        // comparison is address-only ("unique RTTI" implementation), while
++        // FreeCAD module DSOs are dlopen'ed RTLD_LOCAL, so the same interface
++        // type registered from one module and queried from another compares
++        // unequal and any_cast throws std::bad_any_cast (observed when opening
++        // the PartDesign Pad dialog: PreviewUpdateScheduler registered by
++        // PartGui.so, queried from PartDesignGui.so). The map key already is
++        // the mangled type name, which provides the same type safety, so store
++        // a plain void* instead.
++        void* instance;
+ 
+         template<typename T>
+         T* get() const
+         {
+-            return std::any_cast<T*>(instance);
++            return static_cast<T*>(instance);
+         }
+     };
+ 
