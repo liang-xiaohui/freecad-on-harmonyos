@@ -17,6 +17,10 @@ LIBS_DIR="$LIBS_PARENT/$ABI"
 RAWFILE_PARENT="$PROJECT_DIR/entry/src/main/resources"
 RAWFILE_DIR="$RAWFILE_PARENT/rawfile"
 FLEXIMIND_ROOT="${FLEXIMIND_ROOT:-/path/to/FlexiMind}"
+PY_YAML_ROOT="$PROJECT_DIR/runtime/pyyaml"
+PACKAGING_ROOT="$PROJECT_DIR/runtime/packaging"
+NUMPY_SP="${NUMPY_SP:-$CPP_LIB_ROOT/install/numpy/2.2.6/ohos/$ABI/site-packages}"
+NUMPY_LICENSE="$NUMPY_SP/numpy-2.2.6.dist-info/LICENSE.txt"
 
 for required in \
     "$FREECAD_PREFIX/lib/FreeCAD.so" \
@@ -37,16 +41,39 @@ for required in \
     }
 done
 
+[ -f "$PY_YAML_ROOT/yaml/__init__.py" ] || {
+    echo "错误：缺少 vendored PyYAML runtime：$PY_YAML_ROOT/yaml/__init__.py" >&2
+    exit 1
+}
+[ -f "$PACKAGING_ROOT/packaging/__init__.py" ] || {
+    echo "错误：缺少 vendored packaging runtime：$PACKAGING_ROOT/packaging/__init__.py" >&2
+    exit 1
+}
+[ -f "$NUMPY_SP/numpy/__init__.py" ] || {
+    echo "错误：缺少 NumPy runtime：$NUMPY_SP/numpy/__init__.py" >&2
+    exit 1
+}
+for required in \
+    "$PY_YAML_ROOT/LICENSE" \
+    "$PACKAGING_ROOT/LICENSE" \
+    "$PACKAGING_ROOT/LICENSE.APACHE" \
+    "$PACKAGING_ROOT/LICENSE.BSD" \
+    "$NUMPY_LICENSE" \
+    "$NUMPY_SP/numpy/_core/_multiarray_umath.cpython-311-aarch64-linux-ohos.so" \
+    "$NUMPY_SP/numpy/fft/_pocketfft_umath.cpython-311-aarch64-linux-ohos.so" \
+    "$NUMPY_SP/numpy/linalg/_umath_linalg.cpython-311-aarch64-linux-ohos.so"; do
+    [ -f "$required" ] || {
+        echo "错误：缺少 Python runtime 输入：$required" >&2
+        exit 1
+    }
+done
+
 for required in \
     "$FLEXIMIND_ROOT/workers/worker-a.py" \
     "$FLEXIMIND_ROOT/workers/worker-b.py" \
     "$FLEXIMIND_ROOT/workers/worker-c.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/design_bridge.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/Init.py" \
     "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/registered_base.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/reference_geometry.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/scene_state.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/commands.py"; do
+    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/reference_geometry.py"; do
     [ -f "$required" ] || {
         echo "错误：缺少 FlexiMind FreeCAD runtime 输入：$required" >&2
         exit 1
@@ -107,27 +134,89 @@ echo "==> Package Python and FreeCAD non-native runtime as rawfiles"
 (cd "$FREECAD_PREFIX" && \
     zip -q -r "$RAW_STAGE/freecad-runtime.zip" Mod Ext share \
         -x '*/__pycache__/*' '*.pyc')
-echo "==> Package FlexiMind headless workers and Workbench"
+# Material imports the Python ``yaml`` package.  Include its pure-Python
+# implementation in the runtime archive's Ext/ directory; no
+# platform-specific _yaml ELF is copied into rawfile.
+PY_YAML_STAGE=$(mktemp -d "$RAW_STAGE/.pyyaml.XXXXXX")
+mkdir -p "$PY_YAML_STAGE/Ext"
+cp -R "$PY_YAML_ROOT/yaml" "$PY_YAML_STAGE/Ext/"
+cp "$PY_YAML_ROOT/LICENSE" "$PY_YAML_STAGE/Ext/yaml/LICENSE"
+(cd "$PY_YAML_STAGE" && \
+    zip -q -r "$RAW_STAGE/freecad-runtime.zip" Ext/yaml \
+        -x '*/__pycache__/*' '*.pyc' '*.so' '*.so.*')
+rm -rf "$PY_YAML_STAGE"
+PACKAGING_STAGE=$(mktemp -d "$RAW_STAGE/.packaging.XXXXXX")
+mkdir -p "$PACKAGING_STAGE/Ext"
+cp -R "$PACKAGING_ROOT/packaging" "$PACKAGING_STAGE/Ext/"
+cp "$PACKAGING_ROOT"/LICENSE* "$PACKAGING_STAGE/Ext/packaging/"
+(cd "$PACKAGING_STAGE" && \
+    zip -q -r "$RAW_STAGE/freecad-runtime.zip" Ext/packaging \
+        -x '*/__pycache__/*' '*.pyc' '*.so' '*.so.*')
+rm -rf "$PACKAGING_STAGE"
+echo "==> Stage NumPy Python package and signed native extensions"
+NUMPY_STAGE=$(mktemp -d "$RAW_STAGE/.numpy.XXXXXX")
+mkdir -p "$NUMPY_STAGE/Ext"
+cp -r "$NUMPY_SP/numpy" "$NUMPY_STAGE/Ext/"
+cp "$NUMPY_LICENSE" "$NUMPY_STAGE/Ext/numpy/LICENSE.txt"
+PATCHELF_BIN="${PATCHELF:-$(command -v patchelf 2>/dev/null || true)}"
+find "$NUMPY_STAGE/Ext/numpy" -type f -name '*.so*' -print |
+    while IFS= read -r extension; do
+        extension_name=$(basename "$extension")
+        cp -L "$extension" "$STAGE/$extension_name"
+        extension_runpath=$(readelf -d "$STAGE/$extension_name" 2>/dev/null |
+            awk '/\(RPATH\)|\(RUNPATH\)/ {sub(/^.*\[/, ""); sub(/\].*$/, ""); print; exit}')
+        if printf '%s\n' "$extension_runpath" | tr ':' '\n' | grep -q '^/' && [ -x "$PATCHELF_BIN" ]; then
+            "$PATCHELF_BIN" --set-rpath '$ORIGIN' "$STAGE/$extension_name"
+        fi
+    done
+for package_init in \
+    "$NUMPY_STAGE/Ext/numpy/_core/__init__.py" \
+    "$NUMPY_STAGE/Ext/numpy/fft/__init__.py" \
+    "$NUMPY_STAGE/Ext/numpy/linalg/__init__.py" \
+    "$NUMPY_STAGE/Ext/numpy/random/__init__.py"; do
+    package_tmp="${package_init}.ohos"
+    {
+        printf '%s\n' \
+            '# OHOS native extensions live in the HAP-signed library directory.' \
+            'import os as _ohos_os' \
+            '_ohos_native_dir = _ohos_os.environ.get("FREECAD_APP_LIBRARY_DIR")' \
+            'if _ohos_native_dir and _ohos_native_dir not in __path__:' \
+            '    __path__.append(_ohos_native_dir)' \
+            'del _ohos_native_dir, _ohos_os' \
+            ''
+        sed -n 'p' "$package_init"
+    } > "$package_tmp"
+    mv "$package_tmp" "$package_init"
+done
+(cd "$NUMPY_STAGE" && \
+    zip -q -r "$RAW_STAGE/freecad-runtime.zip" Ext/numpy \
+        -x '*.pyc' '*/__pycache__/*' '*.so' '*.so.*' '*.a')
+rm -rf "$NUMPY_STAGE"
+echo "==> Package FlexiMind headless jobs (GUI Workbench excluded)"
 FLEXIMIND_STAGE="$RAW_STAGE/fleximind"
-mkdir -p "$FLEXIMIND_STAGE/FlexiMind/workers" "$FLEXIMIND_STAGE/FlexiMind/tools/freecad" "$FLEXIMIND_STAGE/Mod"
+FLEXIMIND_HELPERS="$FLEXIMIND_STAGE/FlexiMind/tools/freecad/FlexiMindGripDesign"
+mkdir -p "$FLEXIMIND_STAGE/FlexiMind/workers" "$FLEXIMIND_HELPERS"
 cp "$PROJECT_DIR/runtime/fleximind_job_runner.py" "$FLEXIMIND_STAGE/FlexiMind/"
 printf '%s\n' '"""FlexiMind runtime package."""' > "$FLEXIMIND_STAGE/FlexiMind/__init__.py"
+printf '%s\n' '"""Headless modeling helpers shared with FlexiMind."""' > "$FLEXIMIND_HELPERS/__init__.py"
 for worker in \
     worker-a.py \
     worker-b.py \
-    worker-c.py \
-    manual_gripping_workbench_smoke.py; do
-cp "$FLEXIMIND_ROOT/workers/$worker" "$FLEXIMIND_STAGE/FlexiMind/workers/$worker"
+    worker-c.py; do
+    cp "$FLEXIMIND_ROOT/workers/$worker" "$FLEXIMIND_STAGE/FlexiMind/workers/$worker"
 done
-cp "$FLEXIMIND_ROOT/tools/freecad/design_bridge.py" "$FLEXIMIND_STAGE/FlexiMind/tools/freecad/"
-cp -R "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign" \
-    "$FLEXIMIND_STAGE/FlexiMind/tools/freecad/"
-cp -R "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign" \
-    "$FLEXIMIND_STAGE/Mod/"
+for helper in registered_base.py reference_geometry.py; do
+    cp "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/$helper" "$FLEXIMIND_HELPERS/$helper"
+done
 (cd "$FLEXIMIND_STAGE" && \
-    zip -q -r "$RAW_STAGE/freecad-runtime.zip" FlexiMind Mod \
+    zip -q -r "$RAW_STAGE/freecad-runtime.zip" FlexiMind \
         -x '*/__pycache__/*' '*.pyc')
 rm -rf "$FLEXIMIND_STAGE"
+if unzip -Z1 "$RAW_STAGE/freecad-runtime.zip" |
+   grep -Eq '^(Mod/FlexiMindGripDesign/|FlexiMind/tools/freecad/FlexiMindGripDesign/(Init.py|InitGui.py|commands.py|scene_state.py|Resources/))'; then
+    echo "错误：FlexiMindGripDesign GUI 工作台当前禁用，不得进入 runtime" >&2
+    exit 1
+fi
 cp "$PROJECT_DIR/probes/freecad-headless/acceptance.py" \
     "$RAW_STAGE/freecad_headless_acceptance.py"
 unzip -tq "$RAW_STAGE/python311.zip" >/dev/null

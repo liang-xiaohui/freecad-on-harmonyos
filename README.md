@@ -22,12 +22,11 @@
   - **Qt 6.8.3 qtbase 全 GUI 构建+安装完成**（`scripts/build-qt6-gui-ohos.sh`）：Gui/Widgets/OpenGL(GLES2)/EGL/PrintSupport/Network/Xml/Concurrent + offscreen/minimal/linuxfb 平台插件；本机冒烟测试 qVersion=6.8.3、QWidget 正常运行。
   - **Qt6 OHOS QPA 移植完成编译**：tqtc Qt5.12 `qohos` 平台插件（331 文件）整体移植进 qtbase 源码树并 CMake 化；裁剪 accessibility（QT_NO_ACCESSIBILITY）、字体库改 QFreeTypeFontDatabase 扫 /system/fonts、NAPI 桥适配 SDK 26（node-addon-api + node_api.h 兼容头）；`libqohos.so` 编译链接通过、插件可加载注册。
   - **qtsvg + qttools 构建安装完成**（Svg/SvgWidgets + UiTools/Designer/Linguist；qttools 跳过 libclang/qdoc）。
-  - **FreeCAD v1.1.2 GUI 全工作台已完成编译安装**：已启用 Part/PartDesign、Mesh、Material、Sketcher、Import、TechDraw、Spreadsheet、Start、Addon Manager、CAM、Draft、Inspection、Measure、Points、Robot、Surface 等；MeshPart/BIM 因缺少 Salome SMESH 的 MEDFile/HDF5 依赖默认关闭，Assembly 因发布源码不带 OndselSolver 子模块而默认关闭。准备 OndselSolver 后，可通过 `FREECAD_BUILD_ASSEMBLY=ON` 显式启用。桌面 GL API 由 gl4es 提供。
+  - **FreeCAD v1.1.2 GUI 全工作台已完成编译安装**：默认启用 Part/PartDesign、Mesh、Material、Sketcher、Import、TechDraw、Spreadsheet、Start、Addon Manager、CAM、Draft、Inspection、Measure、Points、Robot、Surface、Assembly、Reverse Engineering 等；MeshPart/BIM/FEM 因缺少 Salome SMESH 的 MEDFile/HDF5 依赖继续关闭。Assembly 使用 FreeCAD 1.1.2 固定版本的 OndselSolver 子模块。桌面 GL API 由 gl4es 提供。
   - **GUI HAP staging 已完成**（见 [GUI HAP 集成](docs/gui-hap-integration.md)）：Qt 应用库 `libfreecadqtapp.so`（导出 main）已构建；entry/ 已按 tqtc 官方模板改造（QAbilityStage/QAbility + XComponent 页）；`scripts/stage-gui-hap.sh` 已 staged 完整 GUI native 依赖闭包（数量由验证脚本动态校验）+ rawfile（python311.zip + freecad-runtime.zip + 验收脚本），headless 验收能力保留在 EntryAbility。
   - 首次 GUI 构建尝试（Qt 5.12.12 + Coin 4.0.0）卡在 `FreeCADGui/MainWindow.cpp`：Qt5.12 头缺 `QTime` 定义、`QSignalMapper::mappedWidget` 需 Qt ≥ 5.15；Qt 5.15 源码获取失败（tqtc 分支不存在），故按计划转向 Qt6。
 - Pivy、Shiboken6、**PySide6 全绑定栈（Core/Gui/Widgets/OpenGL/OpenGLWidgets）均已构建并验证**（v6.8.3，QWidget 可创建）。
-  - FlexiMind runtime 已接入：headless `EntryAbility` 提供参数化夹指、参数化模型和人工 FCStd job bridge；GUI `QAbility` 可通过 Want 打开本地 FCStd，并自动激活 `FlexiMindGripDesign` Workbench。接口与设备调用见 [FlexiMind runtime](docs/fleximind-runtime.md)。
-  - 2026-08-23：FlexiMind rawfile runtime 已按当前 worker/Workbench 源码刷新，并随签名 GUI HAP 通过内容校验。
+  - FlexiMind headless runtime 已接入：`EntryAbility` 提供参数化夹指、参数化模型和人工 FCStd job bridge。普通 GUI HAP 不打包或自动激活 `FlexiMindGripDesign`；该工作台由 FlexiMind 设计交付包的 launcher 按需注入。接口与设备调用见 [FlexiMind runtime](docs/fleximind-runtime.md)。
 
 当前 FreeCAD 安装前缀：
 
@@ -51,7 +50,7 @@
 ./scripts/build-occt-smoke-ohos.sh
 ./scripts/build-headless-hap-native-ohos.sh
 ./scripts/stage-headless-hap.sh
-./scripts/stage-fleximind-runtime.sh  # refresh FlexiMind rawfile runtime without the SDK
+./scripts/stage-fleximind-runtime.sh  # refresh headless FlexiMind jobs without the SDK
 ./scripts/run-staged-python-runtime-probe.sh
 ./scripts/stage-gui-hap.sh
 ./scripts/sign-staged-native-ohos.sh  # 仅供本地 target-runtime 探针
@@ -95,9 +94,9 @@ GUI 完成标准包括主窗口与工作台、3D 场景渲染、相机交互、�
 |---|---|---|
 | 参数化夹指 | headless FreeCAD 脚本 | 需要 Part、Mesh、Import、Sketcher、PartDesign 等模块 |
 | Web 工作台 | WebAssembly runtime | 与本原生移植相互独立 |
-| 本地设计包 | 完整原生 FreeCAD GUI | 最终硬需求；通过标准 `Mod/` 工作台注入 |
+| 本地设计包 | 完整原生 FreeCAD GUI | 交付包通过 `-M` 和专用 startup 脚本临时加载包内工作台 |
 
-`FlexiMindGripDesign` 是标准 FreeCAD Python 工作台：`Init.py` 提供 headless 入口，`InitGui.py` 使用 `FreeCADGui` 和 Qt 对话框。最终 GUI 必须能够安装并激活该工作台，不能只停留在 ArkUI 验收壳或 `FreeCADCmd`。
+`FlexiMindGripDesign` 是 FlexiMind 设计交付包的一部分，不安装到普通 FreeCAD 的 `Mod/`。FlexiMind launcher 将包内 `workbench/` 临时加入模块路径，再执行随包 startup 脚本完成注册和激活；普通 FreeCAD 启动不感知该工作台。
 
 ## 环境约束
 

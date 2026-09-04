@@ -1,0 +1,23 @@
+--- a/src/Gui/View3DSettings.cpp
++++ b/src/Gui/View3DSettings.cpp
+@@ -493,7 +493,8 @@
+     }
+     else if (strcmp(Reason, "PickRadius") == 0) {
+         for (auto _viewer : _viewers) {
+-            _viewer->setPickRadius(rGrp.GetFloat("PickRadius", 5.0f));
++            // Touch selection needs a larger default radius than desktop.
++            _viewer->setPickRadius(rGrp.GetFloat("PickRadius", 12.0f));
+         }
+     }
+     else if (strcmp(Reason, "TransparentObjectRenderType") == 0) {
+--- a/src/Gui/PreferencePages/DlgSettingsSelection.ui
++++ b/src/Gui/PreferencePages/DlgSettingsSelection.ui
+@@ -110,7 +110,7 @@
+            <double>200.000000000000000</double>
+           </property>
+           <property name="value">
+-           <double>5.000000000000000</double>
++           <double>12.000000000000000</double>
+           </property>
+           <property name="prefEntry" stdset="0">
+            <cstring>PickRadius</cstring>

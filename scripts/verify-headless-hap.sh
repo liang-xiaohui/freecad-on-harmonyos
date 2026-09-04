@@ -3,7 +3,12 @@ set -eu
 
 PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 FLEXIMIND_ROOT="${FLEXIMIND_ROOT:-/path/to/FlexiMind}"
+PY_YAML_ROOT="$PROJECT_DIR/runtime/pyyaml"
+PACKAGING_ROOT="$PROJECT_DIR/runtime/packaging"
 ABI="${ABI:-arm64-v8a}"
+CPP_LIB_ROOT="${CPP_LIB_ROOT:-/storage/Users/currentUser/CPPLib}"
+NUMPY_SP="${NUMPY_SP:-$CPP_LIB_ROOT/install/numpy/2.2.6/ohos/$ABI/site-packages}"
+NUMPY_LICENSE="$NUMPY_SP/numpy-2.2.6.dist-info/LICENSE.txt"
 STAGED_DIR="$PROJECT_DIR/entry/libs/$ABI"
 RAWFILE_DIR="$PROJECT_DIR/entry/src/main/resources/rawfile"
 DEFAULT_OUTPUT="$PROJECT_DIR/entry/build/default/outputs/default"
@@ -57,6 +62,9 @@ for required in \
     "libs/$ABI/Materials.so" \
     "libs/$ABI/Sketcher.so" \
     "libs/$ABI/_PartDesign.so" \
+    "libs/$ABI/_multiarray_umath.cpython-311-aarch64-linux-ohos.so" \
+    "libs/$ABI/_pocketfft_umath.cpython-311-aarch64-linux-ohos.so" \
+    "libs/$ABI/_umath_linalg.cpython-311-aarch64-linux-ohos.so" \
     "resources/rawfile/python311.zip" \
     "resources/rawfile/freecad-runtime.zip" \
     "resources/rawfile/freecad_headless_acceptance.py"; do
@@ -91,33 +99,88 @@ for source in \
     "$FLEXIMIND_ROOT/workers/worker-a.py" \
     "$FLEXIMIND_ROOT/workers/worker-b.py" \
     "$FLEXIMIND_ROOT/workers/worker-c.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/design_bridge.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/Init.py" \
     "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/registered_base.py" \
     "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/reference_geometry.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/scene_state.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/commands.py"; do
+    "$PY_YAML_ROOT/LICENSE" \
+    "$PY_YAML_ROOT/yaml/__init__.py" \
+    "$PACKAGING_ROOT/LICENSE" \
+    "$PACKAGING_ROOT/LICENSE.APACHE" \
+    "$PACKAGING_ROOT/LICENSE.BSD" \
+    "$PACKAGING_ROOT/packaging/__init__.py" \
+    "$NUMPY_LICENSE" \
+    "$NUMPY_SP/numpy/__init__.py"; do
     if [ "$source" -nt "$HAP" ]; then
         echo "STALE   $source"
         failed=1
     fi
 done
+for source in "$PY_YAML_ROOT"/yaml/*.py; do
+    [ -f "$source" ] || continue
+    if [ "$source" -nt "$HAP" ]; then
+        echo "STALE   $source"
+        failed=1
+    fi
+done
+newer_packaging=$(find "$PACKAGING_ROOT" -type f -newer "$HAP" -print -quit)
+if [ -n "$newer_packaging" ]; then
+    echo "STALE   $newer_packaging"
+    failed=1
+fi
+newer_numpy=$(find "$NUMPY_SP/numpy" -type f -newer "$HAP" -print -quit)
+if [ -n "$newer_numpy" ]; then
+    echo "STALE   $newer_numpy"
+    failed=1
+fi
 
 for entry in \
     FlexiMind/fleximind_job_runner.py \
     FlexiMind/workers/worker-a.py \
     FlexiMind/workers/worker-b.py \
     FlexiMind/workers/worker-c.py \
-    FlexiMind/workers/manual_gripping_workbench_smoke.py \
-    FlexiMind/tools/freecad/design_bridge.py \
+    FlexiMind/tools/freecad/FlexiMindGripDesign/__init__.py \
     FlexiMind/tools/freecad/FlexiMindGripDesign/registered_base.py \
-    FlexiMind/tools/freecad/FlexiMindGripDesign/reference_geometry.py \
-    FlexiMind/tools/freecad/FlexiMindGripDesign/scene_state.py \
-    FlexiMind/tools/freecad/FlexiMindGripDesign/commands.py \
-    Mod/FlexiMindGripDesign/Init.py; do
+    FlexiMind/tools/freecad/FlexiMindGripDesign/reference_geometry.py; do
     if ! unzip -p "$HAP" resources/rawfile/freecad-runtime.zip > "$RUNTIME_ZIP" || \
        ! unzip -Z1 "$RUNTIME_ZIP" | grep -q "^${entry}$"; then
         echo "MISSING resources/rawfile/freecad-runtime.zip:$entry"
+        failed=1
+    fi
+done
+if unzip -p "$HAP" resources/rawfile/freecad-runtime.zip > "$RUNTIME_ZIP" && \
+   unzip -Z1 "$RUNTIME_ZIP" |
+   grep -Eq '^(Mod/FlexiMindGripDesign/|FlexiMind/tools/freecad/FlexiMindGripDesign/(Init.py|InitGui.py|commands.py|scene_state.py|Resources/))'; then
+    echo "UNEXPECTED resources/rawfile/freecad-runtime.zip:FlexiMindGripDesign GUI Workbench"
+    failed=1
+fi
+
+for entry in Ext/yaml/__init__.py Ext/yaml/loader.py Ext/yaml/dumper.py Ext/yaml/LICENSE; do
+    if ! unzip -p "$HAP" resources/rawfile/freecad-runtime.zip > "$RUNTIME_ZIP" || \
+       ! unzip -Z1 "$RUNTIME_ZIP" | grep -q "^${entry}$"; then
+        echo "MISSING resources/rawfile/freecad-runtime.zip:$entry"
+        failed=1
+    fi
+done
+for entry in Ext/packaging/__init__.py Ext/packaging/version.py Ext/packaging/utils.py \
+             Ext/packaging/LICENSE Ext/packaging/LICENSE.APACHE Ext/packaging/LICENSE.BSD; do
+    if ! unzip -p "$HAP" resources/rawfile/freecad-runtime.zip > "$RUNTIME_ZIP" || \
+       ! unzip -Z1 "$RUNTIME_ZIP" | grep -q "^${entry}$"; then
+        echo "MISSING resources/rawfile/freecad-runtime.zip:$entry"
+        failed=1
+    fi
+done
+for entry in Ext/numpy/__init__.py Ext/numpy/_core/__init__.py Ext/numpy/fft/__init__.py \
+             Ext/numpy/linalg/__init__.py Ext/numpy/random/__init__.py Ext/numpy/LICENSE.txt; do
+    if ! unzip -p "$HAP" resources/rawfile/freecad-runtime.zip > "$RUNTIME_ZIP" || \
+       ! unzip -Z1 "$RUNTIME_ZIP" | grep -q "^${entry}$"; then
+        echo "MISSING resources/rawfile/freecad-runtime.zip:$entry"
+        failed=1
+    fi
+done
+
+for package in numpy/_core numpy/fft numpy/linalg numpy/random; do
+    if ! unzip -p "$RUNTIME_ZIP" "Ext/$package/__init__.py" |
+         grep -q 'FREECAD_APP_LIBRARY_DIR'; then
+        echo "MISSING native path setup in resources/rawfile/freecad-runtime.zip:Ext/$package/__init__.py"
         failed=1
     fi
 done

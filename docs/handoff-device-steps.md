@@ -1,6 +1,6 @@
 # 真机交接：需要用户执行的剩余步骤
 
-更新时间：2026-08-25。**全工作台 GUI 构建、staging、签名 HAP、基础 3D 与 Preferences 均已在真机通过**；当前继续扩大交互和工作台覆盖。
+更新时间：2026-09-02。**全工作台 GUI 构建、staging、签名 HAP、基础 3D 与 Preferences 均已在真机通过**；当前继续扩大交互和工作台覆盖。
 
 ## 当前就绪状态（已验证）
 
@@ -24,6 +24,10 @@ DevEco 构建完成后先跑 GUI HAP 验证（native/rawfile/新鲜度一键核�
 
 当前包：`entry/build/default/outputs/default/entry-default-signed.hap`。
 
+GL4ES 增量构建后还必须对对应 build tree 执行 `cmake --install`，再运行
+`stage-gui-hap.sh`；只运行 Ninja 会让新库停留在源码/构建树，最终 HAP 仍可能
+打入 install prefix 中的旧 `libGL.so`。
+
 ## 步骤 A：headless 验收真机复跑（关闭 headless 门禁）
 
 1. DevEco Studio 打开仓库根目录 → Sync → Build Hap（自动签名）→ Run（默认 EntryAbility）。
@@ -36,7 +40,7 @@ DevEco 构建完成后先跑 GUI HAP 验证（native/rawfile/新鲜度一键核�
 
 ## 步骤 B：FreeCAD GUI（QAbility）真机运行与调试
 
-1. 同一工程 Sync → Build Hap → Run config 选 **QAbility**。命令行从 DevEco 主机执行 `hdc -t <connect-key> shell aa start -b com.freecad.headless.acceptance -a QAbility`；如果已经在设备 shell，则直接执行 `aa start -b com.freecad.headless.acceptance -a QAbility`，不要再调用 `hdc`。
+1. 同一工程 Sync → Build Hap → Run config 选 **QAbility**。命令行从 DevEco 主机先执行 `hdc list targets -v`，只选择状态为 `Connected` 的完整 key，再执行 `hdc -t <connect-key> shell aa start -b com.freecad.headless.acceptance -a QAbility`。只有 `bm`/`aa` 实际具有执行权限的特权 HiShell 才直接调用设备命令；`uname` 显示 HarmonyOS/Toybox 不能单独作为判断依据。
 2. 启动链：QAbility.onCreate → `materializeFreecadRuntimeAsync`（解压 runtime + 设 env）→ `setupQtApplication('libfreecadqtapp.so')` → QPA dlopen main() → FreeCAD 主窗口渲染进 XComponent。
 3. hilog 标签：`FreeCADGui`（ArkTS）、`QtForOhos`（QPA）、`FreeCADProbe`（验收）。
 4. 当前回归重点：启动 QAbility → 新建文档/打开复杂文件 → 长时间旋转/缩放/选择 → 反复打开 Preferences/文件对话框 → 前后台切换。
@@ -97,6 +101,17 @@ hvigorw assembleHap --mode module -p product=default -p buildMode=debug --no-dae
 （DevEco 自身也在 watch 同一棵树）。
 
 ## 已知注意事项
+
+- 无线调试开关已开启但 `tconn` 仍失败时，先看 HDC server 日志。2026-09-02
+  实测曾因 active `~/.harmony/hdckey` 是当前 HDC 无法解开的 encrypted PEM 而在
+  RSA 握手阶段失败。已有备用私钥只有在其派生公钥哈希与 active `.pub` 完全
+  一致时才可替换，并先把旧文件备份到
+  `/storage/Users/currentUser/codex-freecad-artifacts`；否则重新生成密钥并重新授权。
+- `list targets -v` 可能把历史 `Offline` 项列在当前 `Connected` 项之前。不要让
+  安装逻辑直接取第一条非空记录；多目标时显式指定完整连接 key。
+- `bm install` 在受限终端可能打印 `error: failed to execute your command` 却返回
+  退出码 0，必须检查标准输出/错误文本。安装命令被中断后，重新确认连接并重复
+  执行 `install -r`，不要根据退出码或中断时机猜测设备状态。
 
 - `stage-gui-hap.sh` 不签名（HAP 构建时签名）；本地探针运行 `scripts/sign-staged-native-ohos.sh` 自签名 entry/libs，再运行 `scripts/run-staged-freecad-acceptance.sh`。
 - Qt6 的 `moc/uic/rcc` 自签名必须在能访问 DevEco 主机工具链的终端完成。`/data/service/hnp/bin` 是设备运行环境路径，不代表存在 `binary-sign-tool`；如果 `uname -a` 显示 `HarmonyOS`/`Toybox`，当前是设备 shell，应切换到 DevEco Studio 的主机终端，或显式提供主机 SDK 中的真实路径：

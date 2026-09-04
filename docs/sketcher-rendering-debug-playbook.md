@@ -105,7 +105,7 @@ SketchObject::execute → buildInternals(闭合线框→内部面) → InternalS
 
 **OHOS 上的实际根因（2026-09-04 探针确认）**：设备参数库里
 `MakeInternals` 被显式存成了 `false`（探针：`paramExists=1 valDef0=0`），
-上游默认值本来就是 `false`，且当时 Preferences 对话框会闪退（见第 9 节），
+上游默认值本来就是 `false`，且当时 Preferences 对话框会闪退（见第 7 节），
 用户无法通过 UI 打开它。在 `harmonyos_startup.py` 启动脚本里 `SetBool`
 种子也未生效（该脚本以位置参数传给 FreeCAD main，执行时机/执行与否不可靠，
 已撤回该尝试）。
@@ -116,10 +116,16 @@ SketchObject::execute → buildInternals(闭合线框→内部面) → InternalS
    `SketchObject::setupObject()` 的默认值从 `GetBool("MakeInternals", false)`
    改为 `GetBool("MakeInternals", true)`——新建草绘默认生成内部面，
    用户仍可通过首选项关闭。
-2. `entry/src/main/cpp/acceptance.cpp` 的 `dropStaleMakeInternalsPreference()`：
+2. `entry/src/main/cpp/acceptance.cpp` 的 `dropStaleBoolPreferences()`：
    启动时（FreeCAD 初始化前）检查 `freecad-home/user.cfg`，若存在历史遗留的
    显式 `MakeInternals=false` 条目则删除该行——否则存量的 false 会盖过新默认值。
    删除后该参数重新回落到默认值，之后用户的显式选择会被正常保留。
+3. `patches/freecad-1.1.2/ohos-sketcher-settings-internal-faces-default.patch`
+   （2026-09-04 晚补上）：**首选项对话框的复选框默认值也必须同步**。
+   PrefCheckBox 在参数缺失时回落到 .ui 里的 `checked` 默认值（原为未勾选），
+   用户只要在 Preferences 点一次 OK，就会把 false 重新写回参数库，
+   盖过运行期默认值——表现为"默认开启莫名失效，要手动开"。.ui 默认值
+   改为勾选后，UI 与运行期默认值一致。
 
 注意 `setupObject()` 只在新建对象时调用；已保存文档里的旧草绘仍带着
 存档的 `MakeInternals=false`，需要在属性面板手动打开（或重新创建）。
@@ -129,7 +135,24 @@ SketchObject::execute → buildInternals(闭合线框→内部面) → InternalS
 `View3DSettings`/`CommandDoc` 两处 `GetBool("ShowAxisCross", ...)` 默认值
 false→true，仍可在首选项关闭）；历史存量的显式 false 由同一个
 user.cfg 迁移（`dropStaleBoolPreferences`，带一次性标记
-`freecad-home/.prefs-migrated-20260904`，不会覆盖用户之后的选择）。
+`freecad-home/.prefs-migrated-*`，不会覆盖用户之后的选择）。
+
+**通用教训**：OHOS 上任何"默认值从关改开"的参数，要三处一起改——
+代码里的 GetBool 默认值、首选项 .ui 的控件默认值、以及存量 user.cfg 的
+一次性迁移，缺一个都会被参数系统"顶回去"。
+
+## 6.5 保存文档报 "Failed to open file"（2026-09-04 晚）
+
+症状：保存/另存文档时弹 "Failed to open file"。
+
+根因：OHOS 系统文件选择器（DocumentViewPicker）返回的是按 URI 授权的
+`/docs/...` 路径；授权是**按文件**的，目录不可写。FreeCAD 的
+`App::Document::saveToFile()` 默认开启 BackupPolicy：先写 `<name>.<uuid>`
+临时文件再 rename——在 /docs 目录里创建这个临时兄弟文件直接失败。
+
+修复（`patches/freecad-1.1.2/ohos-save-docs-path-direct.patch`）：
+目标路径以 `/docs/` 开头时跳过临时文件策略，直接写目标文件
+（选择器在 save 时已创建该文件并授权）。代价：此类保存不产生 .FCBak 备份。
 
 ## 7. Preferences 对话框崩溃（2026-09-04 定位修复）
 

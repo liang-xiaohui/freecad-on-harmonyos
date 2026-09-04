@@ -33,7 +33,9 @@ SWIG_VERSION="${SWIG_VERSION:-4.2.1}"
 PIVY_SITE="${PIVY_SITE:-$CPP_LIB_ROOT/install/pivy/ohos/$ABI/site-packages}"
 BUILD_MESH_PART="${FREECAD_BUILD_MESH_PART:-OFF}"
 BUILD_BIM="${FREECAD_BUILD_BIM:-OFF}"
-BUILD_ASSEMBLY="${FREECAD_BUILD_ASSEMBLY:-OFF}"
+BUILD_FEM="${FREECAD_BUILD_FEM:-OFF}"
+BUILD_ASSEMBLY="${FREECAD_BUILD_ASSEMBLY:-ON}"
+BUILD_REVERSEENGINEERING="${FREECAD_BUILD_REVERSEENGINEERING:-ON}"
 BUILD_ADDONMGR="${FREECAD_BUILD_ADDONMGR:-ON}"
 BUILD_START="${FREECAD_BUILD_START:-ON}"
 PYTHON_HOST_BIN="${PYTHON_HOST_BIN:-$NATIVE_SDK/llvm/python3/bin/python3}"
@@ -106,7 +108,7 @@ export LD_LIBRARY_PATH="$QT_PREFIX/lib:$PIVY_SITE:$COIN_PREFIX/lib:$GL4ES_DIR${L
 PREFIX_PATH="$QT_PREFIX;$COIN_PREFIX;$BOOST_PREFIX;$EIGEN_PREFIX;$XERCES_PREFIX;$OCCT_PREFIX;$YAML_CPP_PREFIX;$VTK_PREFIX;$PYTHON_ROOT"
 FIND_ROOT_PATH="$NATIVE_SDK;$QT_PREFIX;$COIN_PREFIX;$BOOST_PREFIX;$EIGEN_PREFIX;$XERCES_PREFIX;$OCCT_PREFIX;$YAML_CPP_PREFIX;$VTK_PREFIX;$PYTHON_ROOT"
 
-# BIM and MeshPart pull in Salome SMESH, which additionally requires
+# FEM, BIM, and MeshPart pull in Salome SMESH, which additionally requires
 # MEDFile/HDF5. Those OHOS packages are not installed in this toolchain.
 # Keep the Mesh workbench itself enabled; MeshPart is an optional extension.
 # OHOS libc exposes most pthread symbols but not pthread_cancel; Qt's
@@ -151,7 +153,7 @@ cmake_configure "$SRC" "$BUILD" "$PREFIX" \
     -DFREECAD_USE_SHIBOKEN=OFF \
     -DFREECAD_USE_PYSIDE=OFF \
     -DFREECAD_USE_3DCONNEXION_LEGACY=OFF \
-    -DBUILD_FEM=OFF \
+    -DBUILD_FEM="$BUILD_FEM" \
     -DBUILD_SMESH=OFF \
     -DBUILD_FEM_NETGEN=OFF \
     -DBUILD_ADDONMGR="$BUILD_ADDONMGR" \
@@ -179,7 +181,7 @@ cmake_configure "$SRC" "$BUILD" "$PREFIX" \
     -DBUILD_PATH=OFF \
     -DBUILD_PLOT=OFF \
     -DBUILD_POINTS=ON \
-    -DBUILD_REVERSEENGINEERING=OFF \
+    -DBUILD_REVERSEENGINEERING="$BUILD_REVERSEENGINEERING" \
     -DBUILD_ROBOT=ON \
     -DBUILD_SHOW=ON \
     -DBUILD_SKETCHER=ON \
@@ -205,5 +207,21 @@ for target in ImportGui PartDesignGui SketcherGui; do
         exit 1
     }
 done
+if [ "$BUILD_ASSEMBLY" = ON ]; then
+    for target in Assembly AssemblyGui AssemblyScripts; do
+        grep -q "/CMakeFiles/$target.dir" "$TARGETS" || {
+            echo "错误：Assembly 已启用但未生成 $target 目标" >&2
+            exit 1
+        }
+    done
+fi
+if [ "$BUILD_REVERSEENGINEERING" = ON ]; then
+    for target in ReverseEngineering ReverseEngineeringGui ReverseEngineeringScripts; do
+        grep -q "/CMakeFiles/$target.dir" "$TARGETS" || {
+            echo "错误：Reverse Engineering 已启用但未生成 $target 目标" >&2
+            exit 1
+        }
+    done
+fi
 
 echo "Configured Qt6 GUI FreeCAD in $BUILD"

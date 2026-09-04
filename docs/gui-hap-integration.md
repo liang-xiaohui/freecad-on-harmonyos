@@ -74,7 +74,7 @@ FreeCAD GUI 需要 `Mod/Ext/share` 与 Python stdlib；HAP rawfile 里的 `freec
 - 当前包 SHA-256：`6a6849b82e2122685c377246dcdf034493611a69852278049d83b6ece9368bd5`。后续重点是长时间相机交互、拾取/高亮、更多工作台、文件对话框和前后台切换。
 - 如果下拉菜单仍只有 Part、Material、Mesh，先运行 `./scripts/verify-gui-hap.sh`；它会拒绝缺少三个 GUI native 库或使用旧 rawfile 的 HAP。
 - MeshPart/BIM 需要额外的 Salome SMESH、MEDFile 和 HDF5；依赖未安装时保持关闭，不影响 PartDesign/Sketcher/Import 等核心工作台。
-- Assembly 默认关闭，因为 FreeCAD 1.1.2 发布源码不包含 `OndselSolver` 子模块；需要时设置 `FREECAD_BUILD_ASSEMBLY=ON`，重建脚本会固定准备 FreeCAD 1.1.2 标签记录的提交（`30e9b64e8bf881d438d4b88834f9ba3674865418`）。
+- Assembly 默认启用。FreeCAD 1.1.2 发布源码不包含 `OndselSolver` 子模块，重建脚本会固定准备标签记录的提交（`30e9b64e8bf881d438d4b88834f9ba3674865418`）。Reverse Engineering 同样默认启用；MeshPart、BIM、FEM 因 SMESH/MEDFile/HDF5 依赖未移植而保持关闭。
 - Addon Manager 默认开启；发布源码不包含该子模块时，重建脚本会固定准备提交 `937b6877239dc78ef59eeefe8099e5f14243eda1`。无网络或不需要附加组件管理器时可设置 `FREECAD_BUILD_ADDONMGR=OFF`。
 - Start 默认开启；它使用 Microsoft.GSL 的 `gsl::owner` 头文件，重建脚本会固定准备 FreeCAD 1.1.2 记录的提交 `543d0dd3fe966ddf20e884b44e5fdbf12cb43784`。无网络时可设置 `FREECAD_BUILD_START=OFF`，但会失去 Start/StartGui 工作台。
 - 2026-08-24 本地端到端复验：**GUI HAP 运行时（Qt6 staged 集合）跑通全部 6 项验收**（OK: True）——OCCT、FreeCAD 1.1.2、Part/Import/Materials/Mesh/PartDesign/Sketcher 导入、Box/Cylinder/Boolean、FCStd、STEP、STL。可直接运行 `scripts/run-staged-freecad-acceptance.sh`。

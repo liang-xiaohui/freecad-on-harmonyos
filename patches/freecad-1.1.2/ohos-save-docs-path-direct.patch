@@ -1,0 +1,20 @@
+--- a/src/App/Document.cpp
++++ b/src/App/Document.cpp
+@@ -1799,6 +1799,16 @@
+     // realpath is canonical filename i.e. without symlink
+     std::string nativePath = canonical_path(filename);
+-
++
++#if defined(FREECAD_OHOS)
++    // OHOS: the system document picker grants access per file URI, so creating
++    // a sibling temp file (<name>.<uuid>) inside a /docs directory fails with
++    // EACCES and the rename step is not permitted either. Write the target
++    // file directly (no backup policy) for picker-granted /docs paths.
++    if (nativePath.compare(0, 6, "/docs/") == 0) {
++        policy = false;
++    }
++#endif
++
+     // check if file is writeable, then block the save if it is not.
+     Base::FileInfo originalFileInfo(nativePath);
+     if (originalFileInfo.exists() && !originalFileInfo.isWritable()) {

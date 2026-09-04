@@ -220,22 +220,55 @@ void ensureDirectory(const std::string& path)
     requireDirectory(path);
 }
 
-// One-time migration: early OHOS builds shipped several view defaults as
-// "off" (Sketcher MakeInternals, 3D view ShowAxisCross), and a Preferences
-// dialog OK click persisted those explicit "false" values into user.cfg.
-// The defaults are now "on", but an explicitly stored false would still win.
-// Drop the stale entries once; afterwards the preferences are honored again.
-void dropStaleBoolPreferences(const std::string& home,
-                              const std::vector<const char*>& names,
-                              const char* reason)
+struct StalePreference {
+    const char* element;
+    const char* name;
+    const char* value;
+};
+
+bool isStalePreferenceLine(const std::string& line, const StalePreference& preference)
 {
-    const std::string markerPath = home + "/.prefs-migrated-20260904";
-    {
-        struct stat markerStat {};
-        if (stat(markerPath.c_str(), &markerStat) == 0) {
-            return;  // migration already done once; user choice is honored now
-        }
+    const std::string element = std::string("<") + preference.element;
+    const std::string name = std::string("Name=\"") + preference.name + "\"";
+    if (line.find(element) == std::string::npos || line.find(name) == std::string::npos) {
+        return false;
     }
+
+    constexpr const char* valueMarker = "Value=\"";
+    const size_t valueBegin = line.find(valueMarker);
+    if (valueBegin == std::string::npos) {
+        return false;
+    }
+    const size_t valueStart = valueBegin + std::strlen(valueMarker);
+    const size_t valueEnd = line.find('"', valueStart);
+    if (valueEnd == std::string::npos) {
+        return false;
+    }
+    const std::string value = line.substr(valueStart, valueEnd - valueStart);
+    if (std::strcmp(preference.element, "FCFloat") != 0) {
+        return value == preference.value;
+    }
+
+    char* parsedEnd = nullptr;
+    const double parsed = std::strtod(value.c_str(), &parsedEnd);
+    return parsedEnd != value.c_str() && *parsedEnd == '\0' &&
+           parsed == std::strtod(preference.value, nullptr);
+}
+
+// Remove only values written by an older OHOS default. Each migration has an
+// independent marker so adding a new default cannot replay earlier migrations
+// and erase a choice the user made afterwards.
+void dropStalePreferences(const std::string& home,
+                          const char* markerName,
+                          const std::vector<StalePreference>& preferences,
+                          const char* reason)
+{
+    const std::string markerPath = home + "/" + markerName;
+    struct stat markerStat {};
+    if (stat(markerPath.c_str(), &markerStat) == 0) {
+        return;
+    }
+
     // Stale entries can only live in user.cfg; if it does not exist yet there
     // is nothing to migrate. Either way, never run this again so later
     // explicit user choices are preserved.
@@ -251,21 +284,27 @@ void dropStaleBoolPreferences(const std::string& home,
     input.close();
     std::string content = buffer.str();
     bool changed = false;
-    for (const char* name : names) {
-        const std::string marker = std::string("Name=\"") + name + "\"";
-        const size_t pos = content.find(marker);
-        if (pos == std::string::npos) {
-            continue;
+    for (const StalePreference& preference : preferences) {
+        size_t searchFrom = 0;
+        const std::string name = std::string("Name=\"") + preference.name + "\"";
+        while (true) {
+            const size_t pos = content.find(name, searchFrom);
+            if (pos == std::string::npos) {
+                break;
+            }
+            const size_t previousNewline = content.rfind('\n', pos);
+            const size_t lineBegin = previousNewline == std::string::npos ? 0 : previousNewline + 1;
+            const size_t newline = content.find('\n', pos);
+            const size_t lineEnd = newline == std::string::npos ? content.size() : newline + 1;
+            const std::string line = content.substr(lineBegin, lineEnd - lineBegin);
+            if (!isStalePreferenceLine(line, preference)) {
+                searchFrom = lineEnd;
+                continue;
+            }
+            content.erase(lineBegin, lineEnd - lineBegin);
+            searchFrom = lineBegin;
+            changed = true;
         }
-        // Remove the whole <FCBool Name="..." .../> line.
-        const size_t lineBegin = content.rfind('\n', pos);
-        const size_t lineEnd = content.find('\n', pos);
-        if (lineEnd == std::string::npos) {
-            continue;
-        }
-        content = content.substr(0, lineBegin == std::string::npos ? 0 : lineBegin + 1) +
-                  content.substr(lineEnd + 1);
-        changed = true;
     }
     if (changed) {
         std::ofstream output(cfgPath, std::ios::trunc);
@@ -296,9 +335,15 @@ WritableRuntimePaths configureWritableRuntime(const std::string& outputDir)
     ensureDirectory(paths.data);
     ensureDirectory(paths.cache);
     ensureDirectory(paths.temp);
-    dropStaleBoolPreferences(paths.home,
-                             {"MakeInternals", "ShowAxisCross"},
-                             "MakeInternals/ShowAxisCross (old off-by-default values)");
+    dropStalePreferences(paths.home,
+                         ".prefs-migrated-20260904",
+                         {{"FCBool", "MakeInternals", "0"},
+                          {"FCBool", "ShowAxisCross", "0"}},
+                         "MakeInternals/ShowAxisCross (old off-by-default values)");
+    dropStalePreferences(paths.home,
+                         ".pick-radius-migrated-20260904",
+                         {{"FCFloat", "PickRadius", "5"}},
+                         "PickRadius (old 5px default)");
 
     // FreeCAD may fall back to the process working directory when Qt cannot
     // resolve a platform standard path. The bundle directory is read-only on

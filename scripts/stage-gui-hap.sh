@@ -14,6 +14,8 @@ FREECAD_VERSION="${FREECAD_VERSION:-1.1.2}"
 FREECAD_PREFIX="${FREECAD_PREFIX:-$CPP_LIB_ROOT/install/freecad/$FREECAD_VERSION/ohos/$ABI-gui-qt6}"
 BUILD_ADDONMGR="${FREECAD_BUILD_ADDONMGR:-ON}"
 BUILD_START="${FREECAD_BUILD_START:-ON}"
+BUILD_ASSEMBLY="${FREECAD_BUILD_ASSEMBLY:-ON}"
+BUILD_REVERSEENGINEERING="${FREECAD_BUILD_REVERSEENGINEERING:-ON}"
 QT_PREFIX="$CPP_LIB_ROOT/install/qt/6.8.3/ohos/$ABI"
 PYTHON_ROOT="$CPP_LIB_ROOT/install/python/3.11.4/ohos/$ABI"
 OCCT_PREFIX="${OCCT_PREFIX:-$CPP_LIB_ROOT/install/occt/7.8.1/ohos/$ABI}"
@@ -28,6 +30,10 @@ LIBS_DIR="$LIBS_PARENT/$ABI"
 RAWFILE_PARENT="$PROJECT_DIR/entry/src/main/resources"
 RAWFILE_DIR="$RAWFILE_PARENT/rawfile"
 FLEXIMIND_ROOT="${FLEXIMIND_ROOT:-/path/to/FlexiMind}"
+PY_YAML_ROOT="$PROJECT_DIR/runtime/pyyaml"
+PACKAGING_ROOT="$PROJECT_DIR/runtime/packaging"
+NUMPY_SP="${NUMPY_SP:-$CPP_LIB_ROOT/install/numpy/2.2.6/ohos/$ABI/site-packages}"
+NUMPY_LICENSE="$NUMPY_SP/numpy-2.2.6.dist-info/LICENSE.txt"
 
 for required in \
     "$FREECAD_PREFIX/lib/FreeCAD.so" \
@@ -77,19 +83,60 @@ if [ "$BUILD_START" = ON ]; then
         }
     done
 fi
+if [ "$BUILD_ASSEMBLY" = ON ]; then
+    for required in \
+        "$FREECAD_PREFIX/lib/AssemblyApp.so" \
+        "$FREECAD_PREFIX/lib/AssemblyGui.so" \
+        "$FREECAD_PREFIX/Mod/Assembly/InitGui.py"; do
+        [ -f "$required" ] || {
+            echo "错误：Assembly 已启用但未安装：$required" >&2
+            exit 1
+        }
+    done
+fi
+if [ "$BUILD_REVERSEENGINEERING" = ON ]; then
+    for required in \
+        "$FREECAD_PREFIX/lib/ReverseEngineering.so" \
+        "$FREECAD_PREFIX/lib/ReverseEngineeringGui.so" \
+        "$FREECAD_PREFIX/Mod/ReverseEngineering/InitGui.py"; do
+        [ -f "$required" ] || {
+            echo "错误：Reverse Engineering 已启用但未安装：$required" >&2
+            exit 1
+        }
+    done
+fi
 
 for required in \
     "$FLEXIMIND_ROOT/workers/worker-a.py" \
     "$FLEXIMIND_ROOT/workers/worker-b.py" \
     "$FLEXIMIND_ROOT/workers/worker-c.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/design_bridge.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/InitGui.py" \
     "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/registered_base.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/reference_geometry.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/scene_state.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/commands.py"; do
+    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/reference_geometry.py"; do
     [ -f "$required" ] || {
         echo "错误：缺少 FlexiMind FreeCAD runtime 输入：$required" >&2
+        exit 1
+    }
+done
+
+[ -f "$PY_YAML_ROOT/yaml/__init__.py" ] || {
+    echo "错误：缺少 vendored PyYAML runtime：$PY_YAML_ROOT/yaml/__init__.py" >&2
+    exit 1
+}
+[ -f "$PACKAGING_ROOT/packaging/__init__.py" ] || {
+    echo "错误：缺少 vendored packaging runtime：$PACKAGING_ROOT/packaging/__init__.py" >&2
+    exit 1
+}
+for required in \
+    "$PY_YAML_ROOT/LICENSE" \
+    "$PACKAGING_ROOT/LICENSE" \
+    "$PACKAGING_ROOT/LICENSE.APACHE" \
+    "$PACKAGING_ROOT/LICENSE.BSD" \
+    "$NUMPY_LICENSE" \
+    "$NUMPY_SP/numpy/_core/_multiarray_umath.cpython-311-aarch64-linux-ohos.so" \
+    "$NUMPY_SP/numpy/fft/_pocketfft_umath.cpython-311-aarch64-linux-ohos.so" \
+    "$NUMPY_SP/numpy/linalg/_umath_linalg.cpython-311-aarch64-linux-ohos.so"; do
+    [ -f "$required" ] || {
+        echo "错误：缺少 Python runtime 输入：$required" >&2
         exit 1
     }
 done
@@ -196,6 +243,31 @@ echo "==> Package Python and FreeCAD GUI runtime as rawfiles"
 (cd "$FREECAD_PREFIX" && \
     zip -q -r "$RAW_STAGE/freecad-runtime.zip" Mod Ext share \
         -x '*/__pycache__/*' '*.pyc' '*.so' '*.so.*')
+# CAM/Material import the Python ``yaml`` package.  Keep the pure-Python
+# implementation in the runtime archive's Ext/ directory.  FreeCAD's GUI
+# startup adds freecad-home/Ext to sys.path after clearing PYTHONPATH; placing
+# the package at the archive root would therefore only work for the separate
+# acceptance interpreter.  Its optional libyaml extension is intentionally
+# omitted because it is not built for OHOS.
+PY_YAML_STAGE=$(mktemp -d "$RAW_STAGE/.pyyaml.XXXXXX")
+mkdir -p "$PY_YAML_STAGE/Ext"
+cp -R "$PY_YAML_ROOT/yaml" "$PY_YAML_STAGE/Ext/"
+cp "$PY_YAML_ROOT/LICENSE" "$PY_YAML_STAGE/Ext/yaml/LICENSE"
+(cd "$PY_YAML_STAGE" && \
+    zip -q -r "$RAW_STAGE/freecad-runtime.zip" Ext/yaml \
+        -x '*/__pycache__/*' '*.pyc' '*.so' '*.so.*')
+rm -rf "$PY_YAML_STAGE"
+# CAM imports packaging.version and related metadata helpers.  Keep this
+# pure-Python dependency under Ext/ so GUI startup can find it after clearing
+# PYTHONPATH.
+PACKAGING_STAGE=$(mktemp -d "$RAW_STAGE/.packaging.XXXXXX")
+mkdir -p "$PACKAGING_STAGE/Ext"
+cp -R "$PACKAGING_ROOT/packaging" "$PACKAGING_STAGE/Ext/"
+cp "$PACKAGING_ROOT"/LICENSE* "$PACKAGING_STAGE/Ext/packaging/"
+(cd "$PACKAGING_STAGE" && \
+    zip -q -r "$RAW_STAGE/freecad-runtime.zip" Ext/packaging \
+        -x '*/__pycache__/*' '*.pyc' '*.so' '*.so.*')
+rm -rf "$PACKAGING_STAGE"
 # Sketcher/PartDesign/Import 的 Python 目录并入（来自 headless-qt6 构建）
 if [ -d "$HEADLESS_QT6_PREFIX/Mod" ]; then
 (cd "$HEADLESS_QT6_PREFIX" && \
@@ -226,10 +298,30 @@ if [ "$BUILD_START" = ON ]; then
         }
     done
 fi
+if [ "$BUILD_ASSEMBLY" = ON ]; then
+    for entry in Mod/Assembly/Init.py Mod/Assembly/InitGui.py; do
+        unzip -Z1 "$RAW_STAGE/freecad-runtime.zip" | grep -q "^${entry}$" || {
+            echo "错误：打包后的 runtime 缺少 Assembly 注册脚本：$entry" >&2
+            exit 1
+        }
+    done
+fi
+if [ "$BUILD_REVERSEENGINEERING" = ON ]; then
+    for entry in Mod/ReverseEngineering/Init.py Mod/ReverseEngineering/InitGui.py; do
+        unzip -Z1 "$RAW_STAGE/freecad-runtime.zip" | grep -q "^${entry}$" || {
+            echo "错误：打包后的 runtime 缺少 Reverse Engineering 注册脚本：$entry" >&2
+            exit 1
+        }
+    done
+fi
 # PySide6 / shiboken6 / pivy：Python 包解压到 freecad-home/Ext/；native 扩展保留在 HAP libs/ 下
 PYSIDE6_SP="$CPP_LIB_ROOT/install/pyside6/ohos/$ABI/site-packages"
 SHIBOKEN_SP="$CPP_LIB_ROOT/build/shiboken6/inst/lib/python3.11/site-packages"
 PIVY_SP="$CPP_LIB_ROOT/install/pivy/ohos/$ABI/site-packages"
+[ -f "$NUMPY_SP/numpy/__init__.py" ] || {
+    echo "错误：缺少 NumPy runtime：$NUMPY_SP/numpy/__init__.py" >&2
+    exit 1
+}
 # 用临时 staging 目录把 PySide6/shiboken6/pivy 放到 zip 的 Ext/ 前缀下（freecad-home/Ext 在 sys.path）
 BINDINGS_STAGE=$(mktemp -d "$RAW_STAGE/.bindings.XXXXXX")
 mkdir -p "$BINDINGS_STAGE/Ext"
@@ -249,6 +341,8 @@ fi
 if [ -d "$PIVY_SP/pivy" ]; then
     cp -r "$PIVY_SP/pivy" "$BINDINGS_STAGE/Ext/"
 fi
+cp -r "$NUMPY_SP/numpy" "$BINDINGS_STAGE/Ext/"
+cp "$NUMPY_LICENSE" "$BINDINGS_STAGE/Ext/numpy/LICENSE.txt"
 # Native extension modules cannot be loaded from the writable freecad-home
 # tree on a non-debuggable OHOS device: extracting them from a rawfile loses
 # the HAP code signature.  Put every binding ELF in entry/libs so Hvigor signs
@@ -296,41 +390,50 @@ prepend_native_package_path()
 for package_init in \
     "$BINDINGS_STAGE/Ext/shiboken6/__init__.py" \
     "$BINDINGS_STAGE/Ext/PySide6/__init__.py" \
-    "$BINDINGS_STAGE/Ext/pivy/__init__.py"; do
+    "$BINDINGS_STAGE/Ext/pivy/__init__.py" \
+    "$BINDINGS_STAGE/Ext/packaging/__init__.py" \
+    "$BINDINGS_STAGE/Ext/numpy/_core/__init__.py" \
+    "$BINDINGS_STAGE/Ext/numpy/fft/__init__.py" \
+    "$BINDINGS_STAGE/Ext/numpy/linalg/__init__.py" \
+    "$BINDINGS_STAGE/Ext/numpy/random/__init__.py"; do
     [ -f "$package_init" ] && prepend_native_package_path "$package_init"
 done
 
 (cd "$BINDINGS_STAGE" && \
     zip -q -r "$RAW_STAGE/freecad-runtime.zip" Ext \
-        -i 'Ext/PySide6/*' 'Ext/shiboken6/*' 'Ext/pivy/*' \
-        -x '*.pyc' '*/__pycache__/*' '*.so' '*.so.*')
+        -i 'Ext/PySide6/*' 'Ext/shiboken6/*' 'Ext/pivy/*' 'Ext/numpy/*' 'Ext/packaging/*' \
+        -x '*.pyc' '*/__pycache__/*' '*.so' '*.so.*' '*.a')
 if unzip -Z1 "$RAW_STAGE/freecad-runtime.zip" |
-   grep -Eq '^Ext/(PySide6|shiboken6|pivy)/.*\.so([.]|$)'; then
+   grep -Eq '^Ext/(PySide6|shiboken6|pivy|numpy)/.*\.so([.]|$)'; then
     echo "错误：Python 绑定 ELF 不得进入 rawfile（会丢失 HAP 代码签名）" >&2
     exit 1
 fi
 rm -rf "$BINDINGS_STAGE"
-echo "==> Package FlexiMind workers and Grip Design Workbench"
+echo "==> Package FlexiMind headless jobs (GUI Workbench excluded)"
 FLEXIMIND_STAGE="$RAW_STAGE/fleximind"
-mkdir -p "$FLEXIMIND_STAGE/FlexiMind/workers" "$FLEXIMIND_STAGE/FlexiMind/tools/freecad" "$FLEXIMIND_STAGE/Mod"
+FLEXIMIND_HELPERS="$FLEXIMIND_STAGE/FlexiMind/tools/freecad/FlexiMindGripDesign"
+mkdir -p "$FLEXIMIND_STAGE/FlexiMind/workers" "$FLEXIMIND_HELPERS"
 cp "$PROJECT_DIR/runtime/fleximind_job_runner.py" "$FLEXIMIND_STAGE/FlexiMind/"
 printf '%s\n' '"""FlexiMind runtime package."""' > "$FLEXIMIND_STAGE/FlexiMind/__init__.py"
+printf '%s\n' '"""Headless modeling helpers shared with FlexiMind."""' > "$FLEXIMIND_HELPERS/__init__.py"
 for worker in \
     worker-a.py \
     worker-b.py \
-    worker-c.py \
-    manual_gripping_workbench_smoke.py; do
+    worker-c.py; do
     cp "$FLEXIMIND_ROOT/workers/$worker" "$FLEXIMIND_STAGE/FlexiMind/workers/$worker"
 done
-cp "$FLEXIMIND_ROOT/tools/freecad/design_bridge.py" "$FLEXIMIND_STAGE/FlexiMind/tools/freecad/"
-cp -R "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign" \
-    "$FLEXIMIND_STAGE/FlexiMind/tools/freecad/"
-cp -R "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign" \
-    "$FLEXIMIND_STAGE/Mod/"
+for helper in registered_base.py reference_geometry.py; do
+    cp "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/$helper" "$FLEXIMIND_HELPERS/$helper"
+done
 (cd "$FLEXIMIND_STAGE" && \
-    zip -q -r "$RAW_STAGE/freecad-runtime.zip" FlexiMind Mod \
+    zip -q -r "$RAW_STAGE/freecad-runtime.zip" FlexiMind \
         -x '*/__pycache__/*' '*.pyc' '*.so' '*.so.*')
 rm -rf "$FLEXIMIND_STAGE"
+if unzip -Z1 "$RAW_STAGE/freecad-runtime.zip" |
+   grep -Eq '^(Mod/FlexiMindGripDesign/|FlexiMind/tools/freecad/FlexiMindGripDesign/(Init.py|InitGui.py|commands.py|scene_state.py|Resources/))'; then
+    echo "错误：FlexiMindGripDesign GUI 工作台当前禁用，不得进入 runtime" >&2
+    exit 1
+fi
 cp "$PROJECT_DIR/probes/freecad-headless/acceptance.py" \
     "$RAW_STAGE/freecad_headless_acceptance.py"
 unzip -tq "$RAW_STAGE/python311.zip" >/dev/null

@@ -1,0 +1,15 @@
+--- a/src/Mod/Sketcher/Gui/SketcherSettings.ui
++++ b/src/Mod/Sketcher/Gui/SketcherSettings.ui
+@@ -242,6 +242,12 @@
+         <property name="text">
+          <string>Generate internal faces</string>
+         </property>
++        <!-- OHOS: keep the widget default in sync with the OHOS runtime default
++             (MakeInternals defaults to true there); otherwise any Preferences
++             OK click writes an explicit false back over it. -->
++        <property name="checked">
++         <bool>true</bool>
++        </property>
+         <property name="prefPath" stdset="0">
+          <cstring>Mod/Sketcher</cstring>
+         </property>

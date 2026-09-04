@@ -16,11 +16,11 @@ export default class QAbilityStage extends AbilityStage {
 
   private static setupQtApplicationCalled: boolean = false;
 
-  // QPA consumes this as the argv passed to FreeCAD's real main(). Keep the
-  // generated startup script first so an imported FCStd opens directly in the
-  // FlexiMind workbench without requiring an external desktop launcher.
+  // QPA consumes this as the argv passed to FreeCAD's real main(). The generic
+  // startup script clears stale references to workbenches that are no longer
+  // installed; product-specific workbenches are injected by their own launcher.
   public static setAppArgsFromWant(want: Want, filesDir: string): void {
-    let args: Array<string> = [APP_LIBRARY_NAME, filesDir + '/freecad-home/FlexiMind/harmonyos_startup.py'];
+    let args: Array<string> = [APP_LIBRARY_NAME, filesDir + '/freecad-home/harmonyos_startup.py'];
     let parameters = want.parameters as Record<string, Object> | undefined;
     let candidate: string | undefined = (parameters?.['designFilePath'] as string | undefined)
       ?? (parameters?.['freecadFilePath'] as string | undefined)

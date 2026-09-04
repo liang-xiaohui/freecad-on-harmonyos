@@ -48,6 +48,9 @@ AXIS_CROSS_DEFAULT_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos-axi
 GUI_FATAL_HILOG_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos-gui-fatal-hilog.patch"
 NAVICUBE_AXISCROSS_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos-enable-navicube-axiscross.patch"
 NAVICUBE_RAW_GL_LABELS_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos-navicube-raw-gl-labels.patch"
+SAVE_DOCS_DIRECT_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos-save-docs-path-direct.patch"
+SKETCHER_SETTINGS_DEFAULT_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos-sketcher-settings-internal-faces-default.patch"
+PICK_RADIUS_DEFAULT_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos-pick-radius-default.patch"
 
 if [ "$FREECAD_VERSION" != "1.1.2" ] && [ -z "${FREECAD_SHA256:-}" ]; then
     echo "FREECAD_SHA256 is required for version $FREECAD_VERSION" >&2
@@ -100,6 +103,10 @@ CAM_OPENGL_WRAPPER="$SOURCE_DIR/src/Mod/CAM/PathSimulator/AppGL/OpenGlWrapper.h"
 if [ -f "$CAM_OPENGL_WRAPPER" ]; then
     sed -i 's/\r$//' "$CAM_OPENGL_WRAPPER"
 fi
+DOCUMENT_SOURCE="$SOURCE_DIR/src/App/Document.cpp"
+if [ -f "$DOCUMENT_SOURCE" ]; then
+    sed -i 's/\r$//' "$DOCUMENT_SOURCE"
+fi
 
 # Older local OHOS preparations disabled native QUiLoader because the Qt 5
 # port lacked UiTools.  Qt 6 ships the target UiTools library; restore the
@@ -109,7 +116,7 @@ if grep -q '#if !defined(__MINGW32__) && !defined(FREECAD_OHOS)' "$UI_LOADER_HEA
     sed -i 's/#if !defined(__MINGW32__) && !defined(FREECAD_OHOS)/#if !defined(__MINGW32__)/' "$UI_LOADER_HEADER"
 fi
 
-for patch_file in "$OHOS_PATCH" "$PYTHON_COMPAT_PATCH" "$BOOST_COMPAT_PATCH" "$RPATH_PATCH" "$HEADLESS_SWIG_PATCH" "$HEADLESS_TRANSLATIONS_PATCH" "$HEADLESS_TRANSLATION_TOOLS_PATCH" "$SOURCE_LOCATION_PATCH" "$LIBCXX_PATCH" "$ICU_C_API_PATCH" "$QT512_PATCH" "$CLANG15_PATCH" "$LIBCXX15_VIEWS_PATCH" "$RUNTIME_LAYOUT_PATCH" "$TECHDRAW_CLOCALE_PATCH" "$TECHDRAW_QGVPAGE_PATCH" "$CAM_GLES_CONSTANTS_PATCH" "$STYLEPARAMETERS_NUMERIC_PATCH" "$GL_ATTRIB_STACK_PATCH" "$GUI_SPLASH_PATCH" "$GLES_SURFACE_FORMAT_PATCH" "$GUI_STARTUP_LOGO_PATCH" "$GUI_STYLESHEET_PROBES_PATCH" "$QUARTER_DEFER_PAINT_PATCH" "$LCS_RESTORE_NULL_GUARD_PATCH" "$QUARTER_STACK_ON_TOP_PATCH" "$QUARTER_PAINT_ORDER_PATCH" "$NATIVE_UITOOLS_PATCH" "$EMBEDDED_DIALOG_TITLEBAR_PATCH" "$QSS_WIDGET_INDICATOR_PATCH" "$QSS_TASK_INDICATOR_PATCH" "$QSS_TASK_MENU_ARROW_PATCH" "$QT_PLUGIN_PATH_PATCH" "$SERVICE_PROVIDER_PATCH" "$SKETCH_MAKE_INTERNALS_PATCH" "$AXIS_CROSS_DEFAULT_PATCH" "$GUI_FATAL_HILOG_PATCH" "$NAVICUBE_AXISCROSS_PATCH" "$NAVICUBE_RAW_GL_LABELS_PATCH"; do
+for patch_file in "$OHOS_PATCH" "$PYTHON_COMPAT_PATCH" "$BOOST_COMPAT_PATCH" "$RPATH_PATCH" "$HEADLESS_SWIG_PATCH" "$HEADLESS_TRANSLATIONS_PATCH" "$HEADLESS_TRANSLATION_TOOLS_PATCH" "$SOURCE_LOCATION_PATCH" "$LIBCXX_PATCH" "$ICU_C_API_PATCH" "$QT512_PATCH" "$CLANG15_PATCH" "$LIBCXX15_VIEWS_PATCH" "$RUNTIME_LAYOUT_PATCH" "$TECHDRAW_CLOCALE_PATCH" "$TECHDRAW_QGVPAGE_PATCH" "$CAM_GLES_CONSTANTS_PATCH" "$STYLEPARAMETERS_NUMERIC_PATCH" "$GL_ATTRIB_STACK_PATCH" "$GUI_SPLASH_PATCH" "$GLES_SURFACE_FORMAT_PATCH" "$GUI_STARTUP_LOGO_PATCH" "$GUI_STYLESHEET_PROBES_PATCH" "$QUARTER_DEFER_PAINT_PATCH" "$LCS_RESTORE_NULL_GUARD_PATCH" "$QUARTER_STACK_ON_TOP_PATCH" "$QUARTER_PAINT_ORDER_PATCH" "$NATIVE_UITOOLS_PATCH" "$EMBEDDED_DIALOG_TITLEBAR_PATCH" "$QSS_WIDGET_INDICATOR_PATCH" "$QSS_TASK_INDICATOR_PATCH" "$QSS_TASK_MENU_ARROW_PATCH" "$QT_PLUGIN_PATH_PATCH" "$SERVICE_PROVIDER_PATCH" "$SKETCH_MAKE_INTERNALS_PATCH" "$AXIS_CROSS_DEFAULT_PATCH" "$GUI_FATAL_HILOG_PATCH" "$NAVICUBE_AXISCROSS_PATCH" "$NAVICUBE_RAW_GL_LABELS_PATCH" "$SAVE_DOCS_DIRECT_PATCH" "$SKETCHER_SETTINGS_DEFAULT_PATCH" "$PICK_RADIUS_DEFAULT_PATCH"; do
     [ -f "$patch_file" ] || continue
     # A prior OHOS compatibility patch may have extended this function's
     # guard. Treat the stronger equivalent condition as already applied.
@@ -127,6 +134,30 @@ for patch_file in "$OHOS_PATCH" "$PYTHON_COMPAT_PATCH" "$BOOST_COMPAT_PATCH" "$R
     if [ "$patch_file" = "$QT512_PATCH" ] &&
        grep -q 'QT_VERSION < QT_VERSION_CHECK(5, 14, 0)' \
            "$SOURCE_DIR/src/Mod/Material/App/MaterialValue.cpp" 2>/dev/null; then
+        echo "FreeCAD patch already applied: $(basename "$patch_file")"
+        continue
+    fi
+    # Later NaviCube patches intentionally re-enable two overlays disabled by
+    # this patch, so recognize its GL state-save replacement semantically.
+    if [ "$patch_file" = "$GL_ATTRIB_STACK_PATCH" ] &&
+       grep -q "gl4es' emulated attribute stack is unstable" \
+           "$SOURCE_DIR/src/Gui/View3DInventorViewer.cpp" 2>/dev/null &&
+       grep -q "gl4es' emulated attribute stack is unstable" \
+           "$SOURCE_DIR/src/Gui/Inventor/SoFCBackgroundGradient.cpp" 2>/dev/null; then
+        echo "FreeCAD patch already applied: $(basename "$patch_file")"
+        continue
+    fi
+    if [ "$patch_file" = "$SKETCH_MAKE_INTERNALS_PATCH" ] &&
+       grep -q 'GetBool("MakeInternals", true)' \
+           "$SOURCE_DIR/src/Mod/Sketcher/App/SketchObject.cpp" 2>/dev/null; then
+        echo "FreeCAD patch already applied: $(basename "$patch_file")"
+        continue
+    fi
+    if [ "$patch_file" = "$AXIS_CROSS_DEFAULT_PATCH" ] &&
+       grep -q 'GetBool("ShowAxisCross", true)' \
+           "$SOURCE_DIR/src/Gui/View3DSettings.cpp" 2>/dev/null &&
+       grep -q 'GetBool("ShowAxisCross", true)' \
+           "$SOURCE_DIR/src/Gui/CommandDoc.cpp" 2>/dev/null; then
         echo "FreeCAD patch already applied: $(basename "$patch_file")"
         continue
     fi

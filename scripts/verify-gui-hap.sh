@@ -10,14 +10,20 @@ set -eu
 
 PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 FLEXIMIND_ROOT="${FLEXIMIND_ROOT:-/path/to/FlexiMind}"
+PY_YAML_ROOT="$PROJECT_DIR/runtime/pyyaml"
+PACKAGING_ROOT="$PROJECT_DIR/runtime/packaging"
 CPP_LIB_ROOT="${CPP_LIB_ROOT:-/storage/Users/currentUser/CPPLib}"
 . "$CPP_LIB_ROOT/scripts/common-ohos.sh"
+NUMPY_SP="${NUMPY_SP:-$CPP_LIB_ROOT/install/numpy/2.2.6/ohos/$ABI/site-packages}"
+NUMPY_LICENSE="$NUMPY_SP/numpy-2.2.6.dist-info/LICENSE.txt"
 
 HAP="${HAP:-$PROJECT_DIR/entry/build/default/outputs/default/entry-default-signed.hap}"
 STAGED_DIR="$PROJECT_DIR/entry/libs/$ABI"
 RAWFILE_DIR="$PROJECT_DIR/entry/src/main/resources/rawfile"
 BUILD_ADDONMGR="${FREECAD_BUILD_ADDONMGR:-ON}"
 BUILD_START="${FREECAD_BUILD_START:-ON}"
+BUILD_ASSEMBLY="${FREECAD_BUILD_ASSEMBLY:-ON}"
+BUILD_REVERSEENGINEERING="${FREECAD_BUILD_REVERSEENGINEERING:-ON}"
 
 [ -f "$HAP" ] || { echo "错误：找不到 HAP：$HAP" >&2; exit 1; }
 for c in unzip stat sha256sum; do
@@ -52,36 +58,56 @@ for f in "$STAGED_DIR"/plugins/platforms/libqohos.so "$STAGED_DIR"/libqohos.so "
          "$PROJECT_DIR/runtime/fleximind_job_runner.py" \
          "$FLEXIMIND_ROOT/workers/worker-a.py" \
          "$FLEXIMIND_ROOT/workers/worker-b.py" \
-    "$FLEXIMIND_ROOT/workers/worker-c.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/design_bridge.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/InitGui.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/registered_base.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/reference_geometry.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/scene_state.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/commands.py"; do
+         "$FLEXIMIND_ROOT/workers/worker-c.py" \
+         "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/registered_base.py" \
+         "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/reference_geometry.py" \
+         "$PY_YAML_ROOT/LICENSE" \
+         "$PY_YAML_ROOT/yaml/__init__.py" \
+         "$PACKAGING_ROOT/LICENSE" \
+         "$PACKAGING_ROOT/LICENSE.APACHE" \
+         "$PACKAGING_ROOT/LICENSE.BSD" \
+         "$PACKAGING_ROOT/packaging/__init__.py" \
+         "$NUMPY_LICENSE" \
+         "$NUMPY_SP/numpy/__init__.py"; do
     [ -f "$f" ] || { echo "错误：staging 输入缺失：$f" >&2; exit 1; }
     m=$(stat -c '%Y' "$f")
     [ "$m" -gt "$newest_input" ] && newest_input=$m
 done
+newer_numpy=$(find "$NUMPY_SP/numpy" -type f -newer "$HAP" -print -quit)
+if [ -n "$newer_numpy" ]; then
+    m=$(stat -c '%Y' "$newer_numpy")
+    [ "$m" -gt "$newest_input" ] && newest_input=$m
+fi
+for source in "$PY_YAML_ROOT"/yaml/*.py; do
+    [ -f "$source" ] || continue
+    m=$(stat -c '%Y' "$source")
+    [ "$m" -gt "$newest_input" ] && newest_input=$m
+done
+newer_packaging=$(find "$PACKAGING_ROOT" -type f -newer "$HAP" -print -quit)
+if [ -n "$newer_packaging" ]; then
+    m=$(stat -c '%Y' "$newer_packaging")
+    [ "$m" -gt "$newest_input" ] && newest_input=$m
+fi
 
 for entry in \
     FlexiMind/fleximind_job_runner.py \
     FlexiMind/workers/worker-a.py \
     FlexiMind/workers/worker-b.py \
     FlexiMind/workers/worker-c.py \
-    FlexiMind/workers/manual_gripping_workbench_smoke.py \
-    FlexiMind/tools/freecad/design_bridge.py \
+    FlexiMind/tools/freecad/FlexiMindGripDesign/__init__.py \
     FlexiMind/tools/freecad/FlexiMindGripDesign/registered_base.py \
-    FlexiMind/tools/freecad/FlexiMindGripDesign/reference_geometry.py \
-    FlexiMind/tools/freecad/FlexiMindGripDesign/scene_state.py \
-    FlexiMind/tools/freecad/FlexiMindGripDesign/commands.py \
-    Mod/FlexiMindGripDesign/InitGui.py; do
+    FlexiMind/tools/freecad/FlexiMindGripDesign/reference_geometry.py; do
     if ! unzip -p "$HAP" resources/rawfile/freecad-runtime.zip > "$RUNTIME_ZIP" || \
        ! unzip -Z1 "$RUNTIME_ZIP" | grep -q "^${entry}$"; then
         echo "错误：freecad-runtime.zip 缺少 $entry" >&2
         exit 1
     fi
 done
+if unzip -Z1 "$RUNTIME_ZIP" |
+   grep -Eq '^(Mod/FlexiMindGripDesign/|FlexiMind/tools/freecad/FlexiMindGripDesign/(Init.py|InitGui.py|commands.py|scene_state.py|Resources/))'; then
+    echo "错误：已禁用的 FlexiMindGripDesign GUI 工作台仍存在于 freecad-runtime.zip" >&2
+    exit 1
+fi
 if [ "$hap_mtime" -lt "$newest_input" ]; then
     echo "错误：HAP 早于 staging/验收源码，请重新 Build Hap" >&2
     exit 1
@@ -103,7 +129,10 @@ for lib in libfreecadqtapp.so FreeCAD.so FreeCADGui.so Part.so PartGui.so \
            Sketcher.so SketcherGui.so _PartDesign.so PartDesignGui.so Import.so ImportGui.so libQt6Core.so.6 libQt6Gui.so.6 \
            libCoin.so.80 libGL.so libpython3.11.so.1.0 libTKernel.so.7.8 \
            Shiboken.abi3.so libshiboken6.abi3.so QtCore.abi3.so QtGui.abi3.so \
-           QtWidgets.abi3.so libpyside6.abi3.so.6.8 _coin.so; do
+           QtWidgets.abi3.so libpyside6.abi3.so.6.8 _coin.so \
+           _multiarray_umath.cpython-311-aarch64-linux-ohos.so \
+           _pocketfft_umath.cpython-311-aarch64-linux-ohos.so \
+           _umath_linalg.cpython-311-aarch64-linux-ohos.so; do
     if unzip -l "$HAP" | grep -qE "libs/arm64-v8a/(plugins/platforms/)?$lib$"; then
         echo "    ✓ $lib"
     else
@@ -111,6 +140,24 @@ for lib in libfreecadqtapp.so FreeCAD.so FreeCADGui.so Part.so PartGui.so \
         exit 1
     fi
 done
+if [ "$BUILD_ASSEMBLY" = ON ]; then
+    for lib in AssemblyApp.so AssemblyGui.so; do
+        unzip -l "$HAP" | grep -qE "libs/arm64-v8a/$lib$" || {
+            echo "错误：Assembly native 库缺失：$lib" >&2
+            exit 1
+        }
+        echo "    ✓ $lib"
+    done
+fi
+if [ "$BUILD_REVERSEENGINEERING" = ON ]; then
+    for lib in ReverseEngineering.so ReverseEngineeringGui.so; do
+        unzip -l "$HAP" | grep -qE "libs/arm64-v8a/$lib$" || {
+            echo "错误：Reverse Engineering native 库缺失：$lib" >&2
+            exit 1
+        }
+        echo "    ✓ $lib"
+    done
+fi
 
 echo "==> 检查 GUI 工作台注册脚本"
 # These are the workbenches enabled by the default full GUI configuration.
@@ -119,7 +166,6 @@ echo "==> 检查 GUI 工作台注册脚本"
 workbench_entries="
 Mod/CAM/InitGui.py
 Mod/Draft/InitGui.py
-Mod/FlexiMindGripDesign/InitGui.py
 Mod/Help/InitGui.py
 Mod/Import/InitGui.py
 Mod/Inspection/InitGui.py
@@ -161,6 +207,47 @@ if [ "$BUILD_START" = ON ]; then
         echo "    ✓ $entry"
     done
 fi
+if [ "$BUILD_ASSEMBLY" = ON ]; then
+    for entry in Mod/Assembly/Init.py Mod/Assembly/InitGui.py; do
+        unzip -p "$RUNTIME_ZIP" "$entry" >/dev/null 2>&1 || {
+            echo "错误：freecad-runtime.zip 缺少 Assembly 脚本：$entry" >&2
+            exit 1
+        }
+        echo "    ✓ $entry"
+    done
+fi
+if [ "$BUILD_REVERSEENGINEERING" = ON ]; then
+    for entry in Mod/ReverseEngineering/Init.py Mod/ReverseEngineering/InitGui.py; do
+        unzip -p "$RUNTIME_ZIP" "$entry" >/dev/null 2>&1 || {
+            echo "错误：freecad-runtime.zip 缺少 Reverse Engineering 脚本：$entry" >&2
+            exit 1
+        }
+        echo "    ✓ $entry"
+    done
+fi
+for entry in Ext/yaml/__init__.py Ext/yaml/loader.py Ext/yaml/dumper.py Ext/yaml/LICENSE; do
+    unzip -p "$RUNTIME_ZIP" "$entry" >/dev/null 2>&1 || {
+        echo "错误：freecad-runtime.zip 缺少 PyYAML 文件：$entry" >&2
+        exit 1
+    }
+    echo "    ✓ $entry"
+done
+for entry in Ext/packaging/__init__.py Ext/packaging/version.py Ext/packaging/utils.py \
+             Ext/packaging/LICENSE Ext/packaging/LICENSE.APACHE Ext/packaging/LICENSE.BSD; do
+    unzip -p "$RUNTIME_ZIP" "$entry" >/dev/null 2>&1 || {
+        echo "错误：freecad-runtime.zip 缺少 packaging 文件：$entry" >&2
+        exit 1
+    }
+    echo "    ✓ $entry"
+done
+for entry in Ext/numpy/__init__.py Ext/numpy/_core/__init__.py Ext/numpy/fft/__init__.py \
+             Ext/numpy/linalg/__init__.py Ext/numpy/random/__init__.py Ext/numpy/LICENSE.txt; do
+    unzip -p "$RUNTIME_ZIP" "$entry" >/dev/null 2>&1 || {
+        echo "错误：freecad-runtime.zip 缺少 NumPy 文件：$entry" >&2
+        exit 1
+    }
+    echo "    ✓ $entry"
+done
 
 echo "==> 检查 rawfile native ELF 与 Python 绑定 RUNPATH"
 # Every ELF must be a native HAP file so HarmonyOS signs it. Also reject
@@ -177,7 +264,15 @@ for package in PySide6 shiboken6 pivy; do
             exit 1
         }
 done
-unzip -q "$HAP" 'libs/arm64-v8a/*.abi3.so*' 'libs/arm64-v8a/_coin.so' -d "$RUNTIME_DIR"
+for package in numpy/_core numpy/fft numpy/linalg numpy/random; do
+    unzip -p "$RUNTIME_ZIP" "Ext/$package/__init__.py" |
+        grep -q 'FREECAD_APP_LIBRARY_DIR' || {
+            echo "错误：$package 未配置从 HAP native 目录加载扩展模块" >&2
+            exit 1
+        }
+done
+unzip -q "$HAP" 'libs/arm64-v8a/*.abi3.so*' 'libs/arm64-v8a/_coin.so' \
+    'libs/arm64-v8a/*cpython-311-*.so*' -d "$RUNTIME_DIR"
 for binding in "$RUNTIME_DIR"/libs/arm64-v8a/*.so*; do
     [ -f "$binding" ] || continue
     runpath=$("$READELF" -d "$binding" 2>/dev/null |
