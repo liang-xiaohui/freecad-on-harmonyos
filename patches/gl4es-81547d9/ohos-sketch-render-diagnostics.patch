@@ -31,21 +31,111 @@
      endif()
  endif()
 -
+--- a/src/gl/blit.c
++++ b/src/gl/blit.c
+@@ -9,6 +9,12 @@
+ #include "init.h"
+ #include "loader.h"
+ #include "logs.h"
++#if defined(FREECAD_OHOS_SKETCH_DIAG)
++#include "sketch_diag.h"
++
++#define gles_glDrawArrays(...) \
++    freecad_sketch_diag_draw_arrays(__FILE__, __LINE__, __VA_ARGS__)
++#endif
+ #ifdef TEXSTREAM
+ # ifndef GL_TEXTURE_STREAM_IMG
+ # define GL_TEXTURE_STREAM_IMG                                   0x8C0D
+@@ -342,7 +348,76 @@
+ 
+     realize_blitenv(alpha);
+ 
++#if defined(FREECAD_OHOS_SKETCH_DIAG)
++    if (mode==BLIT_COLOR && freecad_sketch_diag_budget > 0) {
++        --freecad_sketch_diag_budget;
++        LOAD_GLES(glGetIntegerv);
++        GLint boundtex = -1, curprog = -1, blendon = -1, bsrc = -1, bdst = -1, activetex = -1;
++        gles_glGetIntegerv(GL_ACTIVE_TEXTURE, &activetex);
++        gles_glGetIntegerv(GL_TEXTURE_BINDING_2D, &boundtex);
++        gles_glGetIntegerv(GL_CURRENT_PROGRAM, &curprog);
++        gles_glGetIntegerv(GL_BLEND, &blendon);
++        gles_glGetIntegerv(GL_BLEND_SRC_RGB, &bsrc);
++        gles_glGetIntegerv(GL_BLEND_DST_RGB, &bdst);
++        LOGD("SKETCH_DIAG blit-color pre tex=%u bound=%d program=%d blend=%d bsrc=0x%04x bdst=0x%04x cache=%u activeunit=0x%04x\n",
++             texture, boundtex, curprog, blendon, bsrc, bdst,
++             glstate->actual_tex2d[0], activetex);
++        {
++            // Sampling an incomplete texture on GLES2 returns (0,0,0,1):
++            // verify the native filter/wrap state of the blit texture.
++            LOAD_GLES(glGetTexParameteriv);
++            GLint minf = -1, magf = -1, wraps = -1, wrapt = -1;
++            gles_glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, &minf);
++            gles_glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, &magf);
++            gles_glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, &wraps);
++            gles_glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, &wrapt);
++            LOGD("SKETCH_DIAG blit-color texparam tex=%u min=0x%04x mag=0x%04x wrap=0x%04x,0x%04x\n",
++                 texture, minf, magf, wraps, wrapt);
++            LOGD("SKETCH_DIAG blit-color uv tex=%u sw=%.3f sh=%.3f rw=%.3f rh=%.3f vert=%.1f,%.1f-%.1f,%.1f\n",
++                 texture, tex[0], tex[1], tex[4], tex[5],
++                 vert[0], vert[1], vert[4], vert[5]);
++        }
++        // Read back the texture content itself through a scratch FBO to
++        // verify the upload actually landed in this native texture object.
++        LOAD_GLES2(glGenFramebuffers);
++        LOAD_GLES2(glBindFramebuffer);
++        LOAD_GLES2(glFramebufferTexture2D);
++        LOAD_GLES2(glCheckFramebufferStatus);
++        LOAD_GLES2(glDeleteFramebuffers);
++        LOAD_GLES(glReadPixels);
++        GLint oldfb = 0;
++        gles_glGetIntegerv(GL_FRAMEBUFFER_BINDING, &oldfb);
++        GLuint scratchfb = 0;
++        gles_glGenFramebuffers(1, &scratchfb);
++        gles_glBindFramebuffer(GL_FRAMEBUFFER, scratchfb);
++        gles_glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
++                                    GL_TEXTURE_2D, texture, 0);
++        GLenum fbstatus = gles_glCheckFramebufferStatus(GL_FRAMEBUFFER);
++        GLubyte texel[4] = {0, 0, 0, 0};
++        if (fbstatus == GL_FRAMEBUFFER_COMPLETE) {
++            // center of the uploaded icon sub-rect
++            gles_glReadPixels((int)(sx + width/2), (int)(sy + height/2),
++                              1, 1, GL_RGBA, GL_UNSIGNED_BYTE, texel);
++        }
++        gles_glBindFramebuffer(GL_FRAMEBUFFER, oldfb);
++        gles_glDeleteFramebuffers(1, &scratchfb);
++        LOGD("SKETCH_DIAG blit-color texread tex=%u fbstatus=0x%04x center=%d,%d,%d,%d\n",
++             texture, fbstatus, texel[0], texel[1], texel[2], texel[3]);
++    }
++#endif
+     gles_glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
++#if defined(FREECAD_OHOS_SKETCH_DIAG)
++    if (mode==BLIT_COLOR && freecad_sketch_diag_budget > 0) {
++        --freecad_sketch_diag_budget;
++        LOAD_GLES(glReadPixels);
++        GLubyte px[4] = {0, 0, 0, 0};
++        int rx = (int)(x + width*zoomx*0.5f);
++        int ry = (int)(y + height*zoomy*0.5f);
++        gles_glReadPixels(rx, ry, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
++        LOGD("SKETCH_DIAG blit-color readback at=%d,%d rgba=%d,%d,%d,%d\n",
++             rx, ry, px[0], px[1], px[2], px[3]);
++    }
++#endif
+ }
+ 
+ void gl4es_blitTexture(GLuint texture, 
 --- a/src/gl/drawing.c
 +++ b/src/gl/drawing.c
-@@ -9,7 +9,14 @@
+@@ -9,7 +9,13 @@
  #include "list.h"
  #include "loader.h"
  #include "render.h"
--
 +#include "sketch_diag.h"
-+
-+#if defined(FREECAD_OHOS_SKETCH_DIAG)
-+#define gles_glDrawArrays(...) \
-+    freecad_sketch_diag_draw_arrays(__FILE__, __LINE__, __VA_ARGS__)
-+#define gles_glDrawElements(...) \
-+    freecad_sketch_diag_draw_elements(__FILE__, __LINE__, __VA_ARGS__)
-+#endif
+ 
++/* NOTE: do NOT redirect gles_glDrawArrays/gles_glDrawElements to the diag
++ * wrappers here. In this file those names are bound to the FPE entry points
++ * (LOAD_GLES_FPE); the diag wrappers call the raw native function and would
++ * silently skip realize_glenv() (blending/material state application),
++ * breaking transparency and any per-draw state change. */
  //#define DEBUG
  #ifdef DEBUG
  #define DBG(a) a
@@ -55,9 +145,8 @@
  #include "shaderconv.h"
  
  #include "fpe.h"
--
 +#include "sketch_diag.h"
-+
+ 
 +#if defined(FREECAD_OHOS_SKETCH_DIAG)
 +#define gles_glDrawArrays(...) \
 +    freecad_sketch_diag_draw_arrays(__FILE__, __LINE__, __VA_ARGS__)
@@ -65,7 +154,7 @@
  #define fpe_state_t fpe_state_t
  #define fpe_fpe_t fpe_fpe_t
  #define kh_fpecachelist_t kh_fpecachelist_t
-@@ -810,6 +815,18 @@
+@@ -810,6 +815,35 @@
      DBG(printf("fpe_glDrawArrays(%s, %d, %d), program=%d, instanceID=%u\n", PrintEnum(mode), first, count, glstate->glsl->program, glstate->instanceID);)
      scratch_t scratch = {0};
      realize_glenv(mode==GL_POINTS, first, count, 0, NULL, &scratch);
@@ -80,11 +169,28 @@
 +             glstate->fpe_state ? glstate->fpe_state->color_material : -1,
 +             glstate->gleshard->vertexattrib[ATT_COLOR].enabled);
 +    }
++    if (freecad_sketch_diag_budget > 0 && mode==GL_TRIANGLES) {
++        --freecad_sketch_diag_budget;
++        LOAD_GLES(glGetIntegerv);
++        GLint nblend = -1, ndepth = -1;
++        gles_glGetIntegerv(GL_BLEND, &nblend);
++        gles_glGetIntegerv(GL_DEPTH_TEST, &ndepth);
++        LOGD("SKETCH_DIAG fpe-tris count=%d color=%.3f,%.3f,%.3f,%.3f blend=%d(native=%d) bfac=0x%04x,0x%04x cull=%d depth=%d(native=%d) dmask=%d lighting=%d colmat=%d colorarray=%d\n",
++             count, glstate->color[0], glstate->color[1], glstate->color[2],
++             glstate->color[3],
++             glstate->enable.blend, nblend,
++             glstate->blendsfactorrgb, glstate->blenddfactorrgb,
++             glstate->enable.cull_face, glstate->enable.depth_test, ndepth,
++             glstate->depth.mask,
++             glstate->fpe_state ? glstate->fpe_state->lighting : -1,
++             glstate->fpe_state ? glstate->fpe_state->color_material : -1,
++             glstate->gleshard->vertexattrib[ATT_COLOR].enabled);
++    }
 +#endif
      LOAD_GLES(glDrawArrays);
      gles_glDrawArrays(mode, first, count);
      free_scratch(&scratch);
-@@ -819,6 +836,18 @@
+@@ -819,6 +853,35 @@
      DBG(printf("fpe_glDrawElements(%s, %d, %s, %p), program=%d, instanceID=%u\n", PrintEnum(mode), count, PrintEnum(type), indices, glstate->glsl->program, glstate->instanceID);)
      scratch_t scratch = {0};
      realize_glenv(mode==GL_POINTS, 0, count, type, indices, &scratch);
@@ -95,6 +201,23 @@
 +        LOGD("SKETCH_DIAG fpe-draw mode=0x%04x color=%.3f,%.3f,%.3f,%.3f lighting=%d colmat=%d colorarray=%d\n",
 +             mode, glstate->color[0], glstate->color[1], glstate->color[2],
 +             glstate->color[3],
++             glstate->fpe_state ? glstate->fpe_state->lighting : -1,
++             glstate->fpe_state ? glstate->fpe_state->color_material : -1,
++             glstate->gleshard->vertexattrib[ATT_COLOR].enabled);
++    }
++    if (freecad_sketch_diag_budget > 0 && mode==GL_TRIANGLES) {
++        --freecad_sketch_diag_budget;
++        LOAD_GLES(glGetIntegerv);
++        GLint nblend = -1, ndepth = -1;
++        gles_glGetIntegerv(GL_BLEND, &nblend);
++        gles_glGetIntegerv(GL_DEPTH_TEST, &ndepth);
++        LOGD("SKETCH_DIAG fpe-tris count=%d color=%.3f,%.3f,%.3f,%.3f blend=%d(native=%d) bfac=0x%04x,0x%04x cull=%d depth=%d(native=%d) dmask=%d lighting=%d colmat=%d colorarray=%d\n",
++             count, glstate->color[0], glstate->color[1], glstate->color[2],
++             glstate->color[3],
++             glstate->enable.blend, nblend,
++             glstate->blendsfactorrgb, glstate->blenddfactorrgb,
++             glstate->enable.cull_face, glstate->enable.depth_test, ndepth,
++             glstate->depth.mask,
 +             glstate->fpe_state ? glstate->fpe_state->lighting : -1,
 +             glstate->fpe_state ? glstate->fpe_state->color_material : -1,
 +             glstate->gleshard->vertexattrib[ATT_COLOR].enabled);
@@ -272,115 +395,6 @@
  	__android_log_vprint(ANDROID_LOG_INFO, "LIBGL", fmt, args);
  	#else
  	vprintf(fmt,args);
---- a/src/gl/texture.c
-+++ b/src/gl/texture.c
-@@ -14,6 +14,14 @@
- #include "loader.h"
- #include "matrix.h"
- #include "pixel.h"
-+#include "sketch_diag.h"
-+
-+#if defined(FREECAD_OHOS_SKETCH_DIAG)
-+#define gles_glTexImage2D(...) \
-+    freecad_sketch_diag_tex_image2d(__FILE__, __LINE__, __VA_ARGS__)
-+#define gles_glTexSubImage2D(...) \
-+    freecad_sketch_diag_tex_sub_image2d(__FILE__, __LINE__, __VA_ARGS__)
-+#endif
- #include "raster.h"
- 
- //#define DEBUG
---- a/src/gl/blit.c
-+++ b/src/gl/blit.c
-@@ -9,6 +9,12 @@
- #include "init.h"
- #include "loader.h"
- #include "logs.h"
-+#if defined(FREECAD_OHOS_SKETCH_DIAG)
-+#include "sketch_diag.h"
-+
-+#define gles_glDrawArrays(...) \
-+    freecad_sketch_diag_draw_arrays(__FILE__, __LINE__, __VA_ARGS__)
-+#endif
- #ifdef TEXSTREAM
- # ifndef GL_TEXTURE_STREAM_IMG
- # define GL_TEXTURE_STREAM_IMG                                   0x8C0D
-@@ -342,7 +348,76 @@
- 
-     realize_blitenv(alpha);
- 
-+#if defined(FREECAD_OHOS_SKETCH_DIAG)
-+    if (mode==BLIT_COLOR && freecad_sketch_diag_budget > 0) {
-+        --freecad_sketch_diag_budget;
-+        LOAD_GLES(glGetIntegerv);
-+        GLint boundtex = -1, curprog = -1, blendon = -1, bsrc = -1, bdst = -1, activetex = -1;
-+        gles_glGetIntegerv(GL_ACTIVE_TEXTURE, &activetex);
-+        gles_glGetIntegerv(GL_TEXTURE_BINDING_2D, &boundtex);
-+        gles_glGetIntegerv(GL_CURRENT_PROGRAM, &curprog);
-+        gles_glGetIntegerv(GL_BLEND, &blendon);
-+        gles_glGetIntegerv(GL_BLEND_SRC_RGB, &bsrc);
-+        gles_glGetIntegerv(GL_BLEND_DST_RGB, &bdst);
-+        LOGD("SKETCH_DIAG blit-color pre tex=%u bound=%d program=%d blend=%d bsrc=0x%04x bdst=0x%04x cache=%u activeunit=0x%04x\n",
-+             texture, boundtex, curprog, blendon, bsrc, bdst,
-+             glstate->actual_tex2d[0], activetex);
-+        {
-+            // Sampling an incomplete texture on GLES2 returns (0,0,0,1):
-+            // verify the native filter/wrap state of the blit texture.
-+            LOAD_GLES(glGetTexParameteriv);
-+            GLint minf = -1, magf = -1, wraps = -1, wrapt = -1;
-+            gles_glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, &minf);
-+            gles_glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, &magf);
-+            gles_glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, &wraps);
-+            gles_glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, &wrapt);
-+            LOGD("SKETCH_DIAG blit-color texparam tex=%u min=0x%04x mag=0x%04x wrap=0x%04x,0x%04x\n",
-+                 texture, minf, magf, wraps, wrapt);
-+            LOGD("SKETCH_DIAG blit-color uv tex=%u sw=%.3f sh=%.3f rw=%.3f rh=%.3f vert=%.1f,%.1f-%.1f,%.1f\n",
-+                 texture, tex[0], tex[1], tex[4], tex[5],
-+                 vert[0], vert[1], vert[4], vert[5]);
-+        }
-+        // Read back the texture content itself through a scratch FBO to
-+        // verify the upload actually landed in this native texture object.
-+        LOAD_GLES2(glGenFramebuffers);
-+        LOAD_GLES2(glBindFramebuffer);
-+        LOAD_GLES2(glFramebufferTexture2D);
-+        LOAD_GLES2(glCheckFramebufferStatus);
-+        LOAD_GLES2(glDeleteFramebuffers);
-+        LOAD_GLES(glReadPixels);
-+        GLint oldfb = 0;
-+        gles_glGetIntegerv(GL_FRAMEBUFFER_BINDING, &oldfb);
-+        GLuint scratchfb = 0;
-+        gles_glGenFramebuffers(1, &scratchfb);
-+        gles_glBindFramebuffer(GL_FRAMEBUFFER, scratchfb);
-+        gles_glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-+                                    GL_TEXTURE_2D, texture, 0);
-+        GLenum fbstatus = gles_glCheckFramebufferStatus(GL_FRAMEBUFFER);
-+        GLubyte texel[4] = {0, 0, 0, 0};
-+        if (fbstatus == GL_FRAMEBUFFER_COMPLETE) {
-+            // center of the uploaded icon sub-rect
-+            gles_glReadPixels((int)(sx + width/2), (int)(sy + height/2),
-+                              1, 1, GL_RGBA, GL_UNSIGNED_BYTE, texel);
-+        }
-+        gles_glBindFramebuffer(GL_FRAMEBUFFER, oldfb);
-+        gles_glDeleteFramebuffers(1, &scratchfb);
-+        LOGD("SKETCH_DIAG blit-color texread tex=%u fbstatus=0x%04x center=%d,%d,%d,%d\n",
-+             texture, fbstatus, texel[0], texel[1], texel[2], texel[3]);
-+    }
-+#endif
-     gles_glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-+#if defined(FREECAD_OHOS_SKETCH_DIAG)
-+    if (mode==BLIT_COLOR && freecad_sketch_diag_budget > 0) {
-+        --freecad_sketch_diag_budget;
-+        LOAD_GLES(glReadPixels);
-+        GLubyte px[4] = {0, 0, 0, 0};
-+        int rx = (int)(x + width*zoomx*0.5f);
-+        int ry = (int)(y + height*zoomy*0.5f);
-+        gles_glReadPixels(rx, ry, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
-+        LOGD("SKETCH_DIAG blit-color readback at=%d,%d rgba=%d,%d,%d,%d\n",
-+             rx, ry, px[0], px[1], px[2], px[3]);
-+    }
-+#endif
- }
- 
- void gl4es_blitTexture(GLuint texture, 
 --- a/src/gl/raster.c
 +++ b/src/gl/raster.c
 @@ -10,6 +10,7 @@
@@ -490,37 +504,7 @@
  		if (texture)
  		gl4es_blitTexture(
  			texture->glname,
---- a/src/gl/wrap/gles.c
-+++ b/src/gl/wrap/gles.c
-@@ -1,6 +1,7 @@
- #include "gles.h"
- #include "../gl4es.h"
- #include "../loader.h"
-+#include "../sketch_diag.h"
- #include "skips.h"
- 
- // emulation of 'glTexParameteri' (for internal use only)
-@@ -1397,6 +1398,9 @@
-     PUSH_IF_COMPILING(glLineWidth)
- #endif
-     gles_glLineWidth(width);
-+#if defined(FREECAD_OHOS_SKETCH_DIAG)
-+    freecad_sketch_diag_state("line-width", width, 0.0f, 0.0f, 0.0f);
-+#endif
- }
- AliasExport(void,glLineWidth,,(GLfloat width));
- #endif
-@@ -1677,6 +1681,9 @@
-     PUSH_IF_COMPILING(glPointSize)
- #endif
-     gles_glPointSize(size);
-+#if defined(FREECAD_OHOS_SKETCH_DIAG)
-+    freecad_sketch_diag_state("point-size", size, 0.0f, 0.0f, 0.0f);
-+#endif
- }
- AliasExport(void,glPointSize,,(GLfloat size));
- #endif
---- /dev/null
+--- a/src/gl/sketch_diag.h
 +++ b/src/gl/sketch_diag.h
 @@ -0,0 +1,177 @@
 +#ifndef _GL4ES_SKETCH_DIAG_H_
@@ -700,3 +684,50 @@
 +#endif
 +
 +#endif
+--- a/src/gl/texture.c
++++ b/src/gl/texture.c
+@@ -14,6 +14,14 @@
+ #include "loader.h"
+ #include "matrix.h"
+ #include "pixel.h"
++#include "sketch_diag.h"
++
++#if defined(FREECAD_OHOS_SKETCH_DIAG)
++#define gles_glTexImage2D(...) \
++    freecad_sketch_diag_tex_image2d(__FILE__, __LINE__, __VA_ARGS__)
++#define gles_glTexSubImage2D(...) \
++    freecad_sketch_diag_tex_sub_image2d(__FILE__, __LINE__, __VA_ARGS__)
++#endif
+ #include "raster.h"
+ 
+ //#define DEBUG
+--- a/src/gl/wrap/gles.c
++++ b/src/gl/wrap/gles.c
+@@ -1,6 +1,7 @@
+ #include "gles.h"
+ #include "../gl4es.h"
+ #include "../loader.h"
++#include "../sketch_diag.h"
+ #include "skips.h"
+ 
+ // emulation of 'glTexParameteri' (for internal use only)
+@@ -1397,6 +1398,9 @@
+     PUSH_IF_COMPILING(glLineWidth)
+ #endif
+     gles_glLineWidth(width);
++#if defined(FREECAD_OHOS_SKETCH_DIAG)
++    freecad_sketch_diag_state("line-width", width, 0.0f, 0.0f, 0.0f);
++#endif
+ }
+ AliasExport(void,glLineWidth,,(GLfloat width));
+ #endif
+@@ -1677,6 +1681,9 @@
+     PUSH_IF_COMPILING(glPointSize)
+ #endif
+     gles_glPointSize(size);
++#if defined(FREECAD_OHOS_SKETCH_DIAG)
++    freecad_sketch_diag_state("point-size", size, 0.0f, 0.0f, 0.0f);
++#endif
+ }
+ AliasExport(void,glPointSize,,(GLfloat size));
+ #endif

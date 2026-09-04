@@ -82,3 +82,15 @@
  EXPORT
  void set_getmainfbsize(void (APIENTRY_GL4ES  *new_getMainFBSize)(int* w, int* h)) {
      gl4es_getMainFBSize = (void*)new_getMainFBSize;
+--- a/include/gl4esinit.h
++++ b/include/gl4esinit.h
+@@ -22,6 +22,9 @@
+ void initialize_gl4es(void);
+ // do this to uninitialize GL4ES if init constructors are disabled.
+ void close_gl4es(void);
++// Keep gl4es state in sync when EGL contexts are made current externally
++// instead of through gl4es' GLX context API.
++void gl4es_activate_external_context(void *native_context, void *shared_native_context);
+ // wrapped GetProcAddress
+ void* APIENTRY_GL4ES gl4es_GetProcAddress(const char *name);
+ 
