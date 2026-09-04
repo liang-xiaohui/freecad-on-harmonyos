@@ -1,0 +1,22 @@
+--- a/src/Gui/View3DSettings.cpp
++++ b/src/Gui/View3DSettings.cpp
+@@ -381,7 +381,7 @@
+     }
+     else if (strcmp(Reason, "ShowAxisCross") == 0) {
+         for (auto _viewer : _viewers) {
+-            _viewer->setAxisCross(rGrp.GetBool("ShowAxisCross", false));
++            _viewer->setAxisCross(rGrp.GetBool("ShowAxisCross", true));  // OHOS: default on
+         }
+     }
+     else if (strcmp(Reason, "UseNavigationAnimations") == 0) {
+--- a/src/Gui/CommandDoc.cpp
++++ b/src/Gui/CommandDoc.cpp
+@@ -723,7 +723,7 @@
+     ParameterGrp::handle hViewGrp = App::GetApplication().GetParameterGroupByPath(
+         "User parameter:BaseApp/Preferences/View"
+     );
+-    if (hViewGrp->GetBool("ShowAxisCross")) {
++    if (hViewGrp->GetBool("ShowAxisCross", true)) {  // OHOS: default on
+         doCommand(Command::Gui, "Gui.ActiveDocument.ActiveView.setAxisCross(True)");
+     }
+ }
