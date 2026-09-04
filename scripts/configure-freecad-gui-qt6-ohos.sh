@@ -28,6 +28,8 @@ VTK_DIR="${VTK_DIR:-$VTK_PREFIX/lib/cmake/vtk-9.3}"
 FMT_SOURCE="${FMT_SOURCE:-$CPP_LIB_ROOT/sources/fmt/9.1.0}"
 PYBIND11_ROOT="${PYBIND11_ROOT:-$CPP_LIB_ROOT/sources/pybind11/pybind11-2.13.6}"
 PYTHON_ROOT="${PYTHON_ROOT:-$CPP_LIB_ROOT/install/python/3.11.4/ohos/$ABI}"
+PYSIDE6_PREFIX="${PYSIDE6_PREFIX:-$CPP_LIB_ROOT/install/pyside6/ohos/$ABI}"
+SHIBOKEN6_PREFIX="${SHIBOKEN6_PREFIX:-$CPP_LIB_ROOT/build/shiboken6/inst}"
 SWIG_PREFIX="${SWIG_PREFIX:-$CPP_LIB_ROOT/install/swig/4.2.1}"
 SWIG_VERSION="${SWIG_VERSION:-4.2.1}"
 PIVY_SITE="${PIVY_SITE:-$CPP_LIB_ROOT/install/pivy/ohos/$ABI/site-packages}"
@@ -83,6 +85,14 @@ QT_PREFIX="$QT_PREFIX" OHOS_SDK="$OHOS_SDK" NATIVE_SDK="$NATIVE_SDK" \
     echo "Pivy is missing: $PIVY_SITE/pivy/_coin.so" >&2
     exit 1
 }
+[ -f "$PYSIDE6_PREFIX/lib/cmake/PySide6/PySide6Config.cmake" ] || {
+    echo "PySide6 target package is missing under $PYSIDE6_PREFIX" >&2
+    exit 1
+}
+[ -f "$SHIBOKEN6_PREFIX/lib/cmake/Shiboken6/Shiboken6Config.cmake" ] || {
+    echo "Shiboken6 target package is missing under $SHIBOKEN6_PREFIX" >&2
+    exit 1
+}
 
 if [ "$BUILD_ASSEMBLY" = ON ] && [ ! -f "$SRC/src/3rdParty/OndselSolver/CMakeLists.txt" ]; then
     echo "Assembly 已启用，但 OndselSolver 子模块不存在。先运行 scripts/prepare-ondsel-solver.sh，或保持 FREECAD_BUILD_ASSEMBLY=OFF。" >&2
@@ -105,8 +115,8 @@ export SWIG_LIB="$SWIG_PREFIX/share/swig/$SWIG_VERSION"
 export PYTHONPATH="$PIVY_SITE${PYTHONPATH:+:$PYTHONPATH}"
 export LD_LIBRARY_PATH="$QT_PREFIX/lib:$PIVY_SITE:$COIN_PREFIX/lib:$GL4ES_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
-PREFIX_PATH="$QT_PREFIX;$COIN_PREFIX;$BOOST_PREFIX;$EIGEN_PREFIX;$XERCES_PREFIX;$OCCT_PREFIX;$YAML_CPP_PREFIX;$VTK_PREFIX;$PYTHON_ROOT"
-FIND_ROOT_PATH="$NATIVE_SDK;$QT_PREFIX;$COIN_PREFIX;$BOOST_PREFIX;$EIGEN_PREFIX;$XERCES_PREFIX;$OCCT_PREFIX;$YAML_CPP_PREFIX;$VTK_PREFIX;$PYTHON_ROOT"
+PREFIX_PATH="$QT_PREFIX;$COIN_PREFIX;$BOOST_PREFIX;$EIGEN_PREFIX;$XERCES_PREFIX;$OCCT_PREFIX;$YAML_CPP_PREFIX;$VTK_PREFIX;$PYTHON_ROOT;$PYSIDE6_PREFIX;$SHIBOKEN6_PREFIX"
+FIND_ROOT_PATH="$NATIVE_SDK;$QT_PREFIX;$COIN_PREFIX;$BOOST_PREFIX;$EIGEN_PREFIX;$XERCES_PREFIX;$OCCT_PREFIX;$YAML_CPP_PREFIX;$VTK_PREFIX;$PYTHON_ROOT;$PYSIDE6_PREFIX;$SHIBOKEN6_PREFIX"
 
 # FEM, BIM, and MeshPart pull in Salome SMESH, which additionally requires
 # MEDFile/HDF5. Those OHOS packages are not installed in this toolchain.
@@ -138,6 +148,8 @@ cmake_configure "$SRC" "$BUILD" "$PREFIX" \
     -DPython3_EXECUTABLE="$PYTHON_HOST_BIN" \
     -DPython3_LIBRARY="$PYTHON_ROOT/lib/libpython3.11.so" \
     -DPython3_INCLUDE_DIR="$PYTHON_ROOT/include/python3.11" \
+    -DShiboken6_DIR="$SHIBOKEN6_PREFIX/lib/cmake/Shiboken6" \
+    -DPySide6_DIR="$PYSIDE6_PREFIX/lib/cmake/PySide6" \
     -DSWIG_EXECUTABLE="$SWIG_PREFIX/bin/swig" \
     -DSWIG_DIR="$SWIG_PREFIX/share/swig/$SWIG_VERSION" \
     -DICU_INCLUDE_DIR="$NATIVE_SDK/sysroot/usr/include" \
@@ -150,8 +162,8 @@ cmake_configure "$SRC" "$BUILD" "$PREFIX" \
     -DINSTALL_TO_SITEPACKAGES=OFF \
     -DBUILD_GUI=ON \
     -DFREECAD_CHECK_PIVY=OFF \
-    -DFREECAD_USE_SHIBOKEN=OFF \
-    -DFREECAD_USE_PYSIDE=OFF \
+    -DFREECAD_USE_SHIBOKEN=ON \
+    -DFREECAD_USE_PYSIDE=ON \
     -DFREECAD_USE_3DCONNEXION_LEGACY=OFF \
     -DBUILD_FEM="$BUILD_FEM" \
     -DBUILD_SMESH=OFF \
@@ -201,6 +213,12 @@ cmake_configure "$SRC" "$BUILD" "$PREFIX" \
 # the corresponding normal variables off. Verify generated targets, not only
 # CMakeCache.txt, before allowing an incomplete GUI runtime to be installed.
 TARGETS="$BUILD/CMakeFiles/TargetDirectories.txt"
+for define in HAVE_SHIBOKEN6 HAVE_PYSIDE6; do
+    grep -q -- "-D$define" "$BUILD/build.ninja" || {
+        echo "错误：FreeCADGui 未启用 $define；请检查 PySide6/Shiboken6 目标包" >&2
+        exit 1
+    }
+done
 for target in ImportGui PartDesignGui SketcherGui; do
     grep -q "/CMakeFiles/$target.dir" "$TARGETS" || {
         echo "错误：GUI 配置未生成 $target 目标；请检查 Eigen3/Qt6 依赖和 configure 输出" >&2

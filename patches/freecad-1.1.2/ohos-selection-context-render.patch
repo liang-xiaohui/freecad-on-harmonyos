@@ -1,0 +1,179 @@
+--- a/src/Gui/Selection/SoFCSelectionContext.cpp
++++ b/src/Gui/Selection/SoFCSelectionContext.cpp
+@@ -141,6 +141,10 @@ int SoFCSelectionContext::merge(
+ 
+ /////////////////////////////////////////////////////////////////////////////////////
+ 
++#if defined(FREECAD_OHOS)
++SoFCSelectionContextEx::~SoFCSelectionContextEx() = default;
++#endif
++
+ bool SoFCSelectionContextEx::setColors(
+     const std::map<std::string, Base::Color>& colors,
+     const std::string& element
+--- a/src/Gui/Selection/SoFCSelectionContext.h
++++ b/src/Gui/Selection/SoFCSelectionContext.h
+@@ -119,6 +119,10 @@ using SoFCSelectionContextExPtr = std::shared_ptr<SoFCSelectionContextEx>;
+ 
+ struct GuiExport SoFCSelectionContextEx: SoFCSelectionContext
+ {
++#if defined(FREECAD_OHOS)
++    ~SoFCSelectionContextEx() override;
++#endif
++
+     std::map<int, Base::Color> colors;
+     float trans0 = 0.0;
+ 
+--- a/src/Gui/Selection/SoFCUnifiedSelection.cpp
++++ b/src/Gui/Selection/SoFCUnifiedSelection.cpp
+@@ -1343,6 +1343,36 @@ SoFCSelectionContextBasePtr SoFCSelectionRoot::getNodeContext2(
+     return ret;
+ }
+ 
++#if defined(FREECAD_OHOS)
++SoFCSelectionContextBasePtr SoFCSelectionRoot::getRenderContextFromAction(
++    SoGLRenderAction* action,
++    SoNode* node,
++    SoFCSelectionContextBasePtr def,
++    SoFCSelectionContextBase::MergeFunc* merge,
++    SoFCSelectionContextBasePtr& ctx2
++)
++{
++    if (!SelStack.empty()) {
++        ctx2 = getNodeContext2(SelStack, node, merge);
++        return getNodeContext(SelStack, node, def);
++    }
++
++    Stack stack;
++    const SoPath* path = action ? action->getCurPath() : nullptr;
++    if (path) {
++        for (int i = 0; i < path->getLength(); ++i) {
++            SoNode* current = path->getNode(i);
++            if (current && current->isOfType(SoFCSelectionRoot::getClassTypeId())) {
++                stack.push_back(current);
++            }
++        }
++    }
++
++    ctx2 = getNodeContext2(stack, node, merge);
++    return getNodeContext(stack, node, def);
++}
++#endif
++
+ std::pair<bool, SoFCSelectionContextBasePtr*> SoFCSelectionRoot::findActionContext(
+     SoAction* action,
+     SoNode* _node,
+--- a/src/Gui/Selection/SoFCUnifiedSelection.h
++++ b/src/Gui/Selection/SoFCUnifiedSelection.h
+@@ -268,6 +268,25 @@ public:
+         return std::dynamic_pointer_cast<T>(getNodeContext(SelStack, node, def));
+     }
+ 
++#if defined(FREECAD_OHOS)
++    template<class T>
++    static std::shared_ptr<T> getRenderContext(
++        SoGLRenderAction* action,
++        SoNode* node,
++        std::shared_ptr<T> def,
++        std::shared_ptr<T>& ctx2
++    )
++    {
++        SoFCSelectionContextBasePtr context2;
++        auto context = getRenderContextFromAction(action, node, def, T::merge, context2);
++        // HarmonyOS does not reliably match C++ RTTI across dynamically loaded
++        // workbench DSOs. The map key includes the querying node, which fixes
++        // the context type for that entry.
++        ctx2 = std::static_pointer_cast<T>(context2);
++        return std::static_pointer_cast<T>(context);
++    }
++#endif
++
+     /** Get the selection context for an action.
+      *
+      * @param action: the action. SoSelectionElementAction has any option to
+@@ -301,10 +320,12 @@ public:
+         // make a new context if there is none
+         auto& ctx = *res.second;
+         if (ctx) {
++#if !defined(FREECAD_OHOS)
+             auto ret = std::dynamic_pointer_cast<T>(ctx);
+             if (!ret) {
+                 ctx.reset();
+             }
++#endif
+         }
+         if (!ctx && create) {
+             ctx = std::make_shared<T>();
+@@ -393,6 +414,15 @@ protected:
+         bool create,
+         bool erase
+     );
++#if defined(FREECAD_OHOS)
++    static SoFCSelectionContextBasePtr getRenderContextFromAction(
++        SoGLRenderAction* action,
++        SoNode* node,
++        SoFCSelectionContextBasePtr def,
++        SoFCSelectionContextBase::MergeFunc* merge,
++        SoFCSelectionContextBasePtr& ctx2
++    );
++#endif
+ 
+     static Stack SelStack;
+     static std::unordered_map<SoAction*, Stack> ActionStacks;
+--- a/src/Mod/Part/Gui/SoBrepEdgeSet.cpp
++++ b/src/Mod/Part/Gui/SoBrepEdgeSet.cpp
+@@ -85,7 +85,12 @@ void SoBrepEdgeSet::GLRender(SoGLRenderAction* action)
+     selCounter.checkRenderCache(state);
+ 
+     SelContextPtr ctx2;
+-    SelContextPtr ctx = Gui::SoFCSelectionRoot::getRenderContext<SelContext>(this, selContext, ctx2);
++    SelContextPtr ctx = Gui::SoFCSelectionRoot::getRenderContext<SelContext>(
++        action,
++        this,
++        selContext,
++        ctx2
++    );
+     if (ctx2 && ctx2->selectionIndex.empty() && ctx2->colors.empty()) {
+         return;
+     }
+--- a/src/Mod/Part/Gui/SoBrepFaceSet.cpp
++++ b/src/Mod/Part/Gui/SoBrepFaceSet.cpp
+@@ -392,7 +392,12 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction* action)
+     }
+ 
+     SelContextPtr ctx2;
+-    SelContextPtr ctx = Gui::SoFCSelectionRoot::getRenderContext<SelContext>(this, selContext, ctx2);
++    SelContextPtr ctx = Gui::SoFCSelectionRoot::getRenderContext<SelContext>(
++        action,
++        this,
++        selContext,
++        ctx2
++    );
+     if (ctx2 && ctx2->selectionIndex.empty()) {
+         return;
+     }
+@@ -582,7 +587,7 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction* action)
+ 
+     SelContextPtr ctx2;
+     std::vector<SelContextPtr> ctxs;
+-    SelContextPtr ctx = Gui::SoFCSelectionRoot::getRenderContext(this, selContext, ctx2);
++    SelContextPtr ctx = Gui::SoFCSelectionRoot::getRenderContext(action, this, selContext, ctx2);
+     if (ctx2 && ctx2->selectionIndex.empty()) {
+         return;
+     }
+--- a/src/Mod/Part/Gui/SoBrepPointSet.cpp
++++ b/src/Mod/Part/Gui/SoBrepPointSet.cpp
+@@ -78,7 +78,12 @@ void SoBrepPointSet::GLRender(SoGLRenderAction* action)
+         return;
+     }
+     SelContextPtr ctx2;
+-    SelContextPtr ctx = Gui::SoFCSelectionRoot::getRenderContext<SelContext>(this, selContext, ctx2);
++    SelContextPtr ctx = Gui::SoFCSelectionRoot::getRenderContext<SelContext>(
++        action,
++        this,
++        selContext,
++        ctx2
++    );
+     if (ctx2 && ctx2->selectionIndex.empty()) {
+         return;
+     }

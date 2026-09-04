@@ -22,7 +22,7 @@
 | Coin3D | 4.0.0（Qt6 目标线） | 已构建、安装（含 `patches/coin-4.0.0/ohos.patch`）；当前为 Qt5.12 链接版本 | Qt6 qtbase 就绪后按 Qt6 重新构建/验证 |
 | Pivy | 与 Coin/Python 匹配 | 已构建并验证 Python 场景图 API，GUI runtime 已 staged | 随真机 GUI 工作台验收继续回归 |
 | Shiboken6 | 6.8.3 | **已构建并验证**：生成器（v6.8.3）+ libshiboken6 + `shiboken6` python 模块导入成功（`CPPLib/scripts/build-shiboken6-ohos.sh`；含 ClangConfig 补丁、OHOS musl 全局作用域修复——显式链接 libpython） | 用于 PySide6 绑定生成 |
-| PySide6 | 6.8.3 | **Core/Gui/Widgets/OpenGL/OpenGLWidgets 绑定全部构建并验证**（v6.8.3：QWidget/QPushButton/QLabel/QColor/QImage 正常，offscreen）。关键修复：绑定模块显式链接 libpython（musl 全局作用域）；libshiboken 纯文件名 NEEDED；`build-pyside6-ohos.sh` | 供 FreeCAD Python GUI API（FREECAD_USE_PYSIDE=ON 后续启用） |
+| PySide6 | 6.8.3 | **Core/Gui/Widgets/OpenGL/OpenGLWidgets 绑定全部构建并验证**（v6.8.3：QWidget/QPushButton/QLabel/QColor/QImage 正常，offscreen）。关键修复：绑定模块显式链接 libpython（musl 全局作用域）；libshiboken 纯文件名 NEEDED；`build-pyside6-ohos.sh`。FreeCAD full 构建已启用 `FREECAD_USE_PYSIDE` / `FREECAD_USE_SHIBOKEN`，并编译 `Base::Quantity` converter | 供 FreeCAD Python GUI API和 C++ Qt 信号类型转换 |
 | gl4es | 81547d9 | FreeCAD 1.1.2 真机 3D 已验证；外部 EGL context 映射并在 Qt/Coin 交接时失效 program/VBO/EBO/vertex-attrib 缓存 | 长时间相机/选择压力回归 |
 | SMESH/VTK/MED/HDF5 | 待业务确认 | 延后，不阻塞首个 GUI | 按 MeshPart 实际需求启用 |
 | Headless 验收 HAP | v1.1.2 runtime | GUI HAP 内同一 Qt6 runtime 本地 6/6 验收通过；headless 真机复跑仍独立记录 | DevEco Run EntryAbility 真机复跑 6 项验收 |

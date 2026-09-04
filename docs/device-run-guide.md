@@ -1,6 +1,6 @@
 # DevEco 真机执行指引（验收 + GUI）
 
-更新时间：2026-09-02。本工程当前为 **GUI HAP（Qt6）** 布局，同时保留 headless 验收能力。
+更新时间：2026-09-05。本工程当前为 **GUI HAP（Qt6）** 布局，同时保留 headless 验收能力。
 
 ## 构建
 
@@ -143,6 +143,54 @@ TARGET=192.168.3.16:39405
 - FreeCAD GUI 二进制（Qt6 + offscreen 平台）可启动至 Qt 事件循环：Python 初始化 → QApplication →
   offscreen 平台窗口创建（`propagateSizeHints`），无崩溃（渲染需真机 OHOS QPA）。
 - 真机已显示 FreeCAD 1.1.2 主窗口、菜单、工具栏、New Document、Part/Cube 与复杂多色示例；Edit → Preferences 可打开。当前验证包 SHA-256 为 `6a6849b82e2122685c377246dcdf034493611a69852278049d83b6ece9368bd5`。
+
+## 子元素选择高亮（2026-09-04 已解决）
+
+原故障表现为新建立方体后，鼠标悬停面的黄色预选高亮和第一次点击面的
+绿色选择高亮都不显示；再次点击后整个立方体的绿色高亮正常。拾取本身没有
+失效，状态栏仍能显示 `Preselected: Unnamed.Box.Face3`，因此问题位于选择上下文
+到渲染节点的传递过程，而不是触摸坐标或拾取半径。
+
+排查发现两个相互叠加的 HarmonyOS 差异：
+
+1. `SoBrepFaceSet::GLRender()` 执行时，`SoFCSelectionRoot::SelStack` 可能为空，
+   action 阶段已经写入的 face selection context 因而无法在 render 阶段查回。
+   OHOS 路径现在从 `SoGLRenderAction::getCurPath()` 重建 selection-root stack，
+   face、edge、point 三类 BRep 渲染节点统一传入当前 render action。
+2. 工作台经 `RTLD_LOCAL` 动态加载后，跨 `libFreeCADGui.so` 与 `PartGui.so` 的
+   `dynamic_pointer_cast<SoFCSelectionContextEx>` 在设备上不可靠。即使 context-map
+   key 已命中，转换仍可能返回空。OHOS 路径根据“查询 node 决定该 map entry 类型”
+   的不变量使用 `static_pointer_cast`，并为 `SoFCSelectionContextEx` 提供由
+   `libFreeCADGui.so` 导出的 out-of-line 析构函数，以统一其 RTTI/typeinfo 所属 DSO。
+
+将 highlight pass 的 depth function 强制为 `GL_LESS` 没有改变故障，证明它不是
+深度测试遮挡；该试验和所有 `FreeCADSel` 临时日志均未保留。真机验证确认立方体
+面的 hover 黄色高亮、首次点击绿色面高亮、再次点击整体绿色高亮均已恢复；构建
+仍保持 `BUILD_ASSEMBLY=ON`。移除诊断后重新构建并通过 `verify-gui-hap.sh` 的
+签名包 SHA-256 为 `dfbdeec8ee9f9e2da690a2d70cc2d1920c9f5f5e8a3a390e05b9dbe50c123afe`。
+
+## Draft `Base::Quantity` 信号转换（2026-09-05 构建修复）
+
+Draft 画线任务面板曾在数值变化时报告：
+
+```text
+Cannot call meta function "slot(Base::Quantity)" because parameter 0 of type
+"Base::Quantity" cannot be converted.
+```
+
+`Gui::InputField::valueChanged(const Base::Quantity&)` 需要 FreeCADGui 在启动时
+向 Shiboken 注册 `Base::Quantity` converter。旧的 full 构建脚本显式关闭了
+`FREECAD_USE_SHIBOKEN` 和 `FREECAD_USE_PYSIDE`；PySide Python 模块虽然已经随
+HAP 打包，`libFreeCADGui.so` 却没有链接两个 C++ 运行库，converter 因此从未注册。
+
+正式的 `configure-freecad-gui-qt6-ohos.sh` 现在显式传入目标端
+`Shiboken6_DIR`/`PySide6_DIR` 并启用两项集成。配置结束还会检查生成的
+`build.ninja` 是否同时包含 `HAVE_SHIBOKEN6` 和 `HAVE_PYSIDE6`，避免 CMake
+缺少依赖时静默退回 OFF。2026-09-05 已完成全工作台 Release 构建、安装、staging
+和 `verify-gui-hap.sh`；`libFreeCADGui.so` 的 `DT_NEEDED` 已包含
+`libpyside6.abi3.so.6.8` 与 `libshiboken6.abi3.so`。签名 HAP SHA-256 为
+`c1587ac4c5a139a9d929904f2be7e68c40466aca4b6399fe1fb65d83b72e93cc`，已覆盖安装
+到 `192.168.3.16:39405`；安装后的 Draft 交互复验需在设备解锁后完成。
 
 ## 当前 GUI 回归重点
 

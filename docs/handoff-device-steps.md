@@ -46,12 +46,12 @@ GL4ES 增量构建后还必须对对应 build tree 执行 `cmake --install`，�
 4. 当前回归重点：启动 QAbility → 新建文档/打开复杂文件 → 长时间旋转/缩放/选择 → 反复打开 Preferences/文件对话框 → 前后台切换。
 5. 若仍崩溃，请保留 `QtForOhos`、`gl4es` 日志，并运行 `hidumper -e --print com.freecad.headless.acceptance -n 3` 保存 cppcrash 完整栈。
 
-## 2026-08-22 追加：PySide6 已启用进 FreeCAD
+## PySide6 / Shiboken6 集成状态（2026-09-05 修正）
 
-- 构建了 **FREECAD_USE_PYSIDE=ON / FREECAD_USE_SHIBOKEN=ON** 的 FreeCAD v1.1.2 GUI（`scripts/configure-freecad-gui-qt6-pyside-ohos.sh`，独立构建目录，完成后安装覆盖 gui-qt6 前缀——PySide 超集）。
-- 配置期识别到 "PySide 6.8.3 Python module found"；FreeCADGui 经运行时导入使用 PySide（Python 控制台等）。
-- 重新 staging + 本地全量验证：**验收 6/6 PASS（PySide 超集 runtime）**、PySide6.QtWidgets + pivy 从 HAP runtime 导入正常。
-- 已知伪影：`bin/FreeCAD` 独立可执行的本机冒烟在 pyside 变体下报 `Base::Exception` typeinfo 重定位错误（musl 加载器对可执行文件的 RTTI UNIQUE 符号处理）；**共享库路径（FreeCAD.so 经嵌入 Python、libfreecadqtapp.so 经 QPA）均正常**，HAP 走共享库路径，不受影响。
+- PySide6、Shiboken6 Python 模块和原生库从 2026-08-22 起已经随 HAP runtime staged，Python 侧导入验证通过。
+- 旧的独立 `configure-freecad-gui-qt6-pyside-ohos.sh` 构建树虽然缓存显示 `FREECAD_USE_PYSIDE=ON` / `FREECAD_USE_SHIBOKEN=ON`，但没有找到两个 CMake package，最终 `libFreeCADGui.so` 也未链接其运行库。旧文档把 runtime 可导入误判成 FreeCAD C++ converter 已启用，此结论已废弃。
+- 当前唯一正式入口是 `configure-freecad-gui-qt6-ohos.sh` 的 full 构建。它显式指定目标端 package 目录、启用两项集成，并检查 `HAVE_PYSIDE6` / `HAVE_SHIBOKEN6` 生成定义。
+- 2026-09-05 的全工作台 Release 构建确认 `PythonWrapper.cpp` 编译了 `Base::Quantity` converter，`libFreeCADGui.so` 直接依赖 `libpyside6.abi3.so.6.8` 和 `libshiboken6.abi3.so`。这修复了 Draft 画线时 `slot(Base::Quantity)` 参数无法转换的问题。
 
 ## 排障：hvigor 构建退出码 1（2026-08-22 实测）
 
