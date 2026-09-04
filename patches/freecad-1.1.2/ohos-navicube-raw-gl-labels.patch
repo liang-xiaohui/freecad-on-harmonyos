@@ -1,0 +1,77 @@
+--- a/src/Gui/NaviCube.cpp
++++ b/src/Gui/NaviCube.cpp
+@@ -42,7 +42,6 @@
+ #include <QImage>
+ #include <QMenu>
+ #include <QOpenGLFramebufferObject>
+-#include <QOpenGLTexture>
+ #include <QOpenGLWidget>
+ #include <QPainterPath>
+ 
+@@ -148,7 +147,12 @@
+     {
+         vector<Vector3f> vertexArray;
+         qreal fontSize;
+-        QOpenGLTexture* texture = nullptr;
++        // OHOS: a plain gl4es-tracked texture name. QOpenGLTexture creates the
++        // texture through Qt's own (native GLES) function table, and binding
++        // such a name through gl4es glBindTexture looks it up in gl4es's
++        // texture map, misses, and silently binds a fresh empty texture
++        // instead (faces render as dark quads, label text never shows).
++        GLuint texture = 0;
+         string label;
+     };
+     bool mousePressed(short x, short y);
+@@ -394,7 +398,10 @@
+         delete m_PickingFramebuffer;
+     }
+     for (auto tex : m_LabelTextures) {
+-        delete tex.second.texture;
++        // OHOS: the destructor may run without a current GL context; the
++        // textures live in the shared gl4es context and are released at
++        // process exit anyway.
++        (void)tex;
+     }
+ }
+ 
+@@ -532,14 +539,25 @@
+         }
+ 
+         if (m_LabelTextures[pickId].texture) {
+-            delete m_LabelTextures[pickId].texture;
++            glDeleteTextures(1, &m_LabelTextures[pickId].texture);
++            m_LabelTextures[pickId].texture = 0;
+         }
+-        m_LabelTextures[pickId].texture = new QOpenGLTexture(image.mirrored());
+-        m_LabelTextures[pickId].texture->setMaximumAnisotropy(4.0);
+-        m_LabelTextures[pickId].texture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
+-        m_LabelTextures[pickId].texture->setMagnificationFilter(QOpenGLTexture::Linear);
+-        m_LabelTextures[pickId].texture->generateMipMaps();
++        // OHOS: upload through the same GL entry points (gl4es) that the draw
++        // path binds with; keep the texture mipmap-free so it stays complete
++        // under GLES2 without relying on sampler state.
++        QImage glImage = image.mirrored().convertToFormat(QImage::Format_RGBA8888);
++        GLuint texId = 0;
++        glGenTextures(1, &texId);
++        glBindTexture(GL_TEXTURE_2D, texId);
++        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
++        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
++        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
++        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
++        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, glImage.width(), glImage.height(), 0,
++                     GL_RGBA, GL_UNSIGNED_BYTE, glImage.constBits());
++        m_LabelTextures[pickId].texture = texId;
+     }
++    glBindTexture(GL_TEXTURE_2D, 0);
+ }
+ 
+ void NaviCubeImplementation::addButtonFace(PickId pickId, const SbVec3f& direction)
+@@ -953,7 +971,7 @@
+             auto f = pair.second;
+             PickId pickId = pair.first;
+             glVertexPointer(3, GL_FLOAT, 0, m_LabelTextures[pickId].vertexArray.data());
+-            glBindTexture(GL_TEXTURE_2D, f.texture->textureId());
++            glBindTexture(GL_TEXTURE_2D, f.texture);
+             glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+         }
+         glDisableClientState(GL_TEXTURE_COORD_ARRAY);

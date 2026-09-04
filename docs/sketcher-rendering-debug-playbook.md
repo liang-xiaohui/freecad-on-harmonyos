@@ -172,6 +172,32 @@ numeric/case-insensitive 排序，**每次排序都 qWarning**。FreeCAD 的
 warning 弹成用户可见通知 → 洪泛。修复
 （`patches/qt-6.8-ohos/13-collator-warn-once.patch`）：每条告警每进程只发一次。
 
+## 8.5 NaviCube 与角落坐标轴缺失/面片深灰（2026-09-04 晚）
+
+症状：3D 视图右上角的导航立方体和右下角的坐标系指示器（feedback axis cross）
+完全不显示；启用后立方体六个面是深灰色、无 "Front/Top/..." 文字。
+
+两个叠加原因：
+
+1. **移植期被整体禁用**：
+   `View3DInventorViewer` 里 `drawAxisCross()` 和 `naviCube->drawNaviCube()`
+   的四处调用点被 `#if !defined(FREECAD_OHOS)` 关掉（早期怕 legacy
+   immediate-mode GL 出问题）。gl4es 的 FPE 已覆盖这些调用
+   （glPushAttrib/矩阵栈/glBegin/glEnd），直接恢复
+   （`patches/freecad-1.1.2/ohos-enable-navicube-axiscross.patch`）。
+2. **QOpenGLTexture 与 gl4es 纹理命名空间不兼容**（面片深灰的根因）：
+   NaviCube 的面标签纹理用 Qt 的 `QOpenGLTexture` 创建——Qt 用自己的函数表
+   直接调原生 GLES，纹理不在 gl4es 的纹理表里。绘制时
+   `glBindTexture(GL_TEXTURE_2D, textureId)` 走 gl4es 的
+   `gl4es_getTexture()`：查不到该名字就**新建一个空的同名记录**，draw 时绑定
+   的是这个新空纹理 → 采样 `(0,0,0,1)` → 标签 quad 整面盖成深色、文字不可见。
+   修复（`patches/freecad-1.1.2/ohos-navicube-raw-gl-labels.patch`）：
+   标签纹理改用裸 GL 调用创建（glGenTextures/glTexImage2D，全程走 gl4es），
+   且不用 mipmap（GLES2 不完整纹理即黑的坑见第 1 节）。
+
+注意：NaviCube 的拾取用 Qt 的 `QOpenGLFramebufferObject`（同属 Qt 原生
+路径，未验证），如果点击立方体切换视角不正常，先查这条 FBO 混用路径。
+
 ## 9. 调试方法论
 
 - **单一变量迭代**：每次构建只改一处，HAP/libGL 的 sha256 逐轮记录到

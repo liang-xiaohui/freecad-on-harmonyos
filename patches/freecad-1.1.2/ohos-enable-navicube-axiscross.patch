@@ -1,0 +1,54 @@
+--- a/src/Gui/View3DInventorViewer.cpp
++++ b/src/Gui/View3DInventorViewer.cpp
+@@ -2404,11 +2404,11 @@
+     gl.apply(this->getSoRenderManager()->getSceneGraph());
+     gl.apply(this->foregroundroot);
+ 
+-#if !defined(FREECAD_OHOS)
++    // OHOS: re-enabled; gl4es covers the legacy immediate-mode calls used by
++    // drawAxisCross/drawNaviCube (attrib stack, matrix stack, glBegin/glEnd).
+     if (this->axiscrossEnabled) {
+         this->drawAxisCross();
+     }
+-#endif
+ 
+     fbo->release();
+ }
+@@ -2464,11 +2464,9 @@
+         it->paintGL();
+     }
+ 
+-#if !defined(FREECAD_OHOS)
+     if (naviCubeEnabled) {
+         naviCube->drawNaviCube();
+     }
+-#endif
+ 
+     glPopAttrib();
+ }
+@@ -2605,11 +2603,11 @@
+         glra->apply(this->foregroundroot);
+     }
+ 
+-#if !defined(FREECAD_OHOS)
++    // OHOS: re-enabled; gl4es covers the legacy immediate-mode calls used by
++    // drawAxisCross/drawNaviCube (attrib stack, matrix stack, glBegin/glEnd).
+     if (this->axiscrossEnabled) {
+         this->drawAxisCross();
+     }
+-#endif
+ 
+ #if defined(ENABLE_GL_DEPTH_RANGE)
+     // using the main portion of z-buffer again (for frontbuffer highlighting)
+@@ -2661,11 +2659,9 @@
+         fpsCounter->move(xOffset, height() - fpsCounter->height() - 5);
+     }
+ 
+-#if !defined(FREECAD_OHOS)
+     if (naviCubeEnabled) {
+         naviCube->drawNaviCube();
+     }
+-#endif
+ 
+     // Workaround for inconsistent QT behavior related to handling custom OpenGL widgets that
+     // leave non opaque alpha values in final output.
