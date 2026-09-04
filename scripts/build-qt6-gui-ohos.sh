@@ -37,6 +37,8 @@ QPA_FILE_ICON_GUARD_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/09-guard-optional-fi
 QPA_NO_SURFACELESS_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/10-disable-surfaceless-context.patch"
 QPA_GL4ES_PROC_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/11-use-egl-proc-address-for-gl4es.patch"
 QPA_DEFER_CURSOR_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/12-defer-detached-input-cursor.patch"
+COLLATOR_WARN_ONCE_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/13-collator-warn-once.patch"
+QPA_POPUP_PARENT_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/14-popup-parent-of-embedded-dialog.patch"
 QPA_GL4ES_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohoseglplatformcontext.cpp"
 QPA_GL4ES_HEADER="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohoseglplatformcontext.h"
 QPA_OFFSCREEN_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohosplatformoffscreensurface.cpp"
@@ -137,6 +139,26 @@ apply_gl4es_qpa_patch() {
         apply_qpa_patch "$QPA_DEFER_CURSOR_PATCH" "$QPA_INPUT_CONTEXT_SOURCE" \
             'Defer the update without flooding notifications' \
             "延后未连接输入法的光标更新并抑制通知洪泛"
+    fi
+
+    # qtbase corelib（非 QPA）：POSIX collation 不支持 numeric/case-insensitive，
+    # 上游逐次 qWarning 会被 FreeCAD 转成用户可见通知洪泛；改为每进程只告警一次。
+    COLLATOR_SOURCE="$SRC/src/corelib/text/qcollator_posix.cpp"
+    if ! grep -Fq 'OHOS: without ICU these modes are silently unsupported' \
+        "$COLLATOR_SOURCE"; then
+        apply_qpa_patch "$COLLATOR_WARN_ONCE_PATCH" "$COLLATOR_SOURCE" \
+            'OHOS: without ICU these modes are silently unsupported' \
+            "让 POSIX collation 的能力缺失告警每进程只出现一次"
+    fi
+
+    # 弹窗/tooltip 的宿主窗口解析：逻辑父窗口是嵌入式对话框时，沿目标父视图
+    # 的祖先链找宿主窗口，避免 "Failed to determine valid parent" 崩溃。
+    QPA_VIEW_SOURCE="$SRC/src/plugins/platforms/ohos/render/qohosview.cpp"
+    if ! grep -Fq 'resolve the hosting window through the \*target parent\*' \
+        "$QPA_VIEW_SOURCE"; then
+        apply_qpa_patch "$QPA_POPUP_PARENT_PATCH" "$QPA_VIEW_SOURCE" \
+            'resolve the hosting window through the *target parent*' \
+            "修复嵌入式对话框里弹窗/下拉框的父窗口解析崩溃"
     fi
 
     # v11 is the last QPA binary that survived startup and painted the FreeCAD

@@ -1,0 +1,42 @@
+--- a/src/corelib/text/qcollator_posix.cpp
++++ b/src/corelib/text/qcollator_posix.cpp
+@@ -14,18 +14,34 @@
+ 
+ void QCollatorPrivate::init()
+ {
++    // OHOS: without ICU these modes are silently unsupported. Warn once per
++    // process; embedding apps (e.g. FreeCAD) route Qt warnings into their
++    // user-visible notification system and a per-sort warning floods it.
++    static bool warnedLocale = false;
++    static bool warnedCaseInsensitive = false;
++    static bool warnedNumeric = false;
++    static bool warnedPunctuation = false;
+     if (!isC()) {
+         if (locale != QLocale::system().collation()) {
+-            qWarning("Only the C and system collation locales are supported "
+-                     "with the POSIX collation implementation");
++            if (!warnedLocale) {
++                warnedLocale = true;
++                qWarning("Only the C and system collation locales are supported "
++                         "with the POSIX collation implementation");
++            }
+         }
+-        if (caseSensitivity != Qt::CaseSensitive)
++        if (caseSensitivity != Qt::CaseSensitive && !warnedCaseInsensitive) {
++            warnedCaseInsensitive = true;
+             qWarning("Case insensitive sorting unsupported in the posix collation implementation");
++        }
+     }
+-    if (numericMode)
++    if (numericMode && !warnedNumeric) {
++        warnedNumeric = true;
+         qWarning("Numeric mode unsupported in the posix collation implementation");
+-    if (ignorePunctuation)
++    }
++    if (ignorePunctuation && !warnedPunctuation) {
++        warnedPunctuation = true;
+         qWarning("Ignoring punctuation unsupported in the posix collation implementation");
++    }
+     dirty = false;
+ }
+ 

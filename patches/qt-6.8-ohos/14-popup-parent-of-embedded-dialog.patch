@@ -1,0 +1,15 @@
+--- a/src/plugins/platforms/ohos/render/qohosview.cpp
++++ b/src/plugins/platforms/ohos/render/qohosview.cpp
+@@ -584,7 +584,11 @@
+             firstViewWithWindow = targetWindowToBeSubWindowOfView;
+             break;
+         case ViewType::EmbeddedWindow:
+-            firstViewWithWindow = ancestorViewWithWindowOrNull();
++            // OHOS: resolve the hosting window through the *target parent*
++            // view. This view's own ancestor chain may be empty (e.g. combo
++            // box popups and tooltips of an embedded dialog), which used to
++            // abort with "Failed to determine valid parent for this window.".
++            firstViewWithWindow = targetWindowToBeSubWindowOfView->ancestorViewWithWindowOrNull();
+             break;
+         }
+ 
