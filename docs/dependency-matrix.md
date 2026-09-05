@@ -5,7 +5,7 @@
 | 依赖 | 当前/目标版本 | 当前状态 | 下一动作 |
 |---|---:|---|---|
 | OHOS SDK/CMake/Ninja/Clang | SDK 26.0.0.18 | headless 构建就绪 | 保持工具链入口可复跑 |
-| FreeCAD | 1.1.2 | **GUI（Qt6 线）编译、链接、安装完成**：全量默认工作台；真机主窗口、New Document、Part/Cube、复杂多色示例和 Preferences 通过 | 长时间 3D 交互、文件对话框与更多工作台回归 |
+| FreeCAD | 1.1.2 | **GUI（Qt6 线）编译、链接、安装完成**：全量默认工作台；真机主窗口、New Document、Part/Cube、Cube ViewFit 动画、复杂多色示例、Preferences 和 Recovery 通过 | 长时间 3D 交互、文件对话框与更多工作台回归 |
 | Qt | GUI 目标 6.8.3 | qtbase、qtsvg、qttools/UiTools 和 OHOS QPA 均已构建安装；原生 QUiLoader 已用于 Preferences，QPA 已抑制 detached cursor 告警洪泛 | 输入、窗口与前后台生命周期回归 |
 | OpenCASCADE | 7.8.1（GUI 目标 7.8） | OHOS `arm64-v8a` 全量构建、安装、48 个共享库 ELF 审计通过；FreeCAD headless 和 OCCT smoke 已切换并链接 7.8.1 | 在最新签名 HAP 内完成端侧验收 |
 | Python | 3.11.4 | `_socket`/`binascii`/`zlib`/`_ctypes` 与 staged probe 通过 | 在签名进程复验，供 PySide/Pivy 使用 |

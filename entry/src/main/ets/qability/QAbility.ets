@@ -93,6 +93,16 @@ export default class QAbility extends UIAbility {
             await this.mainWindow.moveWindowToGlobal(targetLeft, targetTop);
           }
         }
+        // The startup host is explicitly decor-free. Restore the normal
+        // FreeCAD frame only after the full-size geometry is in place and
+        // while the splash child still covers the parent. Decoration changes
+        // are best-effort on HarmonyOS and must not block the reveal path.
+        try {
+          await this.mainWindow.setWindowDecorVisible(true);
+        } catch (e) {
+          hilog.warn(LOG_DOMAIN, LOG_TAG,
+            'QAbility: cannot restore main-window decoration: ' + JSON.stringify(e));
+        }
       }
     } catch (e) {
       hilog.warn(LOG_DOMAIN, LOG_TAG, 'QAbility: cannot restore main-window geometry: ' + JSON.stringify(e));
@@ -246,6 +256,15 @@ export default class QAbility extends UIAbility {
       this.configureStartupWindowBackground();
       await this.mainWindow.showWindow();
       hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility: startup host window shown');
+      // HarmonyOS rejects this call before the first showWindow() on some
+      // devices. Keep it outside the splash setup failure path: a decoration
+      // failure must not suppress the official splash child.
+      try {
+        await this.mainWindow.setWindowDecorVisible(false);
+      } catch (e) {
+        hilog.warn(LOG_DOMAIN, LOG_TAG,
+          'QAbility: cannot hide startup host decoration: ' + JSON.stringify(e));
+      }
       if (this.abilityDestroyed || this.pendingWindowStage !== windowStage) {
         return;
       }

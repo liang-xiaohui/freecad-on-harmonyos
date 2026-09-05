@@ -61,6 +61,14 @@ QPA patch 15 还会把启动阶段的孤立 `QLabelClassWindow` 兜底映射到�
 `1137,905,1022x662`。连续取帧只出现一张无标题栏官方 splash，随后直接过渡到完整主窗；
 日志最终顺序为 `main window raised behind startup splash`、`FreeCAD GUI ready; startup transition complete`。
 
+关闭主窗装饰必须放在主窗首次 `showWindow()` 之后，并用独立异常处理包住。真机确认在首次
+显示之前调用会返回 WindowManager `1300002`；若它与 splash 创建共用外层异常路径，官方
+splash 会被整体跳过。恢复主窗装饰同样是 best-effort，不能阻断 GUI reveal。
+
+启动期间创建的 Qt modal dialog 仍以延后的完整主窗几何计算屏幕坐标。QPA patch 16 在 Qt
+主窗原点与临时 ArkUI splash 宿主原点不一致时，使用 Qt 原点换算嵌入位置；这修复了
+`Document Recovery` 被移到左上角并裁切的问题，`Cleanup` 已在真机完成点击验证。
+
 ### 启动后提示与 Python GUI 依赖
 
 - API 26 不提供 Qt 模板可选的 FileManagerServiceKit，文件图标查询会回退为空 `QIcon`。
@@ -108,6 +116,7 @@ FreeCAD GUI 需要 `Mod/Ext/share` 与 Python stdlib；HAP rawfile 里的 `freec
 ## 真机结论与后续回归
 
 - 2026-08-25 真机已显示主窗口、New Document、Part/Cube 与复杂多色示例。3D 根因不是 FEM/Assembly 缺模块，也不是要把所有 RasterSurface 强制改成 GL backing store，而是 Qt 与 gl4es 共用 GLES context 时的缓存失配。`patches/gl4es-81547d9/ohos-external-context-state.patch` 与 QPA patch 02/11 完成 context 映射、proc address 解析和 program/VBO/EBO/vertex-attrib 缓存失效。
+- 2026-09-05 修复 Part 新建 Cube 时 `ViewFit` 放大动画的裁切变形。Coin 的自动裁剪面由延迟传感器更新，OHOS queued paint 偶尔先于传感器执行，导致某帧使用上一相机位置的 near/far。`ohos-view-all-clipping-sync.patch` 在每次动画相机更新后同步处理延迟队列；10 帧深度探针与真机观察均通过，诊断日志未进入生产补丁。
 - Edit → Preferences 已打开成功。`patches/freecad-1.1.2/ohos-native-uitools.patch` 恢复原生 QUiLoader、链接 `libQt6UiTools.so.6`，并为失败页面增加空值防线。
 - QPA patch 12 在输入法 controller detached 时延后 cursor rectangle 更新，避免数万条非侵入通知淹没界面。
 - 当前包 SHA-256 见 `docs/handoff-device-steps.md`。后续重点是长时间相机交互、更多工作台、文件对话框和前后台切换。

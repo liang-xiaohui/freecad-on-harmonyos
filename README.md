@@ -17,6 +17,7 @@
 - 3D 白屏/创建 Cube 闪退的根因是 Qt 原生 GLES 状态与 gl4es 内部缓存不同步。最终修复在 EGL context 交接时映射 gl4es state，并使 program、VBO/EBO 与 vertex-attrib enable 缓存失效；不启用会破坏普通窗口的全局 RasterSurface GL backing-store 实验。
 - Preferences 崩溃的根因是 OHOS 路径禁用了原生 `QUiLoader`，而精简 PySide6 又没有 QtUiTools Python 扩展。当前恢复目标端 Qt6 UiTools，并对加载失败的 form 增加空值防线。
 - GUI 冷启动现使用同一 QAbility 内的无框 ArkUI 子窗显示 FreeCAD 官方 splash。系统 starting window 和桌面端 `QSplashScreen` 均被禁用；主窗宿主与 splash 使用相同几何，FreeCAD 发布 GUI-ready 标记后才抬起主窗并移除 splash，已在真机连续取帧验证。
+- 启动期 `Document Recovery` 已按完整主窗几何居中且 `Cleanup` 可点击；Part 新建 Cube 的 `ViewFit` 放大动画也已同步 Coin 自动裁剪面，不再出现中间帧被旧 near/far 裁切的变形。
 - GUI HAP 的 Qt6 runtime 已通过本地 6/6 headless 验收（OCCT/模块/布尔/FCStd/STEP/STL）；FreeCAD GUI（Qt6）二进制可启动至 Qt 事件循环（offscreen）。真机执行见 [DevEco 执行指引](docs/device-run-guide.md)。
 - GUI 进展（Qt6 目标线，重大推进）：
   - **Qt 6.8.3 qtbase 全 GUI 构建+安装完成**（`scripts/build-qt6-gui-ohos.sh`）：Gui/Widgets/OpenGL(GLES2)/EGL/PrintSupport/Network/Xml/Concurrent + offscreen/minimal/linuxfb 平台插件；本机冒烟测试 qVersion=6.8.3、QWidget 正常运行。

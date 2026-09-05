@@ -106,3 +106,29 @@ diff --git a/src/plugins/platforms/ohos/render/qohoswindowproxy.cpp b/src/plugin
              auto moveConfigurationObject = toNapiObject(jsState.env(), moveConfiguration);
              auto moveConfigurationObjectStr = QNapi::toJsonString(moveConfigurationObject);
              qOhosPrintfDebug(
+diff --git a/src/plugins/platforms/ohos/render/qohosview.cpp b/src/plugins/platforms/ohos/render/qohosview.cpp
+--- a/src/plugins/platforms/ohos/render/qohosview.cpp
++++ b/src/plugins/platforms/ohos/render/qohosview.cpp
+@@ -1942,10 +1942,23 @@ QPoint QOhosView::remappedEmbeddedParentRelativePosition(const QPoint &screenPo
+
+     // Qt gives top-level windows screen-absolute positions while embedded nodes are
+     // positioned relative to their parent node. Qt coordinates and ArkUI pixels are
+-    // the same unit in this plugin (the platform screen geometry is reported in pixels),
+-    // so subtracting the parent node screen origin is sufficient.
+-    return screenPosition - parentView->nodeScreenGeometryPixels().topLeft();
++    // the same unit in this plugin (the platform screen geometry is reported in pixels).
++    QPoint parentScreenOrigin = parentView->nodeScreenGeometryPixels().topLeft();
++    if (parentView->viewType() == ViewType::MainWindow) {
++        const QPoint qtParentOrigin = parentView->ownerWindow()->geometry().topLeft();
++        if (qtParentOrigin != parentScreenOrigin) {
++            // FreeCADStartupDialogParentGeometry: during the standalone splash,
++            // ArkUI temporarily keeps the physical main-window host at the splash
++            // rectangle while Qt already uses the deferred full main-window geometry.
++            // Dialog positions are based on that Qt geometry, so use its origin too;
++            // otherwise the dialog receives a negative position and is clipped at the
++            // top-left of the small startup host.
++            parentScreenOrigin = qtParentOrigin;
++        }
++    }
++    return screenPosition - parentScreenOrigin;
+ }

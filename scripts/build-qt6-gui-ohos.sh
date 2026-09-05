@@ -181,7 +181,8 @@ apply_gl4es_qpa_patch() {
     # and defers native main-window geometry until GUI-ready, avoiding a
     # second page load and a moving splash.
     if ! grep -Fq 'FreeCADStartupContentReuse' "$QPA_JS_MAIN_SOURCE" \
-        || ! grep -Fq 'FreeCADStartupGeometryDeferred' "$QPA_WINDOW_PROXY_SOURCE"; then
+        || ! grep -Fq 'FreeCADStartupGeometryDeferred' "$QPA_WINDOW_PROXY_SOURCE" \
+        || ! grep -Fq 'FreeCADStartupDialogParentGeometry' "$QPA_VIEW_SOURCE"; then
         apply_qpa_patch "$QPA_STARTUP_CONTENT_PATCH" "$QPA_JS_MAIN_SOURCE" \
             'FreeCADStartupContentReuse' \
             "复用启动页面并延后 FreeCAD 主窗口几何切换"

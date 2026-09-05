@@ -75,9 +75,11 @@ DevEco 的本地运行目标、系统的 `bm`/`aa` 工具，或 HDC 完成安装
 - `startWindowType=REQUIRED_HIDE` 隐藏系统 starting window，FreeCAD 侧也跳过桌面端
   `QSplashScreen`。不要恢复启动 status-bar logo 或样式探针的临时顶层 QLabel；OHOS QPA
   会把它们识别为额外顶层窗口，表现为第二个 splash、最小化动画或主窗退到后台。
-- HarmonyOS 要求父主窗先 `showWindow()`，否则创建 splash 子窗会失败并返回 `1300002`；
-  splash 的透明背景也必须在 `setUIContent()` 和 `showWindow()` 之后设置。主窗宿主与 splash
-  必须使用完全相同的矩形，避免官方 PNG 的透明阴影区域露出第二层合成边界。
+- HarmonyOS 要求父主窗先 `showWindow()`，否则创建 splash 子窗会失败并返回 `1300002`。
+  `setWindowDecorVisible(false)` 同样只能在首次 `showWindow()` 后调用，并且装饰切换必须单独
+  捕获异常；否则一次 `1300002` 会跳过后续整个 splash 子窗创建流程。splash 的透明背景也必须
+  在 `setUIContent()` 和 `showWindow()` 之后设置。主窗宿主与 splash 必须使用完全相同的矩形，
+  避免官方 PNG 的透明阴影区域露出第二层合成边界。
 - `freecad-home/.runtime-ready` 保存 runtime ZIP 的大小和 CRC32。标记缺失或不匹配时会先清理
   `Mod/Ext/share` 再解压，成功后才原子写入标记，避免复用崩溃留下的半成品。
 - hilog 标签：`FreeCADGui`（ArkTS）、`QtForOhos`（QPA）、`FreeCADProbe`（验收）。
@@ -97,6 +99,18 @@ FreeCAD GUI ready; startup transition complete
 `192.168.3.16:39405` 上的冷启动连续取帧确认：启动阶段只有一张无标题栏官方 splash，
 没有大空白主窗、错位的第二层或最小化切换；GUI-ready 后直接显示完整主窗。PNG 自带的
 透明投影属于官方素材，不是第二个窗口。
+
+### 启动期 Recovery 弹窗（2026-09-05）
+
+Qt 在 splash 期间已经按延后的完整主窗几何计算 `Document Recovery` 的屏幕位置，但 ArkUI
+父节点仍处在 splash 的临时小矩形。QPA 原先从目标屏幕坐标减去 ArkUI 物理父节点原点，得到
+类似 `(-284,-135)` 的嵌入坐标，导致弹窗被放到左上角并裁掉按钮区域。QPA patch 16 现在检测
+主窗的 Qt 几何与 ArkUI 节点几何是否不一致；不一致时使用 Qt 主窗原点完成父相对坐标换算。
+真机已验证 Recovery 弹窗居中、内容完整且 `Cleanup` 按钮可点击。
+
+`aa force-stop` 会执行 Ability 的正常销毁流程，FreeCAD 会移除当前 lock 和 transient recovery
+目录，不能用来制造 Recovery 测试数据。模拟崩溃时应先等待自动恢复文件写入（默认 15 分钟，
+可临时改为 1 分钟），再对应用进程发送 `SIGKILL`。
 
 ### HDC 无线调试已开启但仍然 `Connect failed`
 
@@ -170,7 +184,23 @@ TARGET=192.168.3.16:39405
 - GUI HAP 运行时（Qt6 staged native 依赖闭包）跑通 6/6 验收（`logs/gui-acceptance-out/freecad-acceptance.json` ok=true）。
 - FreeCAD GUI 二进制（Qt6 + offscreen 平台）可启动至 Qt 事件循环：Python 初始化 → QApplication →
   offscreen 平台窗口创建（`propagateSizeHints`），无崩溃（渲染需真机 OHOS QPA）。
-- 真机已显示 FreeCAD 1.1.2 主窗口、菜单、工具栏、New Document、Part/Cube 与复杂多色示例；Edit → Preferences 和单 Ability 无框官方 splash 均已验证。当前包摘要见 `docs/handoff-device-steps.md`。
+- 真机已显示 FreeCAD 1.1.2 主窗口、菜单、工具栏、New Document、Part/Cube 与复杂多色示例；Edit → Preferences、Recovery 弹窗和单 Ability 无框官方 splash 均已验证。当前包摘要见 `docs/handoff-device-steps.md`。
+
+## Part Cube 的 View All 动画裁剪（2026-09-05 已解决）
+
+原故障只出现在新建 Cube 后的 10 帧自动 `ViewFit` 放大过程：模型会像被不规则切掉一样变形，
+动画结束后的静态画面正常。逐帧探针同时记录相机、Cube 在相机坐标中的深度范围以及
+`nearDistance/farDistance`，确认模型几何和相机插值本身连续，异常来自 Coin 自动裁剪面滞后。
+
+Coin 用延迟传感器更新相机裁剪面。`animatedViewAll()` 每帧修改相机后只进入一个 20 ms 的
+Qt 事件循环，默认假定传感器和 QOpenGLWidget 重绘会在下一帧前完成。OHOS 的异步绘制有时先
+消费唯一一次 queued paint，却未处理裁剪传感器。例如故障帧 Cube 深度已移动到 `54.180–71.106`，
+near/far 仍是上一帧的 `72.102–89.189`，因此模型在深度测试前已被裁掉。
+
+`ohos-view-all-clipping-sync.patch` 在 OHOS 相机更新后立即调用
+`SoDB::getSensorManager()->processDelayQueue(false)`，让该帧的自动裁剪面在呈现前同步完成，
+而不取消原有动画。修复后 10 帧逐帧验证 near/far 均完整覆盖当帧 Cube 深度，真机观察不再
+出现裁切变形。诊断用 `FreeCADViewFit` hilog 探针未纳入正式补丁。
 
 ## 子元素选择高亮（2026-09-04 已解决）
 

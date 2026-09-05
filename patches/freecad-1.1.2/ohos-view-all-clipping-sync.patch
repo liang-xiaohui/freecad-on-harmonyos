@@ -1,0 +1,16 @@
+--- a/src/Gui/View3DInventorViewer.cpp
++++ b/src/Gui/View3DInventorViewer.cpp
+@@ -3508,5 +3508,13 @@ void View3DInventorViewer::animatedViewAll(int steps, int ms)
+         SbVec3f curpos = campos * (1.0F - par) + pos * par;
+         cam->position.setValue(curpos);
++#if defined(FREECAD_OHOS)
++        // Coin updates the automatic clipping planes through a delay sensor.
++        // On OHOS a single queued QOpenGLWidget paint can run before that
++        // sensor is serviced, so a frame may use clipping distances from the
++        // previous camera position and visibly slice the model during view-all.
++        // Service the queue now so this frame's render sees matching planes.
++        SoDB::getSensorManager()->processDelayQueue(false);
++#endif
+         timer.start(Base::clamp<int>(ms, 0, 5000));  // NOLINT
+         loop.exec(QEventLoop::ExcludeUserInputEvents);
+     }

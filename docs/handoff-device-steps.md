@@ -1,6 +1,6 @@
 # 真机交接：需要用户执行的剩余步骤
 
-更新时间：2026-09-05。**全工作台 GUI 构建、staging、签名 HAP、基础 3D、Preferences 与单 Ability 无框 splash 均已在真机通过**。
+更新时间：2026-09-05。**全工作台 GUI 构建、staging、签名 HAP、基础 3D、Preferences、Recovery、Cube ViewFit 动画与单 Ability 无框 splash 均已在真机通过**。
 
 ## 当前就绪状态（已验证）
 
@@ -11,8 +11,24 @@
 | Pivy / Shiboken6 / PySide6（Core/Gui/Widgets/Network/Svg/SvgWidgets/OpenGL/OpenGLWidgets） | 全部构建+导入验证 ✓；已 staged 进 HAP runtime（Ext/） |
 | GUI HAP staging | 155 个 AArch64 ELF + rawfile；签名 HAP 内 229 个 `.so*`，内容/新鲜度验证通过 |
 | headless 6 项验收（本地） | **6/6 PASS**（2026-08-24 当前 staging 复验） |
-| GUI 真机 | FreeCAD 1.1.2 主窗口、New Document、Part/Cube、复杂多色示例、Preferences ✓ |
+| GUI 真机 | FreeCAD 1.1.2 主窗口、New Document、Part/Cube、Cube ViewFit 动画、复杂多色示例、Preferences、Recovery ✓ |
 | 单 Ability splash | 官方图片、无标题栏子窗、单层几何、ArkUI/XComponent 交接和完整主窗恢复均已真机验证 |
+
+## 2026-09-05 真机问题结论
+
+### Cube 放大动画被裁切
+
+- **现象**：在新文档的 Part 工作台创建 Cube 后，10 帧 `ViewFit` 放大动画的中间帧像几何体被异常切掉；动画结束后的静态 Cube 正常。
+- **根因**：几何和相机插值都连续，实际滞后的是 Coin 的自动裁剪面。相机位置每帧立即更新，但 near/far 由 delay sensor 更新；OHOS 的 queued QOpenGLWidget paint 偶尔先于该 sensor 执行，导致当前相机帧沿用上一帧裁剪范围。例如 Cube 深度已经从 `63.177-80.103` 移到 `54.180-71.106`，裁剪面仍为上一帧的 `72.102-89.189`。
+- **修复**：`patches/freecad-1.1.2/ohos-view-all-clipping-sync.patch` 在 `animatedViewAll()` 每次写入相机位置后，仅针对 `FREECAD_OHOS` 调用 `SoDB::getSensorManager()->processDelayQueue(false)`，使当前帧的自动裁剪面在绘制前完成更新，不移除动画也不改变其他平台行为。
+- **验证**：修复后同一段 10 帧动画的每一帧 near/far 都覆盖当前 Cube 深度；例如第 4 帧裁剪范围变为 `54.126-71.177`。临时 `FreeCADViewFit` 深度与 GL 探针已从正式源码和补丁中移除，真机视觉回归通过。
+
+### 启动期 Recovery 弹窗偏到左上角
+
+- **现象**：存在恢复数据时，`Document Recovery` 出现在左上角且内容被裁切，`Cleanup` 按钮无法操作。
+- **根因**：splash 显示期间，Qt 已使用延后的完整主窗几何计算 modal dialog 的屏幕坐标，ArkUI 物理父节点却仍是 splash 的临时小矩形。QPA 用这两个不同坐标系相减，曾得到 `(-284,-135)` 一类错误的父相对位置。
+- **修复**：`patches/qt-6.8-ohos/16-reuse-startup-content.patch` 检测 Qt 主窗原点与 ArkUI 节点原点是否不一致；启动过渡期若不一致，嵌入式对话框统一使用 Qt 主窗原点换算。主窗装饰调用也改为首次 `showWindow()` 后执行并独立捕获异常，避免 WindowManager `1300002` 连带跳过 splash 创建。
+- **验证**：Recovery 弹窗居中、内容完整，`Cleanup` 真机点击成功。`aa force-stop` 会走正常销毁并清理恢复状态；复测恢复流程应等待 autosave 后用 `SIGKILL` 模拟异常退出。
 
 ## 构建后核对
 
@@ -24,8 +40,9 @@ DevEco 构建完成后先跑 GUI HAP 验证（native/rawfile/新鲜度一键核�
 ```
 
 当前包：`entry/build/default/outputs/default/entry-default-signed.hap`，SHA-256
-`d444ef008d03844257f93cfe75a8bbfc026e23f23372f9027aca7f0b1f3e33d0`。该包已安装到
-`192.168.3.16:39405` 完成启动画面取帧；提交前的 ArkTS 日志语义整理不改变启动时序。
+`411344bb555a7e720e6ee858807fd6db0c0481e8adc65b2c425c7bf4a18d3ffa`。该生产包已移除
+Cube 排障期间的 `FreeCADViewFit` 探针，并通过 rawfile 一致性、新鲜度、229 个 native
+`.so`、GUI 工作台、RUNPATH 与 Python 绑定检查。其对应修复已在此前诊断包上完成真机验证。
 
 GL4ES 增量构建后还必须对对应 build tree 执行 `cmake --install`，再运行
 `stage-gui-hap.sh`；只运行 Ninja 会让新库停留在源码/构建树，最终 HAP 仍可能
