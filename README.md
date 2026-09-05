@@ -6,17 +6,17 @@
 
 ## 当前状态
 
-截至 2026-08-25：
+截至 2026-09-05：
 
 - FreeCAD v1.1.2 headless 已完成交叉编译、安装和 ELF 审计。
 - OpenCASCADE 7.8.1 已完成 OHOS `arm64-v8a` 构建、安装、48 个共享库 ELF 审计，并已用于重新构建 FreeCAD headless 与 OCCT smoke probe。
 - 已构建 `FreeCADCmd`、`FreeCAD.so`、`Part`、`Mesh`、`Import`、`Materials`、`Sketcher` 和 `PartDesign` 等模块。
 - CPython 3.11 runtime 已补齐 `_socket`、`binascii`、`zlib` 和 `_ctypes`，staged Python probe 已通过。
-- GUI HAP staging 包含完整 native 依赖闭包（183 个 AArch64 ELF，其中 127 个文件名以 `.so` 结尾），全部通过 AArch64、RUNPATH 和递归依赖审计。
-- 2026-08-25 04:16 重新生成的签名 GUI HAP 已通过内容、新鲜度和签名摘要验证：HAP 内含 200 个 `.so*`、Qt6 OHOS QPA、FreeCADGui、Qt6 UiTools 及默认工作台注册脚本；SHA-256 为 `6a6849b82e2122685c377246dcdf034493611a69852278049d83b6ece9368bd5`。
+- GUI HAP staging 包含完整 native 依赖闭包（当前 155 个 AArch64 ELF）；签名 HAP 内含 229 个 `.so*`，全部通过 AArch64、RUNPATH、递归依赖、内容和新鲜度审计。
 - **完整原生 GUI 的基础闭环已在真机通过。** FreeCAD 1.1.2 主窗口、菜单、工具栏、New Document、Part/Cube 与复杂多色示例均可显示；Edit → Preferences 也可以打开，不再闪退。
 - 3D 白屏/创建 Cube 闪退的根因是 Qt 原生 GLES 状态与 gl4es 内部缓存不同步。最终修复在 EGL context 交接时映射 gl4es state，并使 program、VBO/EBO 与 vertex-attrib enable 缓存失效；不启用会破坏普通窗口的全局 RasterSurface GL backing-store 实验。
 - Preferences 崩溃的根因是 OHOS 路径禁用了原生 `QUiLoader`，而精简 PySide6 又没有 QtUiTools Python 扩展。当前恢复目标端 Qt6 UiTools，并对加载失败的 form 增加空值防线。
+- GUI 冷启动现使用同一 QAbility 内的无框 ArkUI 子窗显示 FreeCAD 官方 splash。系统 starting window 和桌面端 `QSplashScreen` 均被禁用；主窗宿主与 splash 使用相同几何，FreeCAD 发布 GUI-ready 标记后才抬起主窗并移除 splash，已在真机连续取帧验证。
 - GUI HAP 的 Qt6 runtime 已通过本地 6/6 headless 验收（OCCT/模块/布尔/FCStd/STEP/STL）；FreeCAD GUI（Qt6）二进制可启动至 Qt 事件循环（offscreen）。真机执行见 [DevEco 执行指引](docs/device-run-guide.md)。
 - GUI 进展（Qt6 目标线，重大推进）：
   - **Qt 6.8.3 qtbase 全 GUI 构建+安装完成**（`scripts/build-qt6-gui-ohos.sh`）：Gui/Widgets/OpenGL(GLES2)/EGL/PrintSupport/Network/Xml/Concurrent + offscreen/minimal/linuxfb 平台插件；本机冒烟测试 qVersion=6.8.3、QWidget 正常运行。
@@ -25,7 +25,7 @@
   - **FreeCAD v1.1.2 GUI 全工作台已完成编译安装**：默认启用 Part/PartDesign、Mesh、Material、Sketcher、Import、TechDraw、Spreadsheet、Start、Addon Manager、CAM、Draft、Inspection、Measure、Points、Robot、Surface、Assembly、Reverse Engineering 等；MeshPart/BIM/FEM 因缺少 Salome SMESH 的 MEDFile/HDF5 依赖继续关闭。Assembly 使用 FreeCAD 1.1.2 固定版本的 OndselSolver 子模块。桌面 GL API 由 gl4es 提供。
   - **GUI HAP staging 已完成**（见 [GUI HAP 集成](docs/gui-hap-integration.md)）：Qt 应用库 `libfreecadqtapp.so`（导出 main）已构建；entry/ 已按 tqtc 官方模板改造（QAbilityStage/QAbility + XComponent 页）；`scripts/stage-gui-hap.sh` 已 staged 完整 GUI native 依赖闭包（数量由验证脚本动态校验）+ rawfile（python311.zip + freecad-runtime.zip + 验收脚本），headless 验收能力保留在 EntryAbility。
   - 首次 GUI 构建尝试（Qt 5.12.12 + Coin 4.0.0）卡在 `FreeCADGui/MainWindow.cpp`：Qt5.12 头缺 `QTime` 定义、`QSignalMapper::mappedWidget` 需 Qt ≥ 5.15；Qt 5.15 源码获取失败（tqtc 分支不存在），故按计划转向 Qt6。
-- Pivy、Shiboken6、**PySide6 全绑定栈（Core/Gui/Widgets/OpenGL/OpenGLWidgets）均已构建并验证**（v6.8.3，QWidget 可创建）。
+- Pivy、Shiboken6、**PySide6 全绑定栈（Core/Gui/Widgets/Network/Svg/SvgWidgets/OpenGL/OpenGLWidgets）均已构建并验证**（v6.8.3，QWidget 可创建）。
   - FlexiMind headless runtime 已接入：`EntryAbility` 提供参数化夹指、参数化模型和人工 FCStd job bridge。普通 GUI HAP 不打包或自动激活 `FlexiMindGripDesign`；该工作台由 FlexiMind 设计交付包的 launcher 按需注入。接口与设备调用见 [FlexiMind runtime](docs/fleximind-runtime.md)。
 
 当前 FreeCAD 安装前缀：

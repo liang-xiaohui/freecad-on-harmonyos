@@ -1,0 +1,108 @@
+diff --git a/src/plugins/platforms/ohos/qohosjsmain.cpp b/src/plugins/platforms/ohos/qohosjsmain.cpp
+--- a/src/plugins/platforms/ohos/qohosjsmain.cpp
++++ b/src/plugins/platforms/ohos/qohosjsmain.cpp
+@@ -1382,7 +1382,16 @@ void loadWindowStageContentPage(JsState &jsState, QNapi::Object &qAbility, const
+     auto qAbilityRef = moveToSharedPtr(QNapi::Reference<>::makePersistentFrom(qAbility));
+     auto windowStageRef = moveToSharedPtr(QNapi::Reference<>::makePersistentFrom(windowStage));
+
+-    auto localStorage = jsState.eval<QNapi::Object>("LocalStorage.makeNewLocalStorage()");
++    auto optStartupContentLoaded =
++        QNapi::getOptionalPropOrEmpty<QNapi::Boolean>(qAbility, "freecadStartupContentLoaded");
++    auto optExistingLocalStorage =
++        QNapi::getOptionalPropOrEmpty<QNapi::Object>(qAbility, "localStorage");
++    bool reuseStartupContent =
++        !optStartupContentLoaded.IsEmpty() && optStartupContentLoaded.Value()
++        && !optExistingLocalStorage.IsEmpty();
++    auto localStorage = reuseStartupContent
++        ? optExistingLocalStorage
++        : jsState.eval<QNapi::Object>("LocalStorage.makeNewLocalStorage()");
+     localStorage.call(
+         "setOrCreate",
+         {
+@@ -1407,6 +1416,12 @@ void loadWindowStageContentPage(JsState &jsState, QNapi::Object &qAbility, const
+         });
+     qAbility.set("localStorage", localStorage);
+
++    if (reuseStartupContent) {
++        qOhosPrintfInfo(
++            "FreeCADStartupContentReuse: attached XComponent to existing main-window page");
++        return;
++    }
++
+     const std::string mainWindowNativeNodePagePath = "pages/MainWindowNativeNode";
+     windowStage.call<QNapi::Promise>("loadContent", {mainWindowNativeNodePagePath, localStorage})
+     .onThen([qAbilityRef](const CallbackInfo &) {
+diff --git a/src/plugins/platforms/ohos/render/qohoswindowproxy.cpp b/src/plugins/platforms/ohos/render/qohoswindowproxy.cpp
+--- a/src/plugins/platforms/ohos/render/qohoswindowproxy.cpp
++++ b/src/plugins/platforms/ohos/render/qohoswindowproxy.cpp
+@@ -44,6 +44,13 @@ QRect ohosWindowRectToQRect(const QNapi::Object &ohosWindowRect)
+     };
+ }
+
++bool freecadStartupSplashActive(const QNapi::Object &qAbility)
++{
++    auto optActive =
++        QNapi::getOptionalPropOrEmpty<QNapi::Boolean>(qAbility, "freecadStartupSplashActive");
++    return !optActive.IsEmpty() && optActive.Value();
++}
++
+ QOhosWindowProxy::AvoidArea mapAvoidAreaFromJs(const QNapi::Object &avoidAreaObject)
+ {
+     return {
+@@ -367,6 +374,16 @@ void QOhosWindowProxy::setSize(const QSize &size)
+                 continueFunc();
+                 return;
+             }
++            auto qAbility = m_jsScopeData->qAbilityPeer->qAbility();
++            if (qtIsMainWindow() && freecadStartupSplashActive(qAbility)) {
++                qAbility.set("freecadPendingWindowWidth", size.width());
++                qAbility.set("freecadPendingWindowHeight", size.height());
++                qOhosPrintfInfo(
++                    "FreeCADStartupGeometryDeferred: size=%d,%d",
++                    size.width(), size.height());
++                continueFunc();
++                return;
++            }
+             auto promise = m_jsScopeData->jsWindowRef->call<QNapi::Promise>(
+                 "resizeAsync", {size.width(), size.height()});
+             promise.onFinally(std::move(continueFunc));
+@@ -379,6 +396,10 @@ void QOhosWindowProxy::setWindowBackgroundColor(const QColor &color)
+         if (m_jsScopeData->isWindowClosing()) {
+             return;
+         }
++        if (qtIsMainWindow()
++            && freecadStartupSplashActive(m_jsScopeData->qAbilityPeer->qAbility())) {
++            return;
++        }
+         m_jsScopeData->jsWindowRef->call("setWindowBackgroundColor", {color.name(QColor::HexArgb).toStdString()});
+     });
+ }
+@@ -998,6 +1019,10 @@ void QOhosWindowProxy::setWindowDecorVisible(bool visible)
+         if (m_jsScopeData->isWindowClosing()) {
+             return;
+         }
++        if (qtIsMainWindow()
++            && freecadStartupSplashActive(m_jsScopeData->qAbilityPeer->qAbility())) {
++            return;
++        }
+
+         m_jsScopeData->jsWindowRef->call("setWindowDecorVisible", {visible});
+     });
+@@ -1757,6 +1782,17 @@ void QOhosWindowProxy::moveWindowToGlobal(
+                 return;
+             }
+
++            auto qAbility = m_jsScopeData->qAbilityPeer->qAbility();
++            if (qtIsMainWindow() && freecadStartupSplashActive(qAbility)) {
++                qAbility.set("freecadPendingWindowLeft", position.x());
++                qAbility.set("freecadPendingWindowTop", position.y());
++                qOhosPrintfInfo(
++                    "FreeCADStartupGeometryDeferred: position=%d,%d",
++                    position.x(), position.y());
++                continueFunc();
++                return;
++            }
++
+             auto moveConfigurationObject = toNapiObject(jsState.env(), moveConfiguration);
+             auto moveConfigurationObjectStr = QNapi::toJsonString(moveConfigurationObject);
+             qOhosPrintfDebug(

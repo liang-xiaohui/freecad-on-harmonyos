@@ -1,0 +1,29 @@
+--- a/src/plugins/platforms/ohos/render/qohosview.cpp
++++ b/src/plugins/platforms/ohos/render/qohosview.cpp
+@@ -363,6 +363,26 @@ ViewTypeInfo determineViewTypeAndLogicalParent(const QOhosPlatformWindow *platf
+
+     auto *syntheticParent = syntheticParentForQWindowOrNull(platformWindow->window());
+
++    // QWidget can briefly realize an unparented, empty QLabel window while a
++    // top-level widget hierarchy is being polished. On OHOS, treating that
++    // implementation detail as another MainWindow starts a second Ability,
++    // backgrounds the real one, and destroys its startup XComponent. Keep it
++    // in the existing main window instead. Named labels and actual secondary
++    // window classes continue through the normal window-type paths below.
++    bool isOrphanQLabelWindow =
++        qWindow->objectName() == QStringLiteral("QLabelClassWindow")
++        && windowType == Qt::Window
++        && syntheticParent != nullptr;
++    if (isOrphanQLabelWindow) {
++        qCDebug(QtForOhos,
++            "OrphanQLabelEmbeddedRemap: remapping window %p into parent %p",
++            qWindow, syntheticParent);
++        return ViewTypeInfo {
++            .viewType = ViewType::EmbeddedWindow,
++            .optLogicalParent = syntheticParent,
++        };
++    }
++
+     if (isDialogLikeWindowType(windowType) && syntheticParent != nullptr) {
+         qCDebug(
+             QtForOhos,

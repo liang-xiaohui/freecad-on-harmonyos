@@ -318,6 +318,12 @@ fi
 PYSIDE6_SP="$CPP_LIB_ROOT/install/pyside6/ohos/$ABI/site-packages"
 SHIBOKEN_SP="$CPP_LIB_ROOT/build/shiboken6/inst/lib/python3.11/site-packages"
 PIVY_SP="$CPP_LIB_ROOT/install/pivy/ohos/$ABI/site-packages"
+for binding in QtCore QtGui QtWidgets QtNetwork; do
+    [ -f "$PYSIDE6_SP/PySide6/$binding.abi3.so" ] || {
+        echo "错误：PySide6 缺少 $binding；请包含 Network 模块重新构建 PySide6" >&2
+        exit 1
+    }
+done
 [ -f "$NUMPY_SP/numpy/__init__.py" ] || {
     echo "错误：缺少 NumPy runtime：$NUMPY_SP/numpy/__init__.py" >&2
     exit 1

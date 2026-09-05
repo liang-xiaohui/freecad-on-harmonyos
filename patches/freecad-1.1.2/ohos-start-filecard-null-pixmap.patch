@@ -1,0 +1,13 @@
+--- a/src/Mod/Start/Gui/FileCardDelegate.cpp
++++ b/src/Mod/Start/Gui/FileCardDelegate.cpp
+@@ -229,8 +229,8 @@ QPixmap FileCardDelegate::loadAndCacheThumbnail(const QString& path, int thumbnailSize) const
+         if (!icon.isNull()) {
+             thumbnail = icon.pixmap(thumbnailSize);
+         }
+-        else {
++        if (thumbnail.isNull()) {
+             thumbnail = QPixmap(thumbnailSize, thumbnailSize);
+-            thumbnail.fill();
++            thumbnail.fill(Qt::transparent);
+         }
+     }

@@ -1,6 +1,6 @@
 # FreeCAD v1.1.2 依赖矩阵
 
-更新时间：2026-08-25
+更新时间：2026-09-05
 
 | 依赖 | 当前/目标版本 | 当前状态 | 下一动作 |
 |---|---:|---|---|
@@ -22,12 +22,12 @@
 | Coin3D | 4.0.0（Qt6 目标线） | 已构建、安装（含 `patches/coin-4.0.0/ohos.patch`）；当前为 Qt5.12 链接版本 | Qt6 qtbase 就绪后按 Qt6 重新构建/验证 |
 | Pivy | 与 Coin/Python 匹配 | 已构建并验证 Python 场景图 API，GUI runtime 已 staged | 随真机 GUI 工作台验收继续回归 |
 | Shiboken6 | 6.8.3 | **已构建并验证**：生成器（v6.8.3）+ libshiboken6 + `shiboken6` python 模块导入成功（`CPPLib/scripts/build-shiboken6-ohos.sh`；含 ClangConfig 补丁、OHOS musl 全局作用域修复——显式链接 libpython） | 用于 PySide6 绑定生成 |
-| PySide6 | 6.8.3 | **Core/Gui/Widgets/OpenGL/OpenGLWidgets 绑定全部构建并验证**（v6.8.3：QWidget/QPushButton/QLabel/QColor/QImage 正常，offscreen）。关键修复：绑定模块显式链接 libpython（musl 全局作用域）；libshiboken 纯文件名 NEEDED；`build-pyside6-ohos.sh`。FreeCAD full 构建已启用 `FREECAD_USE_PYSIDE` / `FREECAD_USE_SHIBOKEN`，并编译 `Base::Quantity` converter | 供 FreeCAD Python GUI API和 C++ Qt 信号类型转换 |
+| PySide6 | 6.8.3 | **Core/Gui/Widgets/Network/Svg/SvgWidgets/OpenGL/OpenGLWidgets 绑定全部构建并验证**（v6.8.3：QWidget/QPushButton/QLabel/QColor/QImage 正常，`QNetworkAccessManager` 可导入）。关键修复：绑定模块显式链接 libpython（musl 全局作用域）；libshiboken 纯文件名 NEEDED；无 SSL 的 QtNetwork 构建会同步排除 `QSslEllipticCurve` wrapper；`build-pyside6-ohos.sh`。FreeCAD full 构建已启用 `FREECAD_USE_PYSIDE` / `FREECAD_USE_SHIBOKEN`，并编译 `Base::Quantity` converter；Addon Manager 需要 QtNetwork | 供 FreeCAD Python GUI API和 C++ Qt 信号类型转换 |
 | gl4es | 81547d9 | FreeCAD 1.1.2 真机 3D 已验证；外部 EGL context 映射并在 Qt/Coin 交接时失效 program/VBO/EBO/vertex-attrib 缓存 | 长时间相机/选择压力回归 |
 | SMESH/VTK/MED/HDF5 | 待业务确认 | 延后，不阻塞首个 GUI | 按 MeshPart 实际需求启用 |
 | Headless 验收 HAP | v1.1.2 runtime | GUI HAP 内同一 Qt6 runtime 本地 6/6 验收通过；headless 真机复跑仍独立记录 | DevEco Run EntryAbility 真机复跑 6 项验收 |
-| Qt6 OHOS QPA | 移植自 tqtc Qt5.12 `qohos` 插件 | **已在真机呈现 FreeCAD 主窗口和 3D**；通过 `eglGetProcAddress` 与 gl4es external-context API 完成状态交接；普通 RasterSurface 保持系统 backing store | 输入、窗口和多 context 压力回归 |
-| 完整 GUI HAP | v1.1.2 | 2026-08-25 04:16 包含 200 个 `.so*`，离线 6/6、主窗口、基础 3D、Preferences 均通过 | 扩大交互与工作台覆盖 |
+| Qt6 OHOS QPA | 移植自 tqtc Qt5.12 `qohos` 插件 | **已在真机呈现 FreeCAD 主窗口和 3D**；通过 `eglGetProcAddress` 与 gl4es external-context API 完成状态交接；启动阶段复用 ArkUI 主窗宿主页、延迟 Qt 几何，并把孤立 `QLabelClassWindow` 保留在现有 Ability | 输入、窗口和多 context 压力回归 |
+| 完整 GUI HAP | v1.1.2 | 2026-09-05 包含 229 个 `.so*`，离线 6/6、主窗口、基础 3D、Preferences 和无框官方 splash 冷启动均通过 | 扩大交互与工作台覆盖 |
 
 ## 构建顺序
 

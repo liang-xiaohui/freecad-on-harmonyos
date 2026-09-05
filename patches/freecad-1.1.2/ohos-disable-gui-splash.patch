@@ -1,13 +1,13 @@
 diff --git a/src/Gui/StartupProcess.cpp b/src/Gui/StartupProcess.cpp
 --- a/src/Gui/StartupProcess.cpp
 +++ b/src/Gui/StartupProcess.cpp
-@@ -456,9 +456,15 @@ void StartupPostProcess::showMainWindow()
+@@ -456,7 +456,13 @@ void StartupPostProcess::showMainWindow()
  {
      // show splasher while initializing the GUI
      if (!Application::hiddenMainWindow() && !loadFromPythonModule) {
 +#if defined(FREECAD_OHOS)
-+        // The OHOS QPA binds the Ability to the first top-level Qt window.
-+        // A transient splash would consume that binding before MainWindow is shown.
++        // The ArkUI page owns the startup splash. A transient Qt splash would
++        // be mapped to another Ability by the OHOS QPA.
 +        Base::Console().log("Init: Skipping splash screen on OHOS\n");
 +#else
          mainWindow->startSplasher();

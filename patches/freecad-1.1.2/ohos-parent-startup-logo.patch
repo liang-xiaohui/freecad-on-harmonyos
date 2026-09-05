@@ -1,16 +1,18 @@
 diff --git a/src/Gui/StartupProcess.cpp b/src/Gui/StartupProcess.cpp
 --- a/src/Gui/StartupProcess.cpp
 +++ b/src/Gui/StartupProcess.cpp
-@@ -431,7 +431,13 @@ void StartupPostProcess::setupLogo()
+@@ -431,10 +431,14 @@ void StartupPostProcess::setupLogo()
          }
          QPixmap px(path);
          if (!px.isNull()) {
-+#if defined(FREECAD_OHOS)
-+            // Avoid exposing the status-bar logo as a transient top-level QWindow.
-+            auto logo = new QLabel(mainWindow->statusBar());
-+#else
++#if !defined(FREECAD_OHOS)
++            // Even with a QWidget parent, the OHOS QPA gives this status-bar
++            // logo a native QLabel window and launches a second Ability.
              auto logo = new QLabel();
-+#endif
              logo->setPixmap(px.scaledToHeight(32));
              mainWindow->statusBar()->addPermanentWidget(logo, 0);
              logo->setFrameShape(QFrame::NoFrame);
++#endif
+         }
+     }
+ }

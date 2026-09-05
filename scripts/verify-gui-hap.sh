@@ -55,6 +55,8 @@ for f in "$STAGED_DIR"/plugins/platforms/libqohos.so "$STAGED_DIR"/libqohos.so "
          "$PROJECT_DIR/entry/src/main/ets/qability/QAbility.ets" \
          "$PROJECT_DIR/entry/src/main/ets/qabilitystage/QAbilityStage.ets" \
          "$PROJECT_DIR/entry/src/main/module.json5" \
+         "$PROJECT_DIR/entry/src/main/resources/base/media/freecadsplash.png" \
+         "$PROJECT_DIR/entry/src/main/resources/base/media/transparent_start_window.svg" \
          "$PROJECT_DIR/runtime/fleximind_job_runner.py" \
          "$FLEXIMIND_ROOT/workers/worker-a.py" \
          "$FLEXIMIND_ROOT/workers/worker-b.py" \
@@ -273,6 +275,12 @@ for package in numpy/_core numpy/fft numpy/linalg numpy/random; do
 done
 unzip -q "$HAP" 'libs/arm64-v8a/*.abi3.so*' 'libs/arm64-v8a/_coin.so' \
     'libs/arm64-v8a/*cpython-311-*.so*' -d "$RUNTIME_DIR"
+for binding in QtCore QtGui QtWidgets QtNetwork; do
+    [ -f "$RUNTIME_DIR/libs/arm64-v8a/$binding.abi3.so" ] || {
+        echo "错误：HAP 缺少 PySide6 $binding 绑定" >&2
+        exit 1
+    }
+done
 for binding in "$RUNTIME_DIR"/libs/arm64-v8a/*.so*; do
     [ -f "$binding" ] || continue
     runpath=$("$READELF" -d "$binding" 2>/dev/null |

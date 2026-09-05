@@ -63,12 +63,40 @@ DevEco 的本地运行目标、系统的 `bm`/`aa` 工具，或 HDC 完成安装
 - **`module.json5` 的 `mainElement` 已改为 `QAbility`**：DevEco Run / 桌面图标直接进 FreeCAD 全量 GUI。
 - 运行配置（`.bitfun/configs.json`）已同步为 `launch=Ability, abilityName=QAbility`。
 - 启动链：QAbility.onCreate → `setupFreecadEnv`（同步复制 rawfile 并设置环境）→
-  `materializeFreecadRuntimeAsync`（native async work 用纯 C++/zlib 解压约 48MB）→ Promise 成功后才把
-  `WindowStage`/前台状态转交 QPA → QPA dlopen 并调用 `libfreecadqtapp.so` 的 `main()` →
-  FreeCAD 主窗口渲染进 XComponent。解压期间不会创建 XComponent 或启动 Qt main。
+  `materializeFreecadRuntimeAsync`（native async work 用纯 C++/zlib 解压约 48MB）。与此同时，
+  `onWindowStageCreate` 把主窗临时改为 splash 几何并加载透明的 `MainWindowNativeNode` 宿主页，
+  显示主窗后在同一 Ability 内创建 `decorEnabled: false` 的 `StartupSplash` 子窗。runtime 与
+  splash 都就绪后才把 `WindowStage` 交给 QPA，QPA 复用宿主页创建 XComponent 并启动
+  `libfreecadqtapp.so`。
+- 启动期间 XComponent 不能设为隐藏，否则 native surface 会被销毁；当前将它移出屏幕，
+  并暂存 Qt 对主窗 size/position/decor/background 的修改。FreeCAD 激活启动工作台并完成一次
+  事件循环后写入 `.gui-ready`，ArkUI 随即恢复 Qt 请求的主窗几何、移回 XComponent、抬起
+  主窗，再销毁 splash 子窗。
+- `startWindowType=REQUIRED_HIDE` 隐藏系统 starting window，FreeCAD 侧也跳过桌面端
+  `QSplashScreen`。不要恢复启动 status-bar logo 或样式探针的临时顶层 QLabel；OHOS QPA
+  会把它们识别为额外顶层窗口，表现为第二个 splash、最小化动画或主窗退到后台。
+- HarmonyOS 要求父主窗先 `showWindow()`，否则创建 splash 子窗会失败并返回 `1300002`；
+  splash 的透明背景也必须在 `setUIContent()` 和 `showWindow()` 之后设置。主窗宿主与 splash
+  必须使用完全相同的矩形，避免官方 PNG 的透明阴影区域露出第二层合成边界。
 - `freecad-home/.runtime-ready` 保存 runtime ZIP 的大小和 CRC32。标记缺失或不匹配时会先清理
   `Mod/Ext/share` 再解压，成功后才原子写入标记，避免复用崩溃留下的半成品。
 - hilog 标签：`FreeCADGui`（ArkTS）、`QtForOhos`（QPA）、`FreeCADProbe`（验收）。
+
+### 启动画面真机判据（2026-09-05）
+
+在 `3296x2472` 显示上，日志应记录主窗宿主与 splash 完全相同：
+
+```text
+startup geometry display=3296x2472 ... host=1137,905,1022x662 splash=1137,905,1022x662
+startup host window shown
+decor-free startup splash loaded
+main window raised behind startup splash
+FreeCAD GUI ready; startup transition complete
+```
+
+`192.168.3.16:39405` 上的冷启动连续取帧确认：启动阶段只有一张无标题栏官方 splash，
+没有大空白主窗、错位的第二层或最小化切换；GUI-ready 后直接显示完整主窗。PNG 自带的
+透明投影属于官方素材，不是第二个窗口。
 
 ### HDC 无线调试已开启但仍然 `Connect failed`
 
@@ -142,7 +170,7 @@ TARGET=192.168.3.16:39405
 - GUI HAP 运行时（Qt6 staged native 依赖闭包）跑通 6/6 验收（`logs/gui-acceptance-out/freecad-acceptance.json` ok=true）。
 - FreeCAD GUI 二进制（Qt6 + offscreen 平台）可启动至 Qt 事件循环：Python 初始化 → QApplication →
   offscreen 平台窗口创建（`propagateSizeHints`），无崩溃（渲染需真机 OHOS QPA）。
-- 真机已显示 FreeCAD 1.1.2 主窗口、菜单、工具栏、New Document、Part/Cube 与复杂多色示例；Edit → Preferences 可打开。当前验证包 SHA-256 为 `6a6849b82e2122685c377246dcdf034493611a69852278049d83b6ece9368bd5`。
+- 真机已显示 FreeCAD 1.1.2 主窗口、菜单、工具栏、New Document、Part/Cube 与复杂多色示例；Edit → Preferences 和单 Ability 无框官方 splash 均已验证。当前包摘要见 `docs/handoff-device-steps.md`。
 
 ## 子元素选择高亮（2026-09-04 已解决）
 

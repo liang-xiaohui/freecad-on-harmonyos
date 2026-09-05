@@ -1,5 +1,6 @@
 {
   "src": [
+    "pages/StartupSplash",
     "pages/MainWindowNativeNode",
     "pages/FloatWindowNativeNode",
     "pages/SubWindowNativeNode",

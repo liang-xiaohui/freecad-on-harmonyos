@@ -39,6 +39,8 @@ QPA_GL4ES_PROC_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/11-use-egl-proc-address-f
 QPA_DEFER_CURSOR_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/12-defer-detached-input-cursor.patch"
 COLLATOR_WARN_ONCE_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/13-collator-warn-once.patch"
 QPA_POPUP_PARENT_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/14-popup-parent-of-embedded-dialog.patch"
+QPA_ORPHAN_QLABEL_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/15-embed-orphan-qlabel.patch"
+QPA_STARTUP_CONTENT_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/16-reuse-startup-content.patch"
 QPA_GL4ES_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohoseglplatformcontext.cpp"
 QPA_GL4ES_HEADER="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohoseglplatformcontext.h"
 QPA_OFFSCREEN_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohosplatformoffscreensurface.cpp"
@@ -46,6 +48,9 @@ QPA_INTEGRATION_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platfor
 QPA_BACKING_STORE_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohosplatformbackingstoregl.cpp"
 QPA_THEME_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohosplatformtheme.cpp"
 QPA_INPUT_CONTEXT_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohosinputcontext.cpp"
+QPA_JS_MAIN_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohosjsmain.cpp"
+QPA_WINDOW_PROXY_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/render/qohoswindowproxy.cpp"
+QPA_VIEW_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/render/qohosview.cpp"
 
 SRC="$CPP_LIB_ROOT/sources/qt/$QT_VERSION"
 BUILD="$CPP_LIB_ROOT/build/qt/$QT_VERSION-ohos-gui"
@@ -70,7 +75,10 @@ apply_gl4es_qpa_patch() {
         "$QPA_INTEGRATION_SOURCE" \
         "$QPA_BACKING_STORE_SOURCE" \
         "$QPA_THEME_SOURCE" \
-        "$QPA_INPUT_CONTEXT_SOURCE"; do
+        "$QPA_INPUT_CONTEXT_SOURCE" \
+        "$QPA_JS_MAIN_SOURCE" \
+        "$QPA_WINDOW_PROXY_SOURCE" \
+        "$QPA_VIEW_SOURCE"; do
         [ -f "$qpa_source" ] || continue
         sed -i 's/\r$//' "$qpa_source"
     done
@@ -153,12 +161,30 @@ apply_gl4es_qpa_patch() {
 
     # 弹窗/tooltip 的宿主窗口解析：逻辑父窗口是嵌入式对话框时，沿目标父视图
     # 的祖先链找宿主窗口，避免 "Failed to determine valid parent" 崩溃。
-    QPA_VIEW_SOURCE="$SRC/src/plugins/platforms/ohos/render/qohosview.cpp"
     if ! grep -Fq 'resolve the hosting window through the \*target parent\*' \
         "$QPA_VIEW_SOURCE"; then
         apply_qpa_patch "$QPA_POPUP_PARENT_PATCH" "$QPA_VIEW_SOURCE" \
             'resolve the hosting window through the *target parent*' \
             "修复嵌入式对话框里弹窗/下拉框的父窗口解析崩溃"
+    fi
+
+    # QWidget 样式初始化可能短暂实现一个无父级空 QLabel。若按主窗口处理，
+    # OHOS 会为它启动第二个 Ability，并销毁真正主窗口的启动 surface。
+    if ! grep -Fq 'OrphanQLabelEmbeddedRemap' "$QPA_VIEW_SOURCE"; then
+        apply_qpa_patch "$QPA_ORPHAN_QLABEL_PATCH" "$QPA_VIEW_SOURCE" \
+            'OrphanQLabelEmbeddedRemap' \
+            "将启动阶段的孤立 QLabel 保留在现有主窗口"
+    fi
+
+    # FreeCAD loads the native-node page once as the transparent main-window
+    # host behind its splash subwindow. QPA injects createInfo into that page
+    # and defers native main-window geometry until GUI-ready, avoiding a
+    # second page load and a moving splash.
+    if ! grep -Fq 'FreeCADStartupContentReuse' "$QPA_JS_MAIN_SOURCE" \
+        || ! grep -Fq 'FreeCADStartupGeometryDeferred' "$QPA_WINDOW_PROXY_SOURCE"; then
+        apply_qpa_patch "$QPA_STARTUP_CONTENT_PATCH" "$QPA_JS_MAIN_SOURCE" \
+            'FreeCADStartupContentReuse' \
+            "复用启动页面并延后 FreeCAD 主窗口几何切换"
     fi
 
     # v11 is the last QPA binary that survived startup and painted the FreeCAD

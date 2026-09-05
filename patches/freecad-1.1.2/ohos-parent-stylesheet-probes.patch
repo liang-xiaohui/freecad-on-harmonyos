@@ -1,17 +1,24 @@
 diff --git a/src/Gui/Application.cpp b/src/Gui/Application.cpp
 --- a/src/Gui/Application.cpp
 +++ b/src/Gui/Application.cpp
-@@ -2723,7 +2723,13 @@ void Application::setStyleSheet(const QString& qssFile, bool tiledBackground)
+@@ -2745,6 +2745,12 @@ void Application::setStyleSheet(const QString& qssFile, bool tiledBackground)
+             // The color will then be set to the application's palette.
              // Limitation: it doesn't work if the .qss file on purpose sets the same color as
              // for normal text. In this case the default link color is used.
-             {
 +#if defined(FREECAD_OHOS)
-+                // Parent the temporary style probes so the OHOS QPA does not
-+                // expose each one as a separate top-level QAbility.
-+                QLabel l1(mw), l2(mw);
++            // Polishing these temporary labels creates a native QLabel window
++            // on the OHOS QPA, which is then mapped to a second Ability. Keep
++            // the application palette's link color instead.
++            (void)mw;
 +#else
+             {
                  QLabel l1, l2;
-+#endif
                  l2.setProperty("haslink", QByteArray("true"));
- 
-                 l1.show();
+@@ -2760,6 +2766,7 @@ void Application::setStyleSheet(const QString& qssFile, bool tiledBackground)
+                     qApp->setPalette(newPal);
+                 }
+             }
++#endif
+         }
+     }
+     else {

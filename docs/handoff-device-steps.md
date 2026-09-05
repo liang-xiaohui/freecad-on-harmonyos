@@ -1,6 +1,6 @@
 # 真机交接：需要用户执行的剩余步骤
 
-更新时间：2026-09-02。**全工作台 GUI 构建、staging、签名 HAP、基础 3D 与 Preferences 均已在真机通过**；当前继续扩大交互和工作台覆盖。
+更新时间：2026-09-05。**全工作台 GUI 构建、staging、签名 HAP、基础 3D、Preferences 与单 Ability 无框 splash 均已在真机通过**。
 
 ## 当前就绪状态（已验证）
 
@@ -8,10 +8,11 @@
 |---|---|
 | Qt 6.8.3 全 GUI 模块 + OHOS QPA（libqohos.so） | 构建/加载/注册 ✓ |
 | FreeCAD v1.1.2 GUI（Qt6）全工作台 | bin/FreeCAD + libFreeCADGui + CAM/Draft/Import/Inspection/Measure/PartDesign/Points/Robot/Sketcher/Spreadsheet/Start/Surface/TechDraw GUI ✓ |
-| Pivy / Shiboken6 / PySide6（Core/Gui/Widgets/OpenGL/OpenGLWidgets） | 全部构建+导入验证 ✓；已 staged 进 HAP runtime（Ext/） |
-| GUI HAP staging | 183 个 AArch64 ELF + rawfile；签名 HAP 内 200 个 `.so*`，内容/新鲜度/签名摘要验证通过 |
+| Pivy / Shiboken6 / PySide6（Core/Gui/Widgets/Network/Svg/SvgWidgets/OpenGL/OpenGLWidgets） | 全部构建+导入验证 ✓；已 staged 进 HAP runtime（Ext/） |
+| GUI HAP staging | 155 个 AArch64 ELF + rawfile；签名 HAP 内 229 个 `.so*`，内容/新鲜度验证通过 |
 | headless 6 项验收（本地） | **6/6 PASS**（2026-08-24 当前 staging 复验） |
 | GUI 真机 | FreeCAD 1.1.2 主窗口、New Document、Part/Cube、复杂多色示例、Preferences ✓ |
+| 单 Ability splash | 官方图片、无标题栏子窗、单层几何、ArkUI/XComponent 交接和完整主窗恢复均已真机验证 |
 
 ## 构建后核对
 
@@ -22,7 +23,9 @@ DevEco 构建完成后先跑 GUI HAP 验证（native/rawfile/新鲜度一键核�
 ./scripts/verify-gui-hap.sh
 ```
 
-当前包：`entry/build/default/outputs/default/entry-default-signed.hap`。
+当前包：`entry/build/default/outputs/default/entry-default-signed.hap`，SHA-256
+`d444ef008d03844257f93cfe75a8bbfc026e23f23372f9027aca7f0b1f3e33d0`。该包已安装到
+`192.168.3.16:39405` 完成启动画面取帧；提交前的 ArkTS 日志语义整理不改变启动时序。
 
 GL4ES 增量构建后还必须对对应 build tree 执行 `cmake --install`，再运行
 `stage-gui-hap.sh`；只运行 Ninja 会让新库停留在源码/构建树，最终 HAP 仍可能
@@ -30,7 +33,7 @@ GL4ES 增量构建后还必须对对应 build tree 执行 `cmake --install`，�
 
 ## 步骤 A：headless 验收真机复跑（关闭 headless 门禁）
 
-1. DevEco Studio 打开仓库根目录 → Sync → Build Hap（自动签名）→ Run（默认 EntryAbility）。
+1. DevEco Studio 打开仓库根目录 → Sync → Build Hap（自动签名），再显式启动 EntryAbility；默认 Run 入口是 GUI `QAbility`。
 2. 页面显示验收 JSON（ok）；hilog 核对：
    ```sh
    ./scripts/watch-headless-hap-log.sh
@@ -41,7 +44,7 @@ GL4ES 增量构建后还必须对对应 build tree 执行 `cmake --install`，�
 ## 步骤 B：FreeCAD GUI（QAbility）真机运行与调试
 
 1. 同一工程 Sync → Build Hap → Run config 选 **QAbility**。命令行从 DevEco 主机先执行 `hdc list targets -v`，只选择状态为 `Connected` 的完整 key，再执行 `hdc -t <connect-key> shell aa start -b com.freecad.headless.acceptance -a QAbility`。只有 `bm`/`aa` 实际具有执行权限的特权 HiShell 才直接调用设备命令；`uname` 显示 HarmonyOS/Toybox 不能单独作为判断依据。
-2. 启动链：QAbility.onCreate → `materializeFreecadRuntimeAsync`（解压 runtime + 设 env）→ `setupQtApplication('libfreecadqtapp.so')` → QPA dlopen main() → FreeCAD 主窗口渲染进 XComponent。
+2. 启动链：QAbility.onCreate → 并行准备 runtime 与同一 Ability 内的无框 ArkUI splash 子窗 → `setupQtApplication('libfreecadqtapp.so')` → QPA 复用主窗宿主页并启动 XComponent → `.gui-ready` 后抬起主窗、销毁 splash。
 3. hilog 标签：`FreeCADGui`（ArkTS）、`QtForOhos`（QPA）、`FreeCADProbe`（验收）。
 4. 当前回归重点：启动 QAbility → 新建文档/打开复杂文件 → 长时间旋转/缩放/选择 → 反复打开 Preferences/文件对话框 → 前后台切换。
 5. 若仍崩溃，请保留 `QtForOhos`、`gl4es` 日志，并运行 `hidumper -e --print com.freecad.headless.acceptance -n 3` 保存 cppcrash 完整栈。
@@ -51,6 +54,7 @@ GL4ES 增量构建后还必须对对应 build tree 执行 `cmake --install`，�
 - PySide6、Shiboken6 Python 模块和原生库从 2026-08-22 起已经随 HAP runtime staged，Python 侧导入验证通过。
 - 旧的独立 `configure-freecad-gui-qt6-pyside-ohos.sh` 构建树虽然缓存显示 `FREECAD_USE_PYSIDE=ON` / `FREECAD_USE_SHIBOKEN=ON`，但没有找到两个 CMake package，最终 `libFreeCADGui.so` 也未链接其运行库。旧文档把 runtime 可导入误判成 FreeCAD C++ converter 已启用，此结论已废弃。
 - 当前唯一正式入口是 `configure-freecad-gui-qt6-ohos.sh` 的 full 构建。它显式指定目标端 package 目录、启用两项集成，并检查 `HAVE_PYSIDE6` / `HAVE_SHIBOKEN6` 生成定义。
+- Addon Manager 会同时导入 `PySide6.QtNetwork`。PySide6 必须以 `Core;Gui;Widgets;Network;Svg;SvgWidgets;OpenGL;OpenGLWidgets` 模块集构建；staging 和 HAP 验证会拒绝缺少 `QtNetwork.abi3.so` 的产物。
 - 2026-09-05 的全工作台 Release 构建确认 `PythonWrapper.cpp` 编译了 `Base::Quantity` converter，`libFreeCADGui.so` 直接依赖 `libpyside6.abi3.so.6.8` 和 `libshiboken6.abi3.so`。这修复了 Draft 画线时 `slot(Base::Quantity)` 参数无法转换的问题。
 
 ## 排障：hvigor 构建退出码 1（2026-08-22 实测）

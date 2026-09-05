@@ -1,6 +1,6 @@
 # FreeCAD v1.1.2 HarmonyOS 移植执行计划
 
-更新时间：2026-08-25
+更新时间：2026-09-05
 
 ## 目标基线
 
@@ -17,10 +17,10 @@
 - v1.1.2 headless 已完成交叉编译、安装和 ELF 审计。安装前缀为 `CPPLib/install/freecad/1.1.2/ohos/arm64-v8a-headless`。
 - 已产出 `FreeCADCmd`、`FreeCAD.so`、`libFreeCADBase.so`、`libFreeCADApp.so`、`Part.so`、`Mesh.so`、`Import.so`、`Materials.so`、`Sketcher.so` 和 `_PartDesign.so`。
 - CPython 3.11.4 runtime 的 staged probe 已通过 `_socket`、`ctypes`、`binascii`、`zlib` 和标准库功能检查。
-- GUI HAP runtime 已 staging 183 个 AArch64 ELF（最终 HAP 200 个 `.so*`）；AArch64、相对 RUNPATH 和递归 `DT_NEEDED` 审计通过。
+- GUI HAP runtime 已 staging 155 个 AArch64 ELF（最终 HAP 229 个 `.so*`）；AArch64、相对 RUNPATH 和递归 `DT_NEEDED` 审计通过。
 - Python 验收强制检查 `App.Version()[:3] == (1, 1, 2)`，并导入 FreeCAD、Part、Mesh、Import、Materials、Sketcher 和 PartDesign。
 - OpenCASCADE 7.8.1 已完成 OHOS `arm64-v8a` 构建、安装、ELF 审计，并已切换 FreeCAD v1.1.2 headless 与 native HAP entry 的链接配置。
-- 完整原生 GUI 已完成构建、安装、staging 和签名 HAP 校验；真机主窗口、New Document、Part/Cube、复杂多色示例与 Preferences 已通过。当前主要缺口是长时间 3D/选择交互、文件对话框与更多工作台回归。
+- 完整原生 GUI 已完成构建、安装、staging 和签名 HAP 校验；真机主窗口、New Document、Part/Cube、复杂多色示例、Preferences、子元素选择高亮和单 Ability 无框官方 splash 已通过。当前主要缺口是长时间 3D 交互、文件对话框与更多工作台回归。
 
 ## 执行阶段
 
@@ -61,7 +61,8 @@ HAP 内必须完成：
 - [x] 启用 FreeCADGui、SketcherGui、PartDesignGui 等 GUI 模块。
 - [x] 真机验证主窗口、菜单、工具栏、New Document、Part/Cube、复杂多色示例和 Preferences。
 - [x] 验证 OpenGL 到 HarmonyOS EGL/GLES/gl4es 的基础实体显示路径。
-- 真机压力验证相机交互、面/边/点拾取、选择高亮和大模型稳定性。
+- [x] 真机验证面子元素的 hover 与 click 选择高亮。
+- 真机压力验证相机交互、边/点拾取和大模型稳定性。
 
 ### M4：完整 GUI HAP
 
