@@ -1,6 +1,6 @@
 # Sketcher/3D 可视化问题调试手册（2026-09）
 
-本文沉淀 2026-08 底至 2026-09-04 期间在 OHOS（arm64，Qt6 QPA + gl4es + Coin）
+本文沉淀 2026-08 底至 2026-09-05 期间在 OHOS（arm64，Qt6 QPA + gl4es + Coin）
 上修复 FreeCAD GUI 一系列可视化问题的根因链、补丁位置与调试方法论。
 涉及提交（origin/main，时间序）：
 
@@ -61,6 +61,23 @@ graphics-view 背景通道画进 FBO 的顺序问题，已由 `ohos-quarter-pain
 （`glstate->raster.blit_*`，blit 着色器 `uZ` uniform），并遵循调用者的深度测试/
 深度掩码状态；内部 blit（FBO 拷贝、纹素回读）保持原有无深度行为。
 被实体挡住的几何保持遮挡，与桌面版一致。
+
+## 3.5. 鼠标坐标文字产生大块纹理（2026-09-05）
+
+症状：在草绘编辑态画完矩形后移动鼠标，视口出现随鼠标变化的大块黑白字形纹理。
+触发链为 `EditModeCoinManager::setPositionText()` → `SoText2` → `glBitmap` →
+GL4ES bitmap batching；坐标轴交点的原点标记本身尺寸和绘制行为正常。
+
+根因：GL4ES 会把不同 raster depth 的位图合入同一批次，却在
+`bitmap_flush()` 时用当时的 `rPos.z` 绘制整批。静态原点标记、动态鼠标坐标文字和
+后续 raster position 因而组成一个跨越视口的大纹理，并使用无关深度绘制。
+`ohos-bitmap-batch-depth.patch` 为批次保存创建时的 z；新位图深度变化时先刷新，
+刷新时使用保存的批次深度。同一深度的文字 glyph 仍会正常合批。该补丁应在
+`ohos-raster-blit-depth.patch` 之后应用。
+
+修复前依次排除了 blit 纹理重绑、shader/VBO/vertex attribute 恢复和上传前强制
+texture unit 0 三个假设。2026-09-05 在真机上确认大块纹理消失，原点标记和鼠标
+坐标文字均正常。
 
 ## 4. Pad 对话框 bad any cast（6f268af）
 

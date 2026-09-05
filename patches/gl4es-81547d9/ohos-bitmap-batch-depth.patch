@@ -1,0 +1,40 @@
+--- a/src/gl/state.h
++++ b/src/gl/state.h
+@@ -172,6 +172,7 @@ typedef struct {
+     GLint	raster_x1, raster_x2, raster_y1, raster_y2;
+     // bitmap specific datas
+     int     bm_drawing; // flag if some bitmap are there
++    GLfloat bm_z;      // raster depth shared by the pending bitmap batch
+     int     bm_x1, bm_y1;
+     int     bm_x2, bm_y2;
+     GLubyte *bitmap;
+--- a/src/gl/raster.c
++++ b/src/gl/raster.c
+@@ -406,7 +406,7 @@ void bitmap_flush() {
+ 	// Real GL bitmaps depth-test and depth-write at the raster position's z;
+ 	// request that from the blit (see gl4es_blitTexture).
+ 	glstate->raster.blit_use_depth = 1;
+-	glstate->raster.blit_z = glstate->raster.rPos.z;
++	glstate->raster.blit_z = glstate->raster.bm_z;
+ 	gl4es_blitTexture(
+ 		bitmap_texture->glname,
+ 		sx, sy,
+@@ -469,6 +469,10 @@ void APIENTRY_GL4ES gl4es_glBitmap(GLsizei width, GLsizei height, GLfloat xorig,
+ 		memcpy(l->bitmap, bitmap, sz);
+ 		return;
+ 	}
++	// A batched bitmap is rendered with one depth value. Flush before a new
++	// raster position at another depth can be merged into the same texture.
++	if (glstate->raster.bm_drawing && glstate->raster.bm_z != glstate->raster.rPos.z)
++		bitmap_flush();
+   if (((!width && !height) || (bitmap==0)) && glstate->raster.rPos.x + xmove >= 0 && glstate->raster.rPos.y + ymove >= 0) {
+ 		  glstate->raster.rPos.x += xmove;
+ 		  glstate->raster.rPos.y += ymove;
+@@ -519,6 +523,7 @@ void APIENTRY_GL4ES gl4es_glBitmap(GLsizei width, GLsizei height, GLfloat xorig,
+ 		glstate->raster.bm_y1 = glstate->raster.bm_height;
+ 		glstate->raster.bm_x2 = 0;
+ 		glstate->raster.bm_y2 = 0;
++		glstate->raster.bm_z = glstate->raster.rPos.z;
+ 	}
+ 	glstate->raster.bm_x1 = min(glstate->raster.bm_x1, rx+sx);
+ 	glstate->raster.bm_y1 = min(glstate->raster.bm_y1, ry+sy);
