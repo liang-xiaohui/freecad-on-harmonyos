@@ -2,7 +2,7 @@ diff --git a/CMakeLists.txt b/CMakeLists.txt
 index 1111111..2222222 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -202,8 +202,12 @@ else()
+@@ -202,9 +202,15 @@ else()
      #include_directories("${OPENGL_INCLUDE_DIR}")
      if (NOT TARGET OpenGL::GL)
        list(APPEND COIN_TARGET_INCLUDE_DIRECTORIES ${OPENGL_INCLUDE_DIR})
@@ -20,15 +20,31 @@ index 1111111..2222222 100644
      endif()
    endif()
  endif()
-@@ -575,7 +575,8 @@
+@@ -577,4 +583,5 @@
 -if(NOT (HAVE_WGL OR HAVE_AGL OR HAVE_CGL OR HAVE_GLX))
 +if(NOT (OHOS OR CMAKE_SYSTEM_NAME STREQUAL "HarmonyOS") AND
 +   NOT (HAVE_WGL OR HAVE_AGL OR HAVE_CGL OR HAVE_GLX))
-  endif()
-  set(CMAKE_REQUIRED_LIBRARIES ${COIN_TARGET_LINK_LIBRARIES})
- check_cxx_source_compiles("
-     #include <GL/gl.h>
-     #include <GL/glx.h>
-     int main() { (void)glXChooseVisual(0L, 0, 0L); glEnd(); return 0; }
-   " HAVE_GLX)
- endif()
+   if (NOT TARGET OpenGL::GLX)
+     if (OPENGL_glx_LIBRARY)
+       list(APPEND COIN_TARGET_LINK_LIBRARIES ${OPENGL_glx_LIBRARY})
+@@ -816,3 +823,5 @@ include(CMakePackageConfigHelpers)
+ # ############################################################################
+ # New CPACK section, please see the README file inside cpack.d directory.
+-add_subdirectory(cpack.d)
++if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cpack.d/CMakeLists.txt")
++  add_subdirectory(cpack.d)
++endif()
+diff --git a/src/actions/SoCallbackAction.cpp b/src/actions/SoCallbackAction.cpp
+--- a/src/actions/SoCallbackAction.cpp
++++ b/src/actions/SoCallbackAction.cpp
+@@ -461,5 +461,9 @@ static void
+ delete_list_elements(SbList<SoCallbackData *> & cl)
+ {
+   int n = cl.getLength();
+-  for (int i = 0; i < n; i++) cl[i]->deleteAll();
++  for (int i = 0; i < n; i++) {
++    if (cl[i] != NULL) {
++      cl[i]->deleteAll();
++    }
++  }
+ }
