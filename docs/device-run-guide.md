@@ -80,6 +80,12 @@ DevEco 的本地运行目标、系统的 `bm`/`aa` 工具，或 HDC 完成安装
   捕获异常；否则一次 `1300002` 会跳过后续整个 splash 子窗创建流程。splash 的透明背景也必须
   在 `setUIContent()` 和 `showWindow()` 之后设置。主窗宿主与 splash 必须使用完全相同的矩形，
   避免官方 PNG 的透明阴影区域露出第二层合成边界。
+- 启动时从 FreeCAD 1.1.2 自带的 `freecadsplash0_2x.png` 到 `freecadsplash12_2x.png`
+  随机选择一张。`generate-startup-splashes.mjs` 以高 alpha 内容为轮廓，生成比原轮廓大一圈的
+  半透明异形玻璃底板，再把官方像素无损叠回中心。不同素材画布比例不同，窗口按生成素材的
+  逻辑尺寸居中并保持比例；透明背景和 `Contain` 保留齿轮、圆角及原有投影。不要改成矩形
+  ArkUI box-shadow。子窗默认的矩形边框阴影和圆角必须通过 `setWindowShadowRadius(0)`、
+  `setWindowCornerRadius(0)` 显式清除；启用系统窗体阴影的接口返回 `1300004`，没有采用。
 - `freecad-home/.runtime-ready` 保存 runtime ZIP 的大小和 CRC32。标记缺失或不匹配时会先清理
   `Mod/Ext/share` 再解压，成功后才原子写入标记，避免复用崩溃留下的半成品。
 - hilog 标签：`FreeCADGui`（ArkTS）、`QtForOhos`（QPA）、`FreeCADProbe`（验收）。

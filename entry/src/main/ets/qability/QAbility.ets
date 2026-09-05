@@ -11,6 +11,30 @@ import acceptance from 'libfreecadacceptance.so';
 import common from '@ohos.app.ability.common';
 import {LOG_DOMAIN, LOG_TAG} from '../common/QtAppConstants';
 
+interface StartupSplashSpec {
+  widthVp: number;
+  heightVp: number;
+}
+
+// Logical dimensions are half of the official _2x PNG canvas. The generated
+// resource adds 8 vp around every side for the expanded glass silhouette.
+const STARTUP_GLASS_PADDING_VP = 8;
+const STARTUP_SPLASH_SPECS: StartupSplashSpec[] = [
+  { widthVp: 579, heightVp: 434 },
+  { widthVp: 576, heightVp: 443 },
+  { widthVp: 602, heightVp: 432 },
+  { widthVp: 573, heightVp: 439 },
+  { widthVp: 610, heightVp: 456 },
+  { widthVp: 621, heightVp: 415 },
+  { widthVp: 567.5, heightVp: 434 },
+  { widthVp: 567.5, heightVp: 410 },
+  { widthVp: 629, heightVp: 402 },
+  { widthVp: 673, heightVp: 396 },
+  { widthVp: 654, heightVp: 386 },
+  { widthVp: 619, heightVp: 420 },
+  { widthVp: 633, heightVp: 412 }
+];
+
 export default class QAbility extends UIAbility {
 
   private localStorage: LocalStorage | null = new LocalStorage();
@@ -227,8 +251,16 @@ export default class QAbility extends UIAbility {
       const defaultDisplay = display.getDefaultDisplaySync();
       this.displayWidth = defaultDisplay.width;
       this.displayHeight = defaultDisplay.height;
-      const splashWidth = Math.round(vp2px(568));
-      const splashHeight = Math.round(vp2px(368));
+      const splashIndex = Math.floor(Math.random() * STARTUP_SPLASH_SPECS.length);
+      const splashSpec = STARTUP_SPLASH_SPECS[splashIndex];
+      AppStorage.setOrCreate<number>('freecadSplashIndex', splashIndex);
+      const desiredSplashWidth = vp2px(splashSpec.widthVp + STARTUP_GLASS_PADDING_VP * 2);
+      const desiredSplashHeight = vp2px(splashSpec.heightVp + STARTUP_GLASS_PADDING_VP * 2);
+      const splashScale = Math.min(1,
+        this.displayWidth * 0.8 / desiredSplashWidth,
+        this.displayHeight * 0.8 / desiredSplashHeight);
+      const splashWidth = Math.round(desiredSplashWidth * splashScale);
+      const splashHeight = Math.round(desiredSplashHeight * splashScale);
       const splashLeft = Math.round((this.displayWidth - splashWidth) / 2);
       const splashTop = Math.round((this.displayHeight - splashHeight) / 2);
       // HarmonyOS requires the parent to be shown before it will create an
@@ -240,7 +272,8 @@ export default class QAbility extends UIAbility {
       const startupHostLeft = splashLeft;
       const startupHostTop = splashTop;
       hilog.info(LOG_DOMAIN, LOG_TAG,
-        `QAbility: startup geometry display=${this.displayWidth}x${this.displayHeight}` +
+        `QAbility: startup splash variant=${splashIndex}` +
+        ` display=${this.displayWidth}x${this.displayHeight}` +
             ` original=${oldRect.left},${oldRect.top},${oldRect.width}x${oldRect.height}` +
         ` host=${startupHostLeft},${startupHostTop},${startupHostWidth}x${startupHostHeight}` +
         ` splash=${splashLeft},${splashTop},${splashWidth}x${splashHeight}`);
@@ -292,6 +325,23 @@ export default class QAbility extends UIAbility {
       } catch (e) {
         hilog.warn(LOG_DOMAIN, LOG_TAG,
           'QAbility: cannot make startup splash background transparent: ' + JSON.stringify(e));
+      }
+      try {
+        // A child window gets a rectangular border shadow by default even
+        // when its content is transparent. The splash silhouette comes from
+        // the generated PNG alpha, so the compositor shadow must be disabled.
+        this.startupSplashWindow.setWindowShadowRadius(0);
+        hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility: startup splash window shadow disabled');
+      } catch (e) {
+        hilog.warn(LOG_DOMAIN, LOG_TAG,
+          'QAbility: cannot disable startup splash window shadow: ' + JSON.stringify(e));
+      }
+      try {
+        await this.startupSplashWindow.setWindowCornerRadius(0);
+        hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility: startup splash window corner radius cleared');
+      } catch (e) {
+        hilog.warn(LOG_DOMAIN, LOG_TAG,
+          'QAbility: cannot clear startup splash window corner radius: ' + JSON.stringify(e));
       }
       this.startupSplashReady = true;
       hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility: decor-free startup splash loaded');

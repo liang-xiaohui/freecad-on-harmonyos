@@ -12,9 +12,18 @@
 | GUI HAP staging | 155 个 AArch64 ELF + rawfile；签名 HAP 内 229 个 `.so*`，内容/新鲜度验证通过 |
 | headless 6 项验收（本地） | **6/6 PASS**（2026-08-24 当前 staging 复验） |
 | GUI 真机 | FreeCAD 1.1.2 主窗口、New Document、Part/Cube、Cube ViewFit 动画、复杂多色示例、Preferences、Recovery ✓ |
-| 单 Ability splash | 官方图片、无标题栏子窗、单层几何、ArkUI/XComponent 交接和完整主窗恢复均已真机验证 |
+| 单 Ability splash | 13 张官方高清图随机显示、异形玻璃外扩、无系统圆角/矩形阴影、ArkUI/XComponent 交接和完整主窗恢复均已真机验证 |
 
 ## 2026-09-05 真机问题结论
+
+### 随机官方 splash 与异形玻璃轮廓
+
+- **目标**：与 macOS 版一致，启动时随机显示 FreeCAD 官方 splash，并在原图整体 alpha 轮廓外增加一圈半透明异形玻璃；不能变成矩形背景、圆角矩形阴影或模糊外发光。
+- **素材与尺寸**：`freecadsplash0_2x.png` 到 `freecadsplash12_2x.png` 共 13 张官方高清素材。`QAbility` 每次启动随机选择一张，按各自画布比例和逻辑尺寸显示，小屏最多占显示区域 80%，ArkUI 使用 `ImageFit.Contain`。
+- **生成方式**：`scripts/generate-startup-splashes.mjs` 直接读取官方 8-bit RGBA PNG，以 alpha `>=128` 的内容为轮廓，使用欧氏距离变换生成 `40 px` 等距玻璃外扩和 `4 px` 玻璃边缘。官方图片原位叠回；四周仅增加 `16 px` 安全画布，利用素材已有透明边距，避免为玻璃效果明显放大矩形宿主窗。
+- **矩形残影根因**：HarmonyOS 子窗即使内容和窗口背景均透明，仍默认带矩形边框阴影与系统圆角。隐藏标题栏不会清除这两项；尝试启用系统阴影还会返回 WindowManager `1300004`。
+- **修复**：子窗显示并设置透明背景后，显式调用 `setWindowShadowRadius(0)` 和 `setWindowCornerRadius(0)`。玻璃外观完全来自 PNG alpha，不依赖窗口合成器绘制形状。
+- **复现与校验**：staging 会重新生成全部 13 张资源；HAP 校验使用同一算法做逐字节检查，并确认打包资源与 staging 哈希一致。真机日志确认关闭阴影和圆角均成功，用户于 2026-09-05 确认最终视觉效果正确。
 
 ### Cube 放大动画被裁切
 
@@ -40,11 +49,11 @@ DevEco 构建完成后先跑 GUI HAP 验证（native/rawfile/新鲜度一键核�
 ```
 
 当前包：`entry/build/default/outputs/default/entry-default-signed.hap`，SHA-256
-`0a068be799e41ddc10f838476d14cefef7d8eaac8ef5cbe23ce9837babf60101`。该包已移除
-Cube 排障期间的 `FreeCADViewFit` 探针，新增 19 个简体中文 `.qm` 的编译嵌入及原生
-对话框 SubWindow 路径，并通过 rawfile 一致性、新鲜度、229 个 native `.so`、GUI
-工作台、RUNPATH 与 Python 绑定检查。中文默认值和独立对话框仍需在设备解锁后完成
-交互复验。
+`9a0c3325cdde9d4c7c160a852953bdf6819c34d9b147a5480f8740461c57cda3`。该包包含 13 张
+随机官方高清 splash、异形玻璃轮廓、19 个简体中文 `.qm` 的编译嵌入及原生对话框
+SubWindow 路径，并通过 rawfile 一致性、新鲜度、229 个 native `.so`、GUI 工作台、
+RUNPATH、Python 绑定和 splash 生成资源检查。中文默认值、独立对话框及最终 splash
+视觉效果均已完成真机交互验证。
 
 GL4ES 增量构建后还必须对对应 build tree 执行 `cmake --install`，再运行
 `stage-gui-hap.sh`；只运行 Ninja 会让新库停留在源码/构建树，最终 HAP 仍可能

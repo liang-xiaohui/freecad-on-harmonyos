@@ -29,11 +29,17 @@ LIBS_PARENT="$PROJECT_DIR/entry/libs"
 LIBS_DIR="$LIBS_PARENT/$ABI"
 RAWFILE_PARENT="$PROJECT_DIR/entry/src/main/resources"
 RAWFILE_DIR="$RAWFILE_PARENT/rawfile"
+SPLASH_MEDIA_DIR="$RAWFILE_PARENT/base/media"
+FREECAD_SPLASH_SOURCE="$CPP_LIB_ROOT/sources/freecad/$FREECAD_VERSION/src/Gui/Icons"
 FLEXIMIND_ROOT="${FLEXIMIND_ROOT:-/path/to/FlexiMind}"
 PY_YAML_ROOT="$PROJECT_DIR/runtime/pyyaml"
 PACKAGING_ROOT="$PROJECT_DIR/runtime/packaging"
 NUMPY_SP="${NUMPY_SP:-$CPP_LIB_ROOT/install/numpy/2.2.6/ohos/$ABI/site-packages}"
 NUMPY_LICENSE="$NUMPY_SP/numpy-2.2.6.dist-info/LICENSE.txt"
+
+mkdir -p "$SPLASH_MEDIA_DIR"
+node "$PROJECT_DIR/scripts/generate-startup-splashes.mjs" \
+    "$FREECAD_SPLASH_SOURCE" "$SPLASH_MEDIA_DIR"
 
 for required in \
     "$FREECAD_PREFIX/lib/FreeCAD.so" \

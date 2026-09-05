@@ -16,17 +16,20 @@ CPP_LIB_ROOT="${CPP_LIB_ROOT:-/storage/Users/currentUser/CPPLib}"
 . "$CPP_LIB_ROOT/scripts/common-ohos.sh"
 NUMPY_SP="${NUMPY_SP:-$CPP_LIB_ROOT/install/numpy/2.2.6/ohos/$ABI/site-packages}"
 NUMPY_LICENSE="$NUMPY_SP/numpy-2.2.6.dist-info/LICENSE.txt"
+ARTIFACT_ROOT="${FREECAD_ARTIFACT_ROOT:-/storage/Users/currentUser/codex-freecad-artifacts}"
 
 HAP="${HAP:-$PROJECT_DIR/entry/build/default/outputs/default/entry-default-signed.hap}"
 STAGED_DIR="$PROJECT_DIR/entry/libs/$ABI"
 RAWFILE_DIR="$PROJECT_DIR/entry/src/main/resources/rawfile"
+SPLASH_MEDIA_DIR="$PROJECT_DIR/entry/src/main/resources/base/media"
+FREECAD_SPLASH_SOURCE="$CPP_LIB_ROOT/sources/freecad/1.1.2/src/Gui/Icons"
 BUILD_ADDONMGR="${FREECAD_BUILD_ADDONMGR:-ON}"
 BUILD_START="${FREECAD_BUILD_START:-ON}"
 BUILD_ASSEMBLY="${FREECAD_BUILD_ASSEMBLY:-ON}"
 BUILD_REVERSEENGINEERING="${FREECAD_BUILD_REVERSEENGINEERING:-ON}"
 
 [ -f "$HAP" ] || { echo "错误：找不到 HAP：$HAP" >&2; exit 1; }
-for c in unzip stat sha256sum; do
+for c in node unzip stat sha256sum; do
     command -v "$c" >/dev/null 2>&1 || { echo "错误：需要 $c" >&2; exit 2; }
 done
 READELF=$(command -v readelf 2>/dev/null || command -v llvm-readelf 2>/dev/null || true)
@@ -42,8 +45,32 @@ for rf in python311.zip freecad-runtime.zip freecad_headless_acceptance.py; do
     }
     echo "    ✓ rawfile/$rf 与 HAP 一致"
 done
-RUNTIME_ZIP=$(mktemp)
-RUNTIME_DIR=$(mktemp -d)
+
+echo "==> 检查 13 张官方随机 splash 及异形玻璃外扩"
+node "$PROJECT_DIR/scripts/generate-startup-splashes.mjs" --check \
+    "$FREECAD_SPLASH_SOURCE" "$SPLASH_MEDIA_DIR"
+splash_count=0
+for splash_index in 0 1 2 3 4 5 6 7 8 9 10 11 12; do
+    splash_name="freecadsplash${splash_index}.png"
+    source_splash="$FREECAD_SPLASH_SOURCE/freecadsplash${splash_index}_2x.png"
+    staged_splash="$SPLASH_MEDIA_DIR/$splash_name"
+    [ -f "$source_splash" ] && [ -f "$staged_splash" ] || {
+        echo "错误：缺少 splash 资源：$splash_name" >&2
+        exit 1
+    }
+    staged_hash=$(sha256sum "$staged_splash" | awk '{print $1}')
+    hap_hash=$(unzip -p "$HAP" "resources/base/media/$splash_name" | sha256sum | awk '{print $1}')
+    [ "$staged_hash" = "$hap_hash" ] || {
+        echo "错误：HAP 中的 $splash_name 与异形玻璃 staging 资源不一致" >&2
+        exit 1
+    }
+    splash_count=$((splash_count + 1))
+done
+[ "$splash_count" -eq 13 ] || { echo "错误：随机 splash 数量不是 13" >&2; exit 1; }
+echo "    ✓ 13 张高清官方素材已生成异形玻璃外扩并进入 HAP"
+mkdir -p "$ARTIFACT_ROOT"
+RUNTIME_ZIP=$(mktemp "$ARTIFACT_ROOT/verify-gui-hap-runtime.XXXXXX")
+RUNTIME_DIR=$(mktemp -d "$ARTIFACT_ROOT/verify-gui-hap.XXXXXX")
 trap 'rm -f "$RUNTIME_ZIP"; rm -rf "$RUNTIME_DIR"' EXIT HUP INT TERM
 
 echo "==> 检查 HAP 新鲜度"
@@ -53,9 +80,11 @@ for f in "$STAGED_DIR"/plugins/platforms/libqohos.so "$STAGED_DIR"/libqohos.so "
          "$RAWFILE_DIR/freecad-runtime.zip" "$RAWFILE_DIR/freecad_headless_acceptance.py" \
          "$PROJECT_DIR/entry/src/main/cpp/acceptance.cpp" \
          "$PROJECT_DIR/entry/src/main/ets/qability/QAbility.ets" \
+         "$PROJECT_DIR/entry/src/main/ets/pages/StartupSplash.ets" \
          "$PROJECT_DIR/entry/src/main/ets/qabilitystage/QAbilityStage.ets" \
          "$PROJECT_DIR/entry/src/main/module.json5" \
-         "$PROJECT_DIR/entry/src/main/resources/base/media/freecadsplash.png" \
+         "$PROJECT_DIR/scripts/generate-startup-splashes.mjs" \
+         "$PROJECT_DIR"/entry/src/main/resources/base/media/freecadsplash*.png \
          "$PROJECT_DIR/entry/src/main/resources/base/media/transparent_start_window.svg" \
          "$PROJECT_DIR/runtime/fleximind_job_runner.py" \
          "$FLEXIMIND_ROOT/workers/worker-a.py" \

@@ -29,7 +29,7 @@ XComponent(libraryname='qohos')  ──OH_NativeXComponent──►  QPA qarkui/
 - `entry/src/main/ets/`：新增 qability/、qabilitystage/、process/、common/、pages/MainWindowNativeNode 等（自 tqtc 模板拷贝）；`QtAppConstants.ets` 的 `APP_LIBRARY_NAME='libfreecadqtapp.so'`。
 - `module.json5`：AbilityStage=`QAbilityStage.ets`；abilities = EntryAbility（headless 验收）+ QAbility（GUI、当前 mainElement、file uri skills）。
 - `entry/src/main/qt/libqohos.d.ts` + `oh-package.json5`：libqohos.so 的 ArkTS 类型声明。
-- 资源：string.json 新增 QAbility_desc / 悬浮窗 / 后台权限；main_pages 含 Index、原生节点页和 `StartupSplash`；启动子窗使用 FreeCAD 1.1.2 `src/Gui/Icons/freecadsplash.png` 的原始官方图片，应用图标仍使用方形 `icon.png`。
+- 资源：string.json 新增 QAbility_desc / 悬浮窗 / 后台权限；main_pages 含 Index、原生节点页和 `StartupSplash`；启动子窗包含 FreeCAD 1.1.2 的 13 张官方 `_2x` splash，应用图标仍使用方形 `icon.png`。
 
 ### 单 Ability 启动 splash
 
@@ -40,11 +40,18 @@ window，并由 `QAbility` 在同一 Ability 内管理一个 ArkUI splash 子窗
 
 启动时序如下：
 
-1. `onWindowStageCreate()` 记录原主窗几何，将主窗临时调整为官方图片的 `568x368 vp`
-   居中矩形，加载透明 `MainWindowNativeNode` 宿主页并显式 `showWindow()`。
+1. `onWindowStageCreate()` 记录原主窗几何，从 13 张官方图中随机选择一张，并按生成后 `_2x`
+   PNG 的一半宽高建立居中逻辑画布；若屏幕较小则等比缩到显示区域的 80%。主窗临时调整为
+   同一矩形，加载透明 `MainWindowNativeNode` 宿主页并显式 `showWindow()`。
 2. 父主窗可见后，以同一矩形创建 `decorEnabled: false` 的 `StartupSplash` 子窗，加载并显示
-   `freecadsplash.png`；子窗显示后才设置透明背景。父窗未显示或过早设置子窗背景都会收到
-   WindowManager `1300002`。
+   对应的高清 splash。`generate-startup-splashes.mjs` 对官方图片的高 alpha 轮廓做固定距离
+   外扩，生成一片半透明异形玻璃底板，再将官方 RGBA 像素无损叠回中心；它不是矩形阴影，也
+   不是模糊外发光。ArkUI 使用 `Contain` 保持生成画布的宽高比，窗口和页面背景透明，因此
+   齿轮、圆角和图片自带 alpha 投影不会被裁成矩形。子窗需要先 `setUIContent()`、
+   `showWindow()`，然后才设置透明背景。父窗未显示或过早设置子窗背景都会收到 WindowManager
+   `1300002`。子窗默认仍带矩形边框阴影和系统圆角，因此显示后还要分别调用
+   `setWindowShadowRadius(0)` 与 `setWindowCornerRadius(0)`；启用系统窗体阴影的接口在当前子窗
+   上返回 `1300004`，因此未保留相关权限和调用。
 3. runtime 和 splash 就绪后才把同一个 `WindowStage` 交给 QPA。QPA patch 16 将 `createInfo`
    注入已经加载的宿主页，避免二次 `loadContent()` 引起位置跳变；同时暂存 Qt 请求的主窗几何，
    并在 splash 活跃时忽略 decor/background 修改。
