@@ -1,6 +1,6 @@
 --- a/src/Gui/Stylesheets/FreeCAD.qss
 +++ b/src/Gui/Stylesheets/FreeCAD.qss
-@@ -1358,15 +1358,15 @@
+@@ -1358,16 +1358,16 @@
  QToolButton::menu-indicator {
    subcontrol-position: right center;
  }

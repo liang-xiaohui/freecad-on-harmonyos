@@ -6,7 +6,7 @@
 
 1. 在可执行 OHOS SDK 环境运行 `./scripts/rebuild-freecad-all-workbenches.sh`；不要只运行 hvigor，旧 staging 会保留不完整的工作台集合。脚本会准备 Addon Manager、Microsoft.GSL 和 Assembly 所需的固定版本 OndselSolver；Assembly 与 Reverse Engineering 默认启用。MeshPart、BIM、FEM 需要尚未提供的 SMESH/MEDFile/HDF5 依赖，仍保持关闭。
 2. 运行 `./scripts/stage-gui-hap.sh`，再运行 `./scripts/build-gui-hap-ohos.sh`；也可在 DevEco Studio 对 `default` product 执行 Sync → Build Hap。
-3. Build Hap 完成后运行 `./scripts/verify-gui-hap.sh`，确认 HAP 内含 `ImportGui.so`、`PartDesignGui.so`、`SketcherGui.so` 以及 AddonManager/核心工作台注册脚本。
+3. Build Hap 完成后运行 `./scripts/verify-gui-hap.sh`，确认 HAP 内含 `ImportGui.so`、`PartDesignGui.so`、`SketcherGui.so` 以及 AddonManager/核心工作台注册脚本。FreeCAD 配置阶段还会检查 Qt6 `LinguistTools/lrelease`；构建日志应出现 `FreeCAD_zh-CN.qm` 及各已启用工作台的 `_zh-CN.qm`，而不是 `RCC: Warning: No resources`。
 4. 若改动过 C++/ArkTS，DevEco 会自动重编 `libfreecadacceptance.so` 与 ArkTS。
 
 如果只增量修改 GL4ES，不能只运行 Ninja。Ninja 链接出的库仍在 GL4ES
@@ -111,6 +111,18 @@ Qt 在 splash 期间已经按延后的完整主窗几何计算 `Document Recover
 `aa force-stop` 会执行 Ability 的正常销毁流程，FreeCAD 会移除当前 lock 和 transient recovery
 目录，不能用来制造 Recovery 测试数据。模拟崩溃时应先等待自动恢复文件写入（默认 15 分钟，
 可临时改为 1 分钟），再对应用进程发送 `SIGKILL`。
+
+### 简体中文与独立对话框验收
+
+新配置第一次启动时应直接显示简体中文；如果已有 `BaseApp/Preferences/General/Language`
+设置，则继续尊重该显式值。首选项的语言列表选择“简体中文”后重新启动，核心菜单以及
+Part、Part Design、Sketcher、Assembly 等已启用工作台应保持中文，Qt 标准按钮也应正确翻译。
+
+Preferences、About 以及同类顶层 `QDialog` 应表现为独立的 OHOS 子窗：具有单个系统窗框，
+内容不被主窗口客户区裁切，可以移动和关闭，modal 对话框打开时主窗口不可误操作。重点回归
+对话框内的下拉框和 tooltip；它们仍依赖 QPA 的 popup parent 解析。若看到双标题栏，说明旧的
+`ohos-embedded-dialog-titlebar.patch` 仍残留在 FreeCAD 外部源码树，应重新运行
+`scripts/prepare-freecad-source.sh` 完成迁移后再构建。
 
 ### HDC 无线调试已开启但仍然 `Connect failed`
 

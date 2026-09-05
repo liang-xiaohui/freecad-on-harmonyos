@@ -1,7 +1,7 @@
 diff --git a/cMake/FreeCAD_Helpers/SetupQt.cmake b/cMake/FreeCAD_Helpers/SetupQt.cmake
 --- a/cMake/FreeCAD_Helpers/SetupQt.cmake
 +++ b/cMake/FreeCAD_Helpers/SetupQt.cmake
-@@ -92,4 +92,9 @@ configure_file(${CMAKE_SOURCE_DIR}/src/QtWidgets.h.cmake ${CMAKE_BINARY_DIR}/src/
+@@ -92,4 +92,14 @@ configure_file(${CMAKE_SOURCE_DIR}/src/QtWidgets.h.cmake ${CMAKE_BINARY_DIR}/src/
  function(qt_find_and_add_translation _qm_files _tr_dir _qm_dir)
 +    if(NOT BUILD_GUI)
 +        set("${_qm_files}" "" PARENT_SCOPE)
@@ -9,5 +9,10 @@ diff --git a/cMake/FreeCAD_Helpers/SetupQt.cmake b/cMake/FreeCAD_Helpers/SetupQt
 +    endif()
 +
      file(GLOB _ts_files ${_tr_dir})
++    if(CMAKE_SYSTEM_NAME STREQUAL "OHOS")
++        # Keep the mobile package focused while shipping complete Simplified
++        # Chinese coverage alongside the built-in English source strings.
++        list(FILTER _ts_files INCLUDE REGEX "_zh-CN\\.ts$")
++    endif()
      set_source_files_properties(${_ts_files} PROPERTIES OUTPUT_LOCATION ${_qm_dir})
      qt_add_translation("${_qm_files}" ${_ts_files})

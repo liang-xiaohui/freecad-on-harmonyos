@@ -193,11 +193,15 @@ user.cfg 迁移（`dropStaleBoolPreferences`，带一次性标记
    `__stack_chk_fail`（编译器认为 fatal 可能返回），曾误导方向。
 
 根因：QPA `qohosview.cpp` 的 SubWindow 创建路径里，当逻辑父窗口是
-**嵌入式对话框**（EmbeddedWindow，本移植里 FreeCAD 对话框都嵌入主窗口）时，
+**嵌入式对话框**（当时的实现把 FreeCAD 对话框都嵌入主窗口）时，
 宿主窗口沿**弹窗自身**的视图祖先链解析（`ancestorViewWithWindowOrNull()`），
 而下拉框/tooltip 这类弹窗的视图父链是空的 → 解析失败 → qFatal。
 修复（`patches/qt-6.8-ohos/14-popup-parent-of-embedded-dialog.patch`）：
 改为沿**目标父视图**（对话框）的祖先链解析宿主窗口。
+
+2026-09-05 后，QPA patch 17 已把 Preferences、About 等桌面式顶层对话框恢复为
+OHOS `SubWindow`，不再受主窗口内容区域裁切；patch 14 仍保留，覆盖其他嵌入式窗口中
+出现 popup/tooltip 的路径。
 
 ## 8. 通知洪泛（"打开 Preferences 弹一堆提示"）
 

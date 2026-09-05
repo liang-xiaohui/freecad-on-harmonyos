@@ -37,7 +37,8 @@ LCS_RESTORE_NULL_GUARD_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos
 QUARTER_STACK_ON_TOP_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos-quarter-stack-on-top.patch"
 QUARTER_PAINT_ORDER_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos-quarter-paint-order.patch"
 NATIVE_UITOOLS_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos-native-uitools.patch"
-EMBEDDED_DIALOG_TITLEBAR_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos-embedded-dialog-titlebar.patch"
+LEGACY_EMBEDDED_DIALOG_TITLEBAR_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos-embedded-dialog-titlebar.patch"
+DEFAULT_LANGUAGE_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos-default-language.patch"
 QSS_WIDGET_INDICATOR_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos-qss-widget-indicator-images.patch"
 QSS_TASK_INDICATOR_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos-qss-task-indicator-images.patch"
 QSS_TASK_MENU_ARROW_PATCH="$PROJECT_DIR/patches/freecad-$FREECAD_VERSION/ohos-qss-task-menu-arrow-images.patch"
@@ -131,12 +132,20 @@ if grep -q '#if !defined(__MINGW32__) && !defined(FREECAD_OHOS)' "$UI_LOADER_HEA
     sed -i 's/#if !defined(__MINGW32__) && !defined(FREECAD_OHOS)/#if !defined(__MINGW32__)/' "$UI_LOADER_HEADER"
 fi
 
-for patch_file in "$OHOS_PATCH" "$PYTHON_COMPAT_PATCH" "$BOOST_COMPAT_PATCH" "$RPATH_PATCH" "$HEADLESS_SWIG_PATCH" "$HEADLESS_TRANSLATIONS_PATCH" "$HEADLESS_TRANSLATION_TOOLS_PATCH" "$SOURCE_LOCATION_PATCH" "$LIBCXX_PATCH" "$ICU_C_API_PATCH" "$QT512_PATCH" "$CLANG15_PATCH" "$LIBCXX15_VIEWS_PATCH" "$RUNTIME_LAYOUT_PATCH" "$TECHDRAW_CLOCALE_PATCH" "$TECHDRAW_QGVPAGE_PATCH" "$CAM_GLES_CONSTANTS_PATCH" "$STYLEPARAMETERS_NUMERIC_PATCH" "$GL_ATTRIB_STACK_PATCH" "$GUI_SPLASH_PATCH" "$GLES_SURFACE_FORMAT_PATCH" "$GUI_STARTUP_LOGO_PATCH" "$GUI_STYLESHEET_PROBES_PATCH" "$QUARTER_DEFER_PAINT_PATCH" "$LCS_RESTORE_NULL_GUARD_PATCH" "$QUARTER_STACK_ON_TOP_PATCH" "$QUARTER_PAINT_ORDER_PATCH" "$NATIVE_UITOOLS_PATCH" "$EMBEDDED_DIALOG_TITLEBAR_PATCH" "$QSS_WIDGET_INDICATOR_PATCH" "$QSS_TASK_INDICATOR_PATCH" "$QSS_TASK_MENU_ARROW_PATCH" "$QT_PLUGIN_PATH_PATCH" "$SERVICE_PROVIDER_PATCH" "$SKETCH_MAKE_INTERNALS_PATCH" "$AXIS_CROSS_DEFAULT_PATCH" "$GUI_FATAL_HILOG_PATCH" "$NAVICUBE_AXISCROSS_PATCH" "$NAVICUBE_RAW_GL_LABELS_PATCH" "$VIEW_ALL_CLIPPING_SYNC_PATCH" "$SAVE_DOCS_DIRECT_PATCH" "$SKETCHER_SETTINGS_DEFAULT_PATCH" "$PICK_RADIUS_DEFAULT_PATCH" "$SELECTION_CONTEXT_RENDER_PATCH" "$START_FILECARD_NULL_PIXMAP_PATCH" "$GUI_READY_MARKER_PATCH"; do
+# Native OHOS SubWindows now provide the frame and title bar for top-level
+# dialogs. Remove the earlier in-content title bar when updating an already
+# prepared source tree; keep the old patch only as reversible migration data.
+if grep -q '_freecad_ohos_dialog_titlebar' \
+       "$SOURCE_DIR/src/Gui/GuiApplication.cpp" 2>/dev/null; then
+    git -C "$SOURCE_DIR" apply --ignore-space-change --ignore-whitespace \
+        --reverse "$LEGACY_EMBEDDED_DIALOG_TITLEBAR_PATCH"
+    echo "Removed legacy embedded dialog title bar"
+fi
+
+for patch_file in "$OHOS_PATCH" "$PYTHON_COMPAT_PATCH" "$BOOST_COMPAT_PATCH" "$RPATH_PATCH" "$HEADLESS_SWIG_PATCH" "$HEADLESS_TRANSLATIONS_PATCH" "$HEADLESS_TRANSLATION_TOOLS_PATCH" "$SOURCE_LOCATION_PATCH" "$LIBCXX_PATCH" "$ICU_C_API_PATCH" "$QT512_PATCH" "$CLANG15_PATCH" "$LIBCXX15_VIEWS_PATCH" "$RUNTIME_LAYOUT_PATCH" "$TECHDRAW_CLOCALE_PATCH" "$TECHDRAW_QGVPAGE_PATCH" "$CAM_GLES_CONSTANTS_PATCH" "$STYLEPARAMETERS_NUMERIC_PATCH" "$GL_ATTRIB_STACK_PATCH" "$GUI_SPLASH_PATCH" "$GLES_SURFACE_FORMAT_PATCH" "$GUI_STARTUP_LOGO_PATCH" "$GUI_STYLESHEET_PROBES_PATCH" "$QUARTER_DEFER_PAINT_PATCH" "$LCS_RESTORE_NULL_GUARD_PATCH" "$QUARTER_STACK_ON_TOP_PATCH" "$QUARTER_PAINT_ORDER_PATCH" "$NATIVE_UITOOLS_PATCH" "$DEFAULT_LANGUAGE_PATCH" "$QSS_WIDGET_INDICATOR_PATCH" "$QSS_TASK_INDICATOR_PATCH" "$QSS_TASK_MENU_ARROW_PATCH" "$QT_PLUGIN_PATH_PATCH" "$SERVICE_PROVIDER_PATCH" "$SKETCH_MAKE_INTERNALS_PATCH" "$AXIS_CROSS_DEFAULT_PATCH" "$GUI_FATAL_HILOG_PATCH" "$NAVICUBE_AXISCROSS_PATCH" "$NAVICUBE_RAW_GL_LABELS_PATCH" "$VIEW_ALL_CLIPPING_SYNC_PATCH" "$SAVE_DOCS_DIRECT_PATCH" "$SKETCHER_SETTINGS_DEFAULT_PATCH" "$PICK_RADIUS_DEFAULT_PATCH" "$SELECTION_CONTEXT_RENDER_PATCH" "$START_FILECARD_NULL_PIXMAP_PATCH" "$GUI_READY_MARKER_PATCH"; do
     [ -f "$patch_file" ] || continue
-    # A prior OHOS compatibility patch may have extended this function's
-    # guard. Treat the stronger equivalent condition as already applied.
     if [ "$patch_file" = "$HEADLESS_TRANSLATION_TOOLS_PATCH" ] &&
-       grep -q 'if(NOT BUILD_GUI OR CMAKE_SYSTEM_NAME STREQUAL "OHOS")' \
+       grep -q 'Keep the mobile package focused while shipping complete Simplified' \
            "$SOURCE_DIR/cMake/FreeCAD_Helpers/SetupQt.cmake" 2>/dev/null; then
         echo "FreeCAD patch already applied: $(basename "$patch_file")"
         continue
@@ -209,9 +218,9 @@ for patch_file in "$OHOS_PATCH" "$PYTHON_COMPAT_PATCH" "$BOOST_COMPAT_PATCH" "$R
         echo "FreeCAD patch already applied: $(basename "$patch_file")"
         continue
     fi
-    if [ "$patch_file" = "$EMBEDDED_DIALOG_TITLEBAR_PATCH" ] &&
-       grep -q '_freecad_ohos_dialog_titlebar' \
-           "$SOURCE_DIR/src/Gui/GuiApplication.cpp" 2>/dev/null; then
+    if [ "$patch_file" = "$DEFAULT_LANGUAGE_PATCH" ] &&
+       grep -q 'Default new profiles' \
+           "$SOURCE_DIR/src/Gui/Application.cpp" 2>/dev/null; then
         echo "FreeCAD patch already applied: $(basename "$patch_file")"
         continue
     fi

@@ -78,6 +78,26 @@ splash 会被整体跳过。恢复主窗装饰同样是 best-effort，不能阻�
   `Core;Gui;Widgets;Network;Svg;SvgWidgets;OpenGL;OpenGLWidgets`；staging 和 HAP 验证脚本
   都会拒绝缺少 `QtCore`、`QtGui`、`QtWidgets` 或 `QtNetwork` 绑定的产物，避免问题延迟到真机启动。
 
+### 简体中文资源与桌面式对话框
+
+OHOS 构建原先在 `qt_find_and_add_translation()` 中直接跳过翻译，生成的
+`*_translation.qrc` 因此为空；系统 locale 同时可能是空值，FreeCAD 既没有可加载的
+界面翻译，也不能可靠地从 `QLocale()` 选中中文。当前配置要求 Qt6
+`LinguistTools/lrelease`，并在 OHOS GUI 构建中编译、嵌入 `_zh-CN.ts`。英文仍由源码
+原文提供，FreeCAD 自带 `translation.qrc` 中的 `qt_zh-CN.qm` 和
+`qtbase_zh_CN.qm` 继续覆盖 Qt 标准控件文本。构建应产生 19 个非空简体中文 `.qm`，
+覆盖 FreeCAD 核心和 Part、Part Design、Sketcher、Assembly、TechDraw、CAM 等已启用工作台。
+
+`ohos-default-language.patch` 只在参数库没有显式 `Language` 时使用
+`Chinese (Simplified)`，因此新配置默认简体中文，用户已保存的语言选择不会被覆盖。
+
+QPA 曾把带 transient parent 或 synthetic parent 的 `Qt::Dialog/Sheet/Drawer` 从系统
+`SubWindow` 重映射成主窗口内部的 `EmbeddedWindow`，大尺寸 Preferences、About 等窗口
+会受主窗口内容节点裁切，也不能获得正常的系统窗体移动、装饰与尺寸。QPA patch 17 将这些
+桌面式顶层对话框恢复为真正的 OHOS `SubWindow`，并保留 logical parent 以维持 modality。
+FreeCAD 早期为嵌入式对话框添加的内容内标题栏不再应用；准备脚本会检测旧标记并用保留的
+历史补丁反向移除，避免升级既有源码树后出现双标题栏。
+
 ## Staging（scripts/stage-gui-hap.sh）
 
 - `entry/libs/arm64-v8a/`（完整 GUI native 依赖闭包，当前 155 个 AArch64 ELF；签名 HAP 含 229 个 `.so*`）：
@@ -104,7 +124,7 @@ FreeCAD GUI 需要 `Mod/Ext/share` 与 Python stdlib；HAP rawfile 里的 `freec
 ## 构建与运行
 
 1. gl4es 变更后运行 `/storage/Users/currentUser/CPPLib/scripts/build-gl4es-ohos.sh`。
-2. Qt/QPA 变更后运行 `./scripts/build-qt6-gui-ohos.sh`；FreeCAD 变更后运行 `./scripts/rebuild-freecad-all-workbenches.sh`。
+2. Qt/QPA 变更后运行 `./scripts/build-qt6-gui-ohos.sh`；FreeCAD 变更后运行 `./scripts/rebuild-freecad-all-workbenches.sh`。中文资源还要求 Qt6 `LinguistTools` 与可执行的 `bin/lrelease`，缺失时 FreeCAD 配置脚本会直接报错。
 3. `sh scripts/stage-gui-hap.sh`。
 4. 本地验收需要先执行 `./scripts/sign-staged-native-ohos.sh`，再执行 `./scripts/run-staged-freecad-acceptance.sh`。
 5. `./scripts/build-gui-hap-ohos.sh`（或 DevEco Studio：Sync → Build Hap）。

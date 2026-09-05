@@ -95,7 +95,7 @@
    subcontrol-position: bottom right;
    border-bottom: 1px solid transparent;
    border-right: 1px solid transparent;
-@@ -1018,22 +1018,22 @@
+@@ -1018,20 +1018,20 @@
    border-left: 1px solid @GeneralBorderColor;
    margin:1px;
    margin-top:-1px;

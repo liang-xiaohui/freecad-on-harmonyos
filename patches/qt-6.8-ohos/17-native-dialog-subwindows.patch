@@ -1,0 +1,42 @@
+--- a/src/plugins/platforms/ohos/render/qohosview.cpp
++++ b/src/plugins/platforms/ohos/render/qohosview.cpp
+@@ -343,20 +343,10 @@ ViewTypeInfo determineViewTypeAndLogicalParent(const QOhosPlatformWindow *platf
+         };
+     }
+
+     if (transientParent != nullptr) {
+-        // Top-level dialogs realized as OHOS system SubWindows crash on this platform,
+-        // so remap them to embedded ArkUI nodes inside the transient parent's view.
+-        if (isDialogLikeWindowType(windowType)) {
+-            qCDebug(
+-                QtForOhos,
+-                "DialogEmbeddedRemap: remapping window %p(%s) of type %d with transient parent %p"
+-                " from SubWindow to EmbeddedWindow",
+-                qWindow, qPrintable(qWindow->objectName()), static_cast<int>(windowType), transientParent);
+-            return ViewTypeInfo {
+-                .viewType = ViewType::EmbeddedWindow,
+-                .optLogicalParent = transientParent,
+-            };
+-        }
++        // DesktopDialogSubWindow: top-level Qt dialogs must remain real OHOS
++        // child windows so their requested geometry is not clipped by the
++        // main window's ArkUI node. The transient parent preserves modality.
+         return ViewTypeInfo {
+             .viewType = ViewType::SubWindow,
+             .optLogicalParent = transientParent,
+@@ -385,13 +375,12 @@ ViewTypeInfo determineViewTypeAndLogicalParent(const QOhosPlatformWindow *platf
+     }
+
+     if (isDialogLikeWindowType(windowType) && syntheticParent != nullptr) {
+         qCDebug(
+             QtForOhos,
+-            "DialogEmbeddedRemap: remapping window %p(%s) of type %d with synthetic parent %p"
+-            " from SubWindow to EmbeddedWindow",
++            "DesktopDialogSubWindow: mapping window %p(%s) of type %d to synthetic parent %p",
+             qWindow, qPrintable(qWindow->objectName()), static_cast<int>(windowType), syntheticParent);
+         return ViewTypeInfo {
+-            .viewType = ViewType::EmbeddedWindow,
++            .viewType = ViewType::SubWindow,
+             .optLogicalParent = syntheticParent,
+         };
+     }

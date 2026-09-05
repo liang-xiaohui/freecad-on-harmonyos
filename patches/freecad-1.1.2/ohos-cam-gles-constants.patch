@@ -1,10 +1,10 @@
 diff --git a/src/Mod/CAM/PathSimulator/AppGL/OpenGlWrapper.h b/src/Mod/CAM/PathSimulator/AppGL/OpenGlWrapper.h
 --- a/src/Mod/CAM/PathSimulator/AppGL/OpenGlWrapper.h
 +++ b/src/Mod/CAM/PathSimulator/AppGL/OpenGlWrapper.h
-@@ -27,6 +27,41 @@
+@@ -27,5 +27,41 @@
  
  #include "DlgCAMSimulator.h"
- 
++
 +#if defined(FREECAD_OHOS) || defined(__OHOS__) || defined(__MUSL__)
 +// OHOS ships GLES headers without the desktop/core-profile enum aliases used
 +// by the CAM simulator. The QOpenGLExtraFunctions entry points remain valid.

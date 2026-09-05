@@ -9,10 +9,10 @@ diff --git a/src/Gui/StartupProcess.cpp b/src/Gui/StartupProcess.cpp
 
  #include "StartupProcess.h"
  #include "PreferencePackManager.h"
-@@ -547,6 +548,22 @@ void StartupPostProcess::activateWorkbench()
+@@ -547,5 +548,22 @@ void StartupPostProcess::activateWorkbench()
      // Reactivate the startup workbench
      guiApp.activateWorkbench(start.c_str());
-
++
 +#if defined(FREECAD_OHOS)
 +    // ArkUI keeps the XComponent invisible behind the standalone splash until
 +    // the workbench is complete. Publish readiness after Qt has had one event

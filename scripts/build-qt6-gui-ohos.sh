@@ -41,6 +41,7 @@ COLLATOR_WARN_ONCE_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/13-collator-warn-once
 QPA_POPUP_PARENT_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/14-popup-parent-of-embedded-dialog.patch"
 QPA_ORPHAN_QLABEL_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/15-embed-orphan-qlabel.patch"
 QPA_STARTUP_CONTENT_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/16-reuse-startup-content.patch"
+QPA_NATIVE_DIALOG_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/17-native-dialog-subwindows.patch"
 QPA_GL4ES_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohoseglplatformcontext.cpp"
 QPA_GL4ES_HEADER="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohoseglplatformcontext.h"
 QPA_OFFSCREEN_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohosplatformoffscreensurface.cpp"
@@ -186,6 +187,15 @@ apply_gl4es_qpa_patch() {
         apply_qpa_patch "$QPA_STARTUP_CONTENT_PATCH" "$QPA_JS_MAIN_SOURCE" \
             'FreeCADStartupContentReuse' \
             "复用启动页面并延后 FreeCAD 主窗口几何切换"
+    fi
+
+    # Desktop FreeCAD dialogs are top-level child windows. Keeping them as
+    # embedded ArkUI nodes clips large Preferences/About content to the main
+    # window and prevents normal system-window sizing and movement.
+    if ! grep -Fq 'DesktopDialogSubWindow' "$QPA_VIEW_SOURCE"; then
+        apply_qpa_patch "$QPA_NATIVE_DIALOG_PATCH" "$QPA_VIEW_SOURCE" \
+            'DesktopDialogSubWindow' \
+            "将 FreeCAD 顶层对话框恢复为 OHOS 原生子窗口"
     fi
 
     # v11 is the last QPA binary that survived startup and painted the FreeCAD

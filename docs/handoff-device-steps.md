@@ -40,9 +40,11 @@ DevEco 构建完成后先跑 GUI HAP 验证（native/rawfile/新鲜度一键核�
 ```
 
 当前包：`entry/build/default/outputs/default/entry-default-signed.hap`，SHA-256
-`411344bb555a7e720e6ee858807fd6db0c0481e8adc65b2c425c7bf4a18d3ffa`。该生产包已移除
-Cube 排障期间的 `FreeCADViewFit` 探针，并通过 rawfile 一致性、新鲜度、229 个 native
-`.so`、GUI 工作台、RUNPATH 与 Python 绑定检查。其对应修复已在此前诊断包上完成真机验证。
+`0a068be799e41ddc10f838476d14cefef7d8eaac8ef5cbe23ce9837babf60101`。该包已移除
+Cube 排障期间的 `FreeCADViewFit` 探针，新增 19 个简体中文 `.qm` 的编译嵌入及原生
+对话框 SubWindow 路径，并通过 rawfile 一致性、新鲜度、229 个 native `.so`、GUI
+工作台、RUNPATH 与 Python 绑定检查。中文默认值和独立对话框仍需在设备解锁后完成
+交互复验。
 
 GL4ES 增量构建后还必须对对应 build tree 执行 `cmake --install`，再运行
 `stage-gui-hap.sh`；只运行 Ninja 会让新库停留在源码/构建树，最终 HAP 仍可能

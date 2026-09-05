@@ -1,0 +1,15 @@
+--- a/src/Gui/Application.cpp
++++ b/src/Gui/Application.cpp
+@@ -483,6 +483,11 @@ Application::Application(bool GUIenabled)
+         // install the last active language
+         ParameterGrp::handle hPGrp = App::GetApplication().GetUserParameter().GetGroup("BaseApp");
+         hPGrp = hPGrp->GetGroup("Preferences")->GetGroup("General");
+         QString lang = QLocale::languageToString(QLocale().language());
++#if defined(FREECAD_OHOS)
++        // The OHOS QPA can report an empty system locale. Default new profiles
++        // to Simplified Chinese while preserving an explicit user preference.
++        lang = QStringLiteral("Chinese (Simplified)");
++#endif
+         Translator::instance()->activateLanguage(
+             hPGrp->GetASCII("Language", (const char*)lang.toLatin1()).c_str());
+         GetWidgetFactorySupplier();

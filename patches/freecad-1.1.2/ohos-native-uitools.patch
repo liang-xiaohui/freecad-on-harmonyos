@@ -1,7 +1,7 @@
 diff --git a/cMake/FreeCAD_Helpers/SetupQt.cmake b/cMake/FreeCAD_Helpers/SetupQt.cmake
 --- a/cMake/FreeCAD_Helpers/SetupQt.cmake
 +++ b/cMake/FreeCAD_Helpers/SetupQt.cmake
-@@ -20,6 +20,18 @@ if(BUILD_GUI)
+@@ -20,6 +20,20 @@ if(BUILD_GUI)
      endif()
  
 -    list (APPEND FREECAD_QT_COMPONENTS OpenGL PrintSupport Svg UiTools Widgets LinguistTools)
@@ -10,7 +10,9 @@ diff --git a/cMake/FreeCAD_Helpers/SetupQt.cmake b/cMake/FreeCAD_Helpers/SetupQt
 +        # Link the target UiTools library by file path. Consuming the imported
 +        # target would add QT_UITOOLS_LIB and its include directory to every
 +        # FreeCADGui translation unit, needlessly forcing a full GUI rebuild.
-+        find_package(Qt6 REQUIRED COMPONENTS UiTools)
++        # LinguistTools supplies the executable host-side lrelease target used
++        # to compile the translations embedded into the target libraries.
++        find_package(Qt6 REQUIRED COMPONENTS UiTools LinguistTools)
 +        get_target_property(QtUiTools_LIBRARIES Qt6::UiTools IMPORTED_LOCATION_RELEASE)
 +        set(QtUiTools_INCLUDE_DIRS "")
 +        set(QtUiTools_FOUND ${Qt6UiTools_FOUND})

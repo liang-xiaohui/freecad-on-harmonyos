@@ -62,6 +62,11 @@ OPENGL_INCLUDE_DIR="$NATIVE_SDK/sysroot/usr/include"
     echo "Qt6UiTools 未安装。先运行 scripts/build-qt6-modules-ohos.sh" >&2
     exit 1
 }
+[ -f "$QT_PREFIX/lib/cmake/Qt6LinguistTools/Qt6LinguistToolsConfig.cmake" ] \
+    && [ -x "$QT_PREFIX/bin/lrelease" ] || {
+    echo "Qt6 LinguistTools/lrelease 未安装。先运行 scripts/build-qt6-modules-ohos.sh" >&2
+    exit 1
+}
 
 QT_PREFIX="$QT_PREFIX" OHOS_SDK="$OHOS_SDK" NATIVE_SDK="$NATIVE_SDK" \
     sh "$PROJECT_DIR/scripts/sign-qt6-host-tools-ohos.sh"
