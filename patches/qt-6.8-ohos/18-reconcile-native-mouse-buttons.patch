@@ -1,0 +1,202 @@
+--- a/src/plugins/platforms/ohos/qarkui/input.h
++++ b/src/plugins/platforms/ohos/qarkui/input.h
+@@ -14,6 +14,7 @@
+ #include <qarkui/window.h>
+ #include <qohosdisplayinfo.h>
+ #include <qohoskeymodifiers.h>
++#include <vector>
+ 
+ QT_BEGIN_NAMESPACE
+ 
+@@ -66,6 +67,8 @@
+     QPointF displayPosition;
+     std::int32_t button;
+     std::int32_t action;
++    std::vector<std::int32_t> pressedButtons;
++    bool pressedButtonsKnown = false;
+     QFlags<OhosKeyboardModifier> modifiers;
+ 
+     static NativeNodeMouseEvent makeFromUiInputEvent(::ArkUI_UIInputEvent *event);
+--- a/src/plugins/platforms/ohos/qarkui/input.cpp
++++ b/src/plugins/platforms/ohos/qarkui/input.cpp
+@@ -5,6 +5,7 @@
+ 
+ #include <qarkui/qarkuiutils.h>
+ #include <qohoskeymodifiers.h>
++#include <array>
+ 
+ namespace ch = std::chrono;
+ 
+@@ -183,14 +184,33 @@
+     return ch::duration_cast<ch::milliseconds>(eventTime);
+ }
+ 
++QOhosOptional<std::vector<std::int32_t>> tryGetMouseEventPressedButtons(
++    const ::ArkUI_UIInputEvent *event)
++{
++    std::array<std::int32_t, 16> buttons {};
++    std::int32_t length = static_cast<std::int32_t>(buttons.size());
++    const std::int32_t result =
++        ::OH_ArkUI_MouseEvent_GetPressedButtons(event, buttons.data(), &length);
++    if (result != 0 || length < 0
++        || length > static_cast<std::int32_t>(buttons.size())) {
++        return makeEmptyQOhosOptional();
++    }
++
++    return makeQOhosOptional(
++        std::vector<std::int32_t>(buttons.begin(), buttons.begin() + length));
++}
++
+ NativeNodeMouseEvent NativeNodeMouseEvent::makeFromUiInputEvent(::ArkUI_UIInputEvent *event)
+ {
++    const auto pressedButtons = tryGetMouseEventPressedButtons(event);
+     return NativeNodeMouseEvent {
+         .timestampMs = getInputEventTimeMs(event),
+         .localPosition = getPointerEventLocalPosition(event),
+         .displayPosition = getPointerEventDisplayPosition(event),
+         .button = callArkUi(Q_OHOS_NAMED_FUNC(::OH_ArkUI_MouseEvent_GetMouseButton), event),
+         .action = callArkUi(Q_OHOS_NAMED_FUNC(::OH_ArkUI_MouseEvent_GetMouseAction), event),
++        .pressedButtons = pressedButtons.valueOr(std::vector<std::int32_t>{}),
++        .pressedButtonsKnown = pressedButtons.hasValue(),
+         .modifiers = readKeyModifiersFromOhosUiInputEvent(event),
+     };
+ }
+--- a/src/plugins/platforms/ohos/qohosinputmethodeventhandler.h
++++ b/src/plugins/platforms/ohos/qohosinputmethodeventhandler.h
+@@ -55,6 +55,9 @@
+     Qt::MouseButton button;
+     QEvent::Type eventType;
+     QFlags<OhosKeyboardModifier> modifiers;
++    Qt::MouseButtons pressedButtons = Qt::NoButton;
++    bool pressedButtonsKnown = false;
++    bool cancelled = false;
+ };
+ 
+ struct QOhosHoverEvent
+--- a/src/plugins/platforms/ohos/qohosinputmethodeventhandler.cpp
++++ b/src/plugins/platforms/ohos/qohosinputmethodeventhandler.cpp
+@@ -11,6 +11,7 @@
+ #include <QtGui/private/qguiapplication_p.h>
+ #include <QtGui/private/qhighdpiscaling_p.h>
+ #include <QtMath>
++#include <array>
+ #include <algorithm>
+ #include <arkui/ui_input_event.h>
+ #include <chrono>
+@@ -26,6 +27,14 @@
+ constexpr double fingerAreaWidth = 50.0;
+ constexpr double fingerAreaHeight = 50.0;
+ 
++constexpr std::array<Qt::MouseButton, 5> trackedMouseButtons = {
++    Qt::LeftButton,
++    Qt::RightButton,
++    Qt::MiddleButton,
++    Qt::BackButton,
++    Qt::ForwardButton,
++};
++
+ QPointingDevice *createTouchDevice(QPointingDevice::DeviceType deviceType)
+ {
+     qOhosDebug(QtForOhos) << "Creating touchDevice!";
+@@ -216,8 +225,49 @@
+         .button = button,
+         .eventType = mouseEvent.eventType,
+         .modifiers = mouseEvent.modifiers,
++        .pressedButtons = mouseEvent.pressedButtons,
++        .pressedButtonsKnown = mouseEvent.pressedButtonsKnown,
++        .cancelled = mouseEvent.cancelled,
+     };
+ 
++    if (wsiEvent.pressedButtonsKnown || wsiEvent.cancelled) {
++        // MouseButtonStateRecovery: ArkUI's complete post-event state repairs
++        // a lost release or press without surfacing a warning to applications.
++        const Qt::MouseButtons reportedButtons =
++            wsiEvent.cancelled ? Qt::MouseButtons(Qt::NoButton) : wsiEvent.pressedButtons;
++        Qt::MouseButtons missingReleases = m_mouseButtonsState & ~reportedButtons;
++        Qt::MouseButtons missingPresses = reportedButtons & ~m_mouseButtonsState;
++
++        if (wsiEvent.eventType == QEvent::MouseButtonRelease) {
++            missingReleases.setFlag(wsiEvent.button, false);
++        } else if (wsiEvent.eventType == QEvent::MouseButtonPress) {
++            missingPresses.setFlag(wsiEvent.button, false);
++        }
++
++        auto dispatchMissingTransition = [&](Qt::MouseButton changedButton, QEvent::Type type) {
++            QOhosMouseEvent recoveredEvent = mouseEvent;
++            recoveredEvent.button = changedButton;
++            recoveredEvent.eventType = type;
++            recoveredEvent.pressedButtonsKnown = false;
++            recoveredEvent.cancelled = false;
++            onMouseEvent(recoveredEvent);
++        };
++        for (const auto trackedButton : trackedMouseButtons) {
++            if (missingReleases.testFlag(trackedButton)) {
++                dispatchMissingTransition(trackedButton, QEvent::MouseButtonRelease);
++            }
++        }
++        for (const auto trackedButton : trackedMouseButtons) {
++            if (missingPresses.testFlag(trackedButton)) {
++                dispatchMissingTransition(trackedButton, QEvent::MouseButtonPress);
++            }
++        }
++    }
++
++    if (wsiEvent.cancelled) {
++        return;
++    }
++
+     handleMouseEvent(wsiEvent);
+ }
+ 
+--- a/src/plugins/platforms/ohos/render/qohosnativemouseeventshandler.cpp
++++ b/src/plugins/platforms/ohos/render/qohosnativemouseeventshandler.cpp
+@@ -49,6 +49,8 @@
+         return makeQOhosOptional(QEvent::MouseButtonRelease);
+     case ::UI_MOUSE_EVENT_ACTION_MOVE:
+         return makeQOhosOptional(QEvent::MouseMove);
++    case ::UI_MOUSE_EVENT_ACTION_CANCEL:
++        return makeQOhosOptional(QEvent::MouseMove);
+     }
+ 
+     return makeEmptyQOhosOptional();
+@@ -103,6 +105,16 @@
+         return;
+     }
+ 
++    Qt::MouseButtons pressedButtons = Qt::NoButton;
++    if (nativeNodeMouseEvent.pressedButtonsKnown) {
++        for (const auto nativeButton : nativeNodeMouseEvent.pressedButtons) {
++            const auto mappedButton = tryMapNativeNodeMouseButtonToQt(nativeButton);
++            if (mappedButton.hasValue()) {
++                pressedButtons.setFlag(mappedButton.value());
++            }
++        }
++    }
++
+     QOhosMouseEvent mouseEvent = {
+         .timestampMs = nativeNodeMouseEvent.timestampMs,
+         .localPosition = nativeNodeMouseEvent.localPosition,
+@@ -110,9 +122,14 @@
+         .button = tryMapNativeNodeMouseButtonToQt(nativeNodeMouseEvent.button).valueOr(Qt::NoButton),
+         .eventType = eventType.value(),
+         .modifiers = nativeNodeMouseEvent.modifiers,
++        .pressedButtons = pressedButtons,
++        .pressedButtonsKnown = nativeNodeMouseEvent.pressedButtonsKnown,
++        .cancelled = nativeNodeMouseEvent.action == ::UI_MOUSE_EVENT_ACTION_CANCEL,
+     };
+ 
+-    m_hoverEventsGenerator->handleQOhosMouseEvent(mouseEvent);
++    if (!mouseEvent.cancelled) {
++        m_hoverEventsGenerator->handleQOhosMouseEvent(mouseEvent);
++    }
+ 
+     if (!m_optMouseEventsHandler) {
+         auto weakSelf = QtOhos::makeWeakPtr(shared_from_this());
+@@ -174,6 +191,7 @@
+     return
+         now - event.timestamp >= mouseMotionEventMinAgeForDrop
+         && event.mouseEvent.eventType == QEvent::MouseMove
++        && !event.mouseEvent.cancelled
+         && nextEvent.mouseEvent.eventType == QEvent::MouseMove;
+ }
+ 

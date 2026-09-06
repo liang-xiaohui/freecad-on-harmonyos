@@ -242,6 +242,36 @@ warning 弹成用户可见通知 → 洪泛。修复
 注意：NaviCube 的拾取用 Qt 的 `QOpenGLFramebufferObject`（同属 Qt 原生
 路径，未验证），如果点击立方体切换视角不正常，先查这条 FBO 混用路径。
 
+## 8.6 旋转持续摆动与复杂模型 GPU 卡死（2026-09-06）
+
+这轮实际包含两个会被描述为“旋转卡住”的独立问题：
+
+1. ArkUI 偶尔丢失鼠标 Release/CANCEL 后，Qt 仍认为旋转键按下，视角会在没有
+   按键时继续左右摆动。`18-reconcile-native-mouse-buttons.patch` 读取 ArkUI 提供的
+   完整按键集合，补发缺失的 Press/Release，并在 CANCEL 时释放所有按键。
+   修复过程中的 `MouseButtonStateRecovery` 用户通知只是诊断 warning，最终版已删除
+   warning，只保留状态修复。
+2. 较大的 `BIMExample.FCStd` 即使鼠标状态已恢复，连续旋转仍会真正卡死。
+   系统日志确认 Zink/驱动发生 `DEVICE LOST`，同时可见 timeline wait reset 和
+   `DMD_HIGPU_PAGE_FAULT`；这不是 Coin 导航状态机问题。
+
+最终修复分两层：
+
+1. `ohos-fpe-scratch-lifetime.patch` 在释放 GL4ES 为 FPE 转换的客户端属性数组前
+   等待原生绘制完成，避免异步 GLES 消费已经释放的 scratch 内存。
+2. `ohos-draw-batch-throttle.patch` 为每个 GL4ES context 统计 FPE 原生 draw，
+   每 4 条执行一次 `glFinish()`；普通和 instanced DrawArrays/DrawElements 都计数，
+   scratch 路径也会在释放前完成当前批次。限制只在 `__OHOS__` 下启用。
+
+4 条阈值已在真机的大 BIM 示例上连续旋转验证通过。以下实验不能解决大模型卡死：
+禁用全部 GL4ES VBO、只在每帧末 `glFinish()`、只保护 scratch 数组、临时把一次性
+renderlist 上传到 VBO，以及每 16 条 draw 同步。每条 FPE draw 都同步也能缓解，
+但交互明显更慢，因此最终采用实测可用的 4 条阈值。该修复以吞吐量换取驱动稳定性；
+若更换 GPU/系统版本，应重新用复杂 BIM 场景压测后再放宽阈值。
+
+两个补丁必须按上述顺序应用，因为 draw 节流补丁会把 scratch 补丁中的直接
+`glFinish()` 改为统一的 pending-draw 完成函数。
+
 ## 9. 调试方法论
 
 - **单一变量迭代**：每次构建只改一处，HAP/libGL 的 sha256 逐轮记录到

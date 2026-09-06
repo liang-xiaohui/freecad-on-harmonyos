@@ -144,6 +144,7 @@ FreeCAD GUI 需要 `Mod/Ext/share` 与 Python stdlib；HAP rawfile 里的 `freec
 
 - 2026-08-25 真机已显示主窗口、New Document、Part/Cube 与复杂多色示例。3D 根因不是 FEM/Assembly 缺模块，也不是要把所有 RasterSurface 强制改成 GL backing store，而是 Qt 与 gl4es 共用 GLES context 时的缓存失配。`patches/gl4es-81547d9/ohos-external-context-state.patch` 与 QPA patch 02/11 完成 context 映射、proc address 解析和 program/VBO/EBO/vertex-attrib 缓存失效。
 - 2026-09-05 修复 Part 新建 Cube 时 `ViewFit` 放大动画的裁切变形。Coin 的自动裁剪面由延迟传感器更新，OHOS queued paint 偶尔先于传感器执行，导致某帧使用上一相机位置的 near/far。`ohos-view-all-clipping-sync.patch` 在每次动画相机更新后同步处理延迟队列；10 帧深度探针与真机观察均通过，诊断日志未进入生产补丁。
+- 2026-09-06 修复两类旋转卡住：Qt QPA patch 18 用 ArkUI 完整按键集合补偿丢失的鼠标 Press/Release/CANCEL，避免松键后视角持续摆动；`ohos-fpe-scratch-lifetime.patch` 与 `ohos-draw-batch-throttle.patch` 则处理复杂模型旋转时的 Zink/GPU `DEVICE LOST`，将 OHOS FPE 原生绘制限制为每 4 条同步一次。16 条阈值在 `BIMExample.FCStd` 上仍失败，4 条已通过真机连续旋转验证。该限制有同步开销，调整阈值必须用大 BIM 场景回归，详见 `docs/sketcher-rendering-debug-playbook.md` 第 8.6 节。
 - Edit → Preferences 已打开成功。`patches/freecad-1.1.2/ohos-native-uitools.patch` 恢复原生 QUiLoader、链接 `libQt6UiTools.so.6`，并为失败页面增加空值防线。
 - QPA patch 12 在输入法 controller detached 时延后 cursor rectangle 更新，避免数万条非侵入通知淹没界面。
 - 当前包 SHA-256 见 `docs/handoff-device-steps.md`。后续重点是长时间相机交互、更多工作台、文件对话框和前后台切换。

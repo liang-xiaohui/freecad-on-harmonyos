@@ -42,6 +42,7 @@ QPA_POPUP_PARENT_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/14-popup-parent-of-embe
 QPA_ORPHAN_QLABEL_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/15-embed-orphan-qlabel.patch"
 QPA_STARTUP_CONTENT_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/16-reuse-startup-content.patch"
 QPA_NATIVE_DIALOG_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/17-native-dialog-subwindows.patch"
+QPA_MOUSE_BUTTON_STATE_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/18-reconcile-native-mouse-buttons.patch"
 QPA_GL4ES_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohoseglplatformcontext.cpp"
 QPA_GL4ES_HEADER="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohoseglplatformcontext.h"
 QPA_OFFSCREEN_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohosplatformoffscreensurface.cpp"
@@ -52,6 +53,11 @@ QPA_INPUT_CONTEXT_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platf
 QPA_JS_MAIN_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohosjsmain.cpp"
 QPA_WINDOW_PROXY_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/render/qohoswindowproxy.cpp"
 QPA_VIEW_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/render/qohosview.cpp"
+QPA_ARKUI_INPUT_HEADER="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qarkui/input.h"
+QPA_ARKUI_INPUT_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qarkui/input.cpp"
+QPA_INPUT_EVENT_HEADER="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohosinputmethodeventhandler.h"
+QPA_INPUT_EVENT_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohosinputmethodeventhandler.cpp"
+QPA_NATIVE_MOUSE_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/render/qohosnativemouseeventshandler.cpp"
 
 SRC="$CPP_LIB_ROOT/sources/qt/$QT_VERSION"
 BUILD="$CPP_LIB_ROOT/build/qt/$QT_VERSION-ohos-gui"
@@ -79,7 +85,12 @@ apply_gl4es_qpa_patch() {
         "$QPA_INPUT_CONTEXT_SOURCE" \
         "$QPA_JS_MAIN_SOURCE" \
         "$QPA_WINDOW_PROXY_SOURCE" \
-        "$QPA_VIEW_SOURCE"; do
+        "$QPA_VIEW_SOURCE" \
+        "$QPA_ARKUI_INPUT_HEADER" \
+        "$QPA_ARKUI_INPUT_SOURCE" \
+        "$QPA_INPUT_EVENT_HEADER" \
+        "$QPA_INPUT_EVENT_SOURCE" \
+        "$QPA_NATIVE_MOUSE_SOURCE"; do
         [ -f "$qpa_source" ] || continue
         sed -i 's/\r$//' "$qpa_source"
     done
@@ -196,6 +207,15 @@ apply_gl4es_qpa_patch() {
         apply_qpa_patch "$QPA_NATIVE_DIALOG_PATCH" "$QPA_VIEW_SOURCE" \
             'DesktopDialogSubWindow' \
             "将 FreeCAD 顶层对话框恢复为 OHOS 原生子窗口"
+    fi
+
+    # ArkUI exposes both cancellation and the complete post-event mouse button
+    # set. Reconcile that authoritative state so a dropped release cannot leave
+    # FreeCAD's navigation state machine permanently rotating or panning.
+    if ! grep -Fq 'MouseButtonStateRecovery' "$QPA_INPUT_EVENT_SOURCE"; then
+        apply_qpa_patch "$QPA_MOUSE_BUTTON_STATE_PATCH" "$QPA_INPUT_EVENT_SOURCE" \
+            'MouseButtonStateRecovery' \
+            "使用 ArkUI 当前按键集合恢复丢失的鼠标 Press/Release"
     fi
 
     # v11 is the last QPA binary that survived startup and painted the FreeCAD

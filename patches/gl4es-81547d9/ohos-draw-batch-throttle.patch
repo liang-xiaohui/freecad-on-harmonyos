@@ -1,0 +1,82 @@
+--- a/src/gl/glstate.h
++++ b/src/gl/glstate.h
+@@ -106,6 +106,9 @@ struct glstate_s {
+     GLsizei             scratch_vertex_size;
+     GLuint              scratch_indices;
+     GLsizei             scratch_indices_size;
++#if defined(__OHOS__)
++    unsigned int        ohos_pending_draw_count;
++#endif
+     // Implementation read
+     GLenum              readf; // implementation Read Format
+     GLenum              readt; // implementation Read Type
+--- a/src/gl/fpe.c
++++ b/src/gl/fpe.c
+@@ -39,14 +39,32 @@
+ #define DBG(a)
+ #endif
+ 
++#if defined(__OHOS__)
++#define OHOS_DRAW_BATCH_LIMIT 4U
++
++static void ohos_finish_pending_draws(void) {
++    if(!glstate->ohos_pending_draw_count)
++        return;
++
++    LOAD_GLES(glFinish);
++    gles_glFinish();
++    glstate->ohos_pending_draw_count = 0;
++}
++
++static void ohos_throttle_after_draw(void) {
++    if(++glstate->ohos_pending_draw_count >= OHOS_DRAW_BATCH_LIMIT)
++        ohos_finish_pending_draws();
++}
++#else
++static void ohos_throttle_after_draw(void) {}
++#endif
++
+ void free_scratch(scratch_t* scratch) {
+ #if defined(__OHOS__)
+     if(scratch->size) {
+         // Zink on HarmonyOS can return before it has consumed client attribute
+         // memory. Keep GL4ES' converted arrays alive until this draw completes.
+-        LOAD_GLES(glFinish);
+-        gles_glFinish();
+-
++        ohos_finish_pending_draws();
+     }
+ #endif
+     for(int i=0; i<scratch->size; ++i)
+@@ -855,6 +873,7 @@ void APIENTRY_GL4ES fpe_glDrawArrays(GLenum mode, GLint first, GLsizei count) {
+ #endif
+     LOAD_GLES(glDrawArrays);
+     gles_glDrawArrays(mode, first, count);
++    ohos_throttle_after_draw();
+     free_scratch(&scratch);
+ }
+ 
+@@ -900,6 +919,7 @@ void APIENTRY_GL4ES fpe_glDrawElements(GLenum mode, GLsizei count, GLenum type,
+     }
+     realize_bufferIndex();
+     gles_glDrawElements(mode, count, type, indices);
++    ohos_throttle_after_draw();
+     if(use_vbo)
+         wantBufferIndex(0);
+     free_scratch(&scratch);
+@@ -952,6 +972,7 @@ void APIENTRY_GL4ES fpe_glDrawArraysInstanced(GLenum mode, GLint first, GLsizei
+             }
+         }
+         gles_glDrawArrays(mode, first, count);
++        ohos_throttle_after_draw();
+     }
+     free_scratch(&scratch);
+ }
+@@ -1013,6 +1034,7 @@ void APIENTRY_GL4ES fpe_glDrawElementsInstanced(GLenum mode, GLsizei count, GLen
+             }
+         }
+         gles_glDrawElements(mode, count, type, inds);
++        ohos_throttle_after_draw();
+     }
+     if(use_vbo)
+         wantBufferIndex(0);
