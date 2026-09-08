@@ -1,0 +1,39 @@
+--- a/src/Gui/Inventor/SoFCPlacementIndicatorKit.cpp
++++ b/src/Gui/Inventor/SoFCPlacementIndicatorKit.cpp
+@@ -24,6 +24,9 @@
+ #include <sstream>
+
+ #include <Inventor/nodes/SoBaseColor.h>
++#if defined(FREECAD_OHOS)
++#include <Inventor/nodes/SoAsciiText.h>
++#endif
+ #include <Inventor/nodes/SoComplexity.h>
+ #include <Inventor/nodes/SoCone.h>
+ #include <Inventor/nodes/SoCylinder.h>
+@@ -220,6 +223,19 @@
+             pcLabelTranslation->translation.setValue(0.0, cylinderOffset + labelOffset, 0.0);
+             pcLabelSeparator->addChild(pcLabelTranslation);
+
++#if defined(FREECAD_OHOS)
++            // OHOS: draw Axis Cross labels as Coin geometry. SoFrameLabel and
++            // SoText2 both enter the raster glDrawPixels/glBitmap path, which
++            // can become a large black polygon after FEM rendering.
++            auto pcFont = new SoFontStyle();
++            pcFont->family = SoFontStyle::SANS;
++            pcFont->size = 1.0F;
++            pcLabelSeparator->addChild(pcFont);
++
++            auto pcAxisLabel = new SoAsciiText();
++            pcAxisLabel->string.setValue(label);
++            pcAxisLabel->justification = SoAsciiText::CENTER;
++#else
+             auto pcAxisLabel = new SoFrameLabel();
+             pcAxisLabel->string.setValue(label);
+             pcAxisLabel->textColor.setValue(1.0, 1.0, 1.0);
+@@ -229,6 +245,7 @@
+             pcAxisLabel->frame = false;
+             pcAxisLabel->textUseBaseColor = true;
+             pcAxisLabel->size = labelFontSize;
++#endif
+
+             pcLabelSeparator->addChild(pcAxisLabel);

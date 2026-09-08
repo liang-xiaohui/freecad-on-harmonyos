@@ -1,0 +1,32 @@
+--- a/src/gl/buffers.c
++++ b/src/gl/buffers.c
+@@ -715,7 +715,7 @@
+         LOGE("Warning, unhandled Buffer type %s in bindBuffer\n", PrintEnum(target));
+         return;
+     }
+-    glstate->bind_buffer.used = (glstate->bind_buffer.index && glstate->bind_buffer.array)?1:0;
++    glstate->bind_buffer.used = (glstate->bind_buffer.index || glstate->bind_buffer.array)?1:0;
+ }
+
+ GLuint wantBufferIndex(GLuint buffer)
+@@ -732,7 +732,7 @@
+         glstate->bind_buffer.index = glstate->bind_buffer.want_index;
+         gles_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, glstate->bind_buffer.index);
+         DBG(printf("Bind buffer %d to GL_ELEMENT_ARRAY_BUFFER\n", glstate->bind_buffer.index);)
+-        glstate->bind_buffer.used = (glstate->bind_buffer.index && glstate->bind_buffer.array)?1:0;
++        glstate->bind_buffer.used = (glstate->bind_buffer.index || glstate->bind_buffer.array)?1:0;
+     }
+ }
+
+@@ -746,7 +746,10 @@
+
+ void unboundBuffers()
+ {
+-    if(!glstate->bind_buffer.used)
++    // Either binding must be cleared before client-memory vertex pointers
++    // are installed (for example by the glBitmap/glDrawPixels blit path).
++    // Also handle external-context cache invalidation independently of used.
++    if(!glstate->bind_buffer.array && !glstate->bind_buffer.index)
+         return;
+     LOAD_GLES(glBindBuffer);
+     if(glstate->bind_buffer.array) {
