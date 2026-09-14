@@ -26,3 +26,4 @@ oh_modules/
 /build-profile.json5
 **/__pycache__/
 *.py[cod]
+.workbuddy/

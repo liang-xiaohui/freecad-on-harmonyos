@@ -222,10 +222,13 @@ near/far 仍是上一帧的 `72.102–89.189`，因此模型在深度测试前�
 
 ## 子元素选择高亮（2026-09-04 已解决）
 
-原故障表现为新建立方体后，鼠标悬停面的黄色预选高亮和第一次点击面的
+原故障表现为新建立方体后，鼠标悬停面的预选高亮和第一次点击面的
 绿色选择高亮都不显示；再次点击后整个立方体的绿色高亮正常。拾取本身没有
 失效，状态栏仍能显示 `Preselected: Unnamed.Box.Face3`，因此问题位于选择上下文
 到渲染节点的传递过程，而不是触摸坐标或拾取半径。
+
+（预选/选中颜色取自 `View3DSettings.cpp:262-283`：预选 `SbColor(0.8, 0.1, 0.1)`
+为**红**色，选中 `SbColor(0.1, 0.8, 0.1)` 为绿色。早期笔记写"黄色预选"有误。）
 
 排查发现两个相互叠加的 HarmonyOS 差异：
 
@@ -240,10 +243,84 @@ near/far 仍是上一帧的 `72.102–89.189`，因此模型在深度测试前�
    `libFreeCADGui.so` 导出的 out-of-line 析构函数，以统一其 RTTI/typeinfo 所属 DSO。
 
 将 highlight pass 的 depth function 强制为 `GL_LESS` 没有改变故障，证明它不是
-深度测试遮挡；该试验和所有 `FreeCADSel` 临时日志均未保留。真机验证确认立方体
+深度测试遮挡 —— 注意这个结论**仅对本次故障成立**：当时 highlight pass 根本没画
+出来（context 查不回），深度函数自然无从影响结果。2026-09-14 出现的同类外观
+（面级高亮消失）根因完全不同，详见下节；当时那轮试验和所有 `FreeCADSel` 临时
+日志均未保留。真机验证确认立方体
 面的 hover 黄色高亮、首次点击绿色面高亮、再次点击整体绿色高亮均已恢复；构建
 仍保持 `BUILD_ASSEMBLY=ON`。移除诊断后重新构建并通过 `verify-gui-hap.sh` 的
 签名包 SHA-256 为 `dfbdeec8ee9f9e2da690a2d70cc2d1920c9f5f5e8a3a390e05b9dbe50c123afe`。
+
+## 子元素高亮回归：Native 渲染路径缺少 `glDepthFunc(GL_LESS)`（2026-09-14 已解决）
+
+`91a337c`（"Enable FEM and BIM workbenches; fix BIM coplanar stripe artifact"）
+推送后面级高亮再次消失：整对象选中高亮正常，但**鼠标悬停单个面**的红色预选和
+**单击单个面**的绿色选中都不显示。状态栏仍正确显示 `Preselected: BIMExample.Wall007.Face3`，
+所以拾取、选择上下文和颜色下发都是好的，问题只在最终光栅化。
+
+根因链（每一步都有设备实证）：
+
+1. gl4es 默认 `glstate->depth.func = GL_LESS`（`src/gl/glstate.c:296`）。
+2. Coin3D 在一次性的 `needglinit` 里**主动把深度函数改成 `GL_LEQUAL`**
+   （`SoGLRenderAction.cpp:1081-1095`），注释明说"SoGLDepthBufferElement 假定初始值是
+   `GL_LEQUAL`"。
+3. FreeCAD 只在 `View3DInventorViewer::renderToFramebuffer()`（约 line 2403）用
+   `glDepthFunc(GL_LESS)` 抵消它 —— 但 `renderType` 默认是 `Native`
+   （`View3DInventorViewer.cpp:409/433`），`actualRedraw()` 走的是 `renderScene()`，
+   **那里没有这句**。
+4. `SoBrepFaceSet::GLRender()` 先画高亮 pass、再画**同深度**的基准面 pass。`GL_LEQUAL`
+   下 `z <= z` 成立，灰色基准面完整覆盖刚画好的红/绿高亮。只影响与基准面共面的
+   面级高亮，边高亮和整对象高亮不受影响 —— 与现象完全一致。
+
+为什么 `91a337c` 才暴露：该提交给 Qt 引入 `19-prefer-24bit-depth-attachment.patch`，
+深度附件从 16-bit 回退变成真正的 24-bit。
+
+| 深度精度 | 共面高亮面 vs 基准面的深度值 | `GL_LEQUAL` 下的结果 |
+|---|---|---|
+| 16-bit（91a337c 之前） | 量化误差使两者略有差异 | 高亮可见（偶然正确） |
+| 24-bit（91a337c 之后） | 精确相等 | 基准面覆盖高亮 |
+
+同一提交修好 BIM 红柱条纹也正是靠 24-bit 抑制 z-fighting，所以不能回退它。
+
+定位手段（探针已全部撤销，仅在此存档）：在 gl4es 的 `gl4es_glDepthFunc()` 打点输出
+`DEPTHFUNC func=...`，并在 FPE draw 入口追踪 `glstate->color`。实测高亮 pass：
+
+```text
+HL2 REDC glcolor=0.800,0.200,0.200 count=228 depthmask=1 depthtest=1
+         depthfunc=0x0203 colarray=0 colmat=1 lighting=0 program=9
+```
+
+`0x0203` 即 `GL_LEQUAL`；全程 `0x0201`(`GL_LESS`) 出现 **0 次**，证明 FreeCAD 的
+`glDepthFunc(GL_LESS)` 从未到达 gl4es。把 `func == GL_LEQUAL` 临时强制成 `GL_LESS`
+做 5 分钟实验，真机上高亮立即恢复，根因随即确认。
+
+正式修复取 FreeCAD 侧最小侵入方案，与 `renderToFramebuffer()` 对称，补丁为
+`patches/freecad-1.1.2/ohos-native-render-depthfunc.patch`：
+
+```cpp
+// renderScene()，backgroundroot apply 之后
+glDepthFunc(GL_LESS);
+```
+
+不改 gl4es、不改 Coin、不影响 BIM 修复。真机复验通过，签名 HAP 尺寸回到
+494,480,552 B（实验版为 494,512,664 B）。
+
+### 顺带修复：configure 脚本续行被注释截断
+
+排查中 `scripts/configure-freecad-gui-qt6-ohos.sh` 的重新配置失败，`BUILD_BIM` 回到
+默认 `ON` 又与 `BUILD_MESH_PART=OFF` 冲突。原因是 `91a337c` 把一段 BIM 说明注释
+插进了 `cmake_configure` 的续行参数列表**中间**：
+
+```sh
+    -DBUILD_ASSEMBLY="$BUILD_ASSEMBLY" \
+    # BUILD_BIM stays OFF for CMake on purpose. ...
+    -DBUILD_BIM=OFF \
+```
+
+shell 里 `\` 续行后紧跟注释行会**终止整条命令**，于是 `-DBUILD_BIM=OFF` 及其后
+**整批 `-D` 参数被静默丢弃**。旧缓存恰好是关掉 BIM 之前的快照，ninja 一直没触发
+重配置因此长期未暴露。修复是把注释移到参数列表之外，并加了防回归说明。全仓库
+已扫描确认无同类残留。
 
 ## Draft `Base::Quantity` 信号转换（2026-09-05 构建修复）
 
@@ -270,6 +347,10 @@ HAP 打包，`libFreeCADGui.so` 却没有链接两个 C++ 运行库，converter 
 
 ## 当前 GUI 回归重点
 
+- **面级高亮（红色预选 / 绿色选中）是最敏感的光栅化探针**：它依赖"高亮面与基准面
+  深度值恰好相等"这一边界条件，深度精度、深度函数、渲染路径类型任一变化都可能
+  让它消失而其他功能看起来完全正常。凡是改动深度附件格式、`glDepthFunc`、
+  `renderType` 或 gl4es 深度状态，都必须复验 hover/单击单个面的高亮。
 - 长时间覆盖旋转、缩放、平移、拾取、选择高亮、输入映射和弹窗 remap。
 - 反复打开 Preferences、文件选择器并切换前后台，确认窗口和输入法生命周期稳定。
 - 若崩溃或白屏，保留 `QtForOhos`、`gl4es` 日志，并用 `hidumper -e --print com.freecad.headless.acceptance -n 3` 读取持久化 cppcrash。

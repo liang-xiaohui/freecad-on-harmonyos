@@ -1,0 +1,20 @@
+--- a/src/Gui/View3DInventorViewer.cpp
++++ b/src/Gui/View3DInventorViewer.cpp
+@@ -2549,6 +2549,17 @@
+         glra->apply(this->backgroundroot);
+     }
+ 
++    // The render action initialises the depth function to GL_LEQUAL
++    // (SoGLRenderAction, one-shot "needglinit") instead of the OpenGL default
++    // GL_LESS.  renderToFramebuffer() compensates for that explicitly, but this
++    // Native path did not, so the depth function stayed GL_LEQUAL whenever the
++    // render type is Native (the default).  SoBrepFaceSet draws the preselection
++    // / selection highlight first and the (coplanar) base faces afterwards, and
++    // with GL_LEQUAL the base faces satisfy z <= z and paint over the highlight,
++    // which made sub-element preselection invisible.  Mirror the Framebuffer path
++    // so both render types produce the same result.
++    glDepthFunc(GL_LESS);
++
+     if (!this->shading) {
+         state->push();
+         SoLightModelElement::set(state, selectionRoot, SoLightModelElement::BASE_COLOR);

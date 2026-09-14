@@ -140,6 +140,19 @@ if [ "$BUILD_FEM" = ON ] || [ "$BUILD_MESH_PART" = ON ]; then
 fi
 # OHOS libc exposes most pthread symbols but not pthread_cancel; Qt's
 # -pthread probe therefore fails before FindThreads can use libpthread.
+#
+# BUILD_BIM stays OFF for CMake on purpose. CheckInterModuleDependencies.cmake
+# declares REQUIRES_MODS(BUILD_BIM ... BUILD_MESH_PART ...), and MeshPart
+# would drag in C++ SMESH/VTK/MEDFile just to satisfy a dependency BIM only
+# uses from two lazy code paths. scripts/install-bim-module-ohos.sh mirrors
+# the BIM install manifest instead. FREECAD_BUILD_BIM controls that step.
+#
+# NOTE: this comment must stay OUTSIDE the argument list below. A comment line
+# that follows a backslash-continued line terminates the continued command, so
+# every -D option after it is silently dropped (and the comment's own next line
+# becomes a stray command). That is exactly how -DBUILD_BIM=OFF and the whole
+# BUILD_* block used to disappear, leaving BUILD_BIM at its ON default and
+# breaking the configuration against BUILD_MESH_PART=OFF.
 cmake_configure "$SRC" "$BUILD" "$PREFIX" \
     -DCMAKE_AUTOGEN_PARALLEL="$JOBS" \
     -DCMAKE_PREFIX_PATH="$PREFIX_PATH" \
@@ -192,11 +205,6 @@ cmake_configure "$SRC" "$BUILD" "$PREFIX" \
     -DBUILD_ADDONMGR="$BUILD_ADDONMGR" \
     -DBUILD_ARCH=OFF \
     -DBUILD_ASSEMBLY="$BUILD_ASSEMBLY" \
-    # BUILD_BIM stays OFF for CMake on purpose. CheckInterModuleDependencies.cmake
-    # declares REQUIRES_MODS(BUILD_BIM ... BUILD_MESH_PART ...), and MeshPart
-    # would drag in C++ SMESH/VTK/MEDFile just to satisfy a dependency BIM only
-    # uses from two lazy code paths. scripts/install-bim-module-ohos.sh mirrors
-    # the BIM install manifest instead. FREECAD_BUILD_BIM controls that step.
     -DBUILD_BIM=OFF \
     -DBUILD_CAM=ON \
     -DBUILD_CLOUD=OFF \
