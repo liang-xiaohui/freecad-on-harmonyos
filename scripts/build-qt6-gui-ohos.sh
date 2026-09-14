@@ -44,6 +44,8 @@ QPA_STARTUP_CONTENT_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/16-reuse-startup-con
 QPA_NATIVE_DIALOG_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/17-native-dialog-subwindows.patch"
 QPA_MOUSE_BUTTON_STATE_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/18-reconcile-native-mouse-buttons.patch"
 OPENGL_FBO_DEPTH_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/19-prefer-24bit-depth-attachment.patch"
+QPA_FRAME_MARGINS_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/20-scale-frame-margins-by-ohos-density.patch"
+QPA_PLATFORM_WINDOW_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohosplatformwindow.cpp"
 QPA_GL4ES_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohoseglplatformcontext.cpp"
 QPA_GL4ES_HEADER="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohoseglplatformcontext.h"
 QPA_OFFSCREEN_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohosplatformoffscreensurface.cpp"
@@ -231,6 +233,19 @@ apply_gl4es_qpa_patch() {
         apply_qpa_patch "$OPENGL_FBO_DEPTH_PATCH" "$OPENGL_FBO_SOURCE" \
             'reserveRenderbufferStorage' \
             "让 QOpenGLWidget 的深度附件优先使用 24 位格式"
+    fi
+
+    # OHOS 窗口管理器给出的装饰高度单位是 vp，必须按屏幕密度换算成原生像素。
+    # 这个 QPA 没有覆写 QPlatformScreen::devicePixelRatio()，它恒为 Qt 默认的
+    # 1.0，于是每个带装饰的 SubWindow 申请到的 windowRect 都比标题栏矮一截；
+    # 系统从客户区扣掉差额，QInputDialog 这类小对话框的内容就被裁掉。改用
+    # pixelDensity()。补丁另带一段 SubWindowCreate 诊断打印（QTFOROH-363），
+    # 与 ArkUI 页面 pages/SubWindowNativeNode 的客户区日志配对使用。
+    if ! grep -Fq 'predefinedWindowTitleBarHeight * screenDensity' "$QPA_PLATFORM_WINDOW_SOURCE" \
+        || ! grep -Fq 'SubWindowCreate: title=' "$QPA_VIEW_SOURCE"; then
+        apply_qpa_patch "$QPA_FRAME_MARGINS_PATCH" "$QPA_PLATFORM_WINDOW_SOURCE" \
+            'predefinedWindowTitleBarHeight * screenDensity' \
+            "按 OHOS 屏幕密度缩放子窗口装饰高度"
     fi
 
     # v11 is the last QPA binary that survived startup and painted the FreeCAD

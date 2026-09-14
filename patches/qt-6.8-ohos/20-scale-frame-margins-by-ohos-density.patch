@@ -1,0 +1,49 @@
+--- a/src/plugins/platforms/ohos/qohosplatformwindow.cpp
++++ b/src/plugins/platforms/ohos/qohosplatformwindow.cpp
+@@ -330,9 +330,17 @@
+     }
+ 
+     if (decorationPreset() == DecorationPreset::Standard) {
++        // The window manager states this height in vp, so it has to be scaled by the
++        // OHOS screen density to reach native pixels. Do not use
++        // QPlatformScreen::devicePixelRatio() here: this QPA does not override it,
++        // so it stays at Qt's default of 1.0 and leaves the margin unscaled. Every
++        // decorated OHOS SubWindow then requested a windowRect that was one title bar
++        // too short, and the system takes the missing pixels out of the client area,
++        // so small dialogs (QInputDialog and friends) came up with clipped contents.
+         // https://gitlab.siilicloud.com/automotive/customers/qt/qt-for-openharmony/ohos-mirrors/ohos-window-manager/utils/include/wm_common_inner.h
+         constexpr auto predefinedWindowTitleBarHeight = 37;
+-        const int titlebarHeightPixels = std::round(predefinedWindowTitleBarHeight * screen->devicePixelRatio());
++        const qreal screenDensity = screen->pixelDensity() > 0 ? screen->pixelDensity() : 1.0;
++        const int titlebarHeightPixels = std::round(predefinedWindowTitleBarHeight * screenDensity);
+         return QMargins{0, titlebarHeightPixels, 0, 0};
+     }
+ 
+--- a/src/plugins/platforms/ohos/render/qohosview.cpp
++++ b/src/plugins/platforms/ohos/render/qohosview.cpp
+@@ -620,6 +620,25 @@
+         createInfo.disableWindowFocusableBeforeLoadContentHack = window->windowFlags().testFlag(Qt::WindowDoesNotAcceptFocus);
+         createInfo.modal = qWindow->modality() != Qt::NonModal;
+         createInfo.windowRect = window->geometry().marginsAdded(window->frameMargins());
++        {
++            // Diagnostic only. Paired with the area log emitted by the ArkUI page
++            // pages/SubWindowNativeNode, this makes a device log show both the
++            // geometry Qt asks the system for and the client area the system grants.
++            // Remove once the decoration height is read back from the system
++            // (QTFOROH-363).
++            const auto geometry = window->geometry();
++            const auto margins = window->frameMargins();
++            const auto *screen = static_cast<QOhosPlatformScreen *>(window->screen());
++            qOhosPrintfInfo(
++                "SubWindowCreate: title='%s' decor=%d density=%f geometry=(%d,%d %dx%d) "
++                "margins=(%d,%d,%d,%d) windowRect=(%d,%d %dx%d)",
++                createInfo.windowTitle.c_str(), createInfo.decorEnabled ? 1 : 0,
++                screen != nullptr ? screen->pixelDensity() : -1.0,
++                geometry.x(), geometry.y(), geometry.width(), geometry.height(),
++                margins.left(), margins.top(), margins.right(), margins.bottom(),
++                createInfo.windowRect.x(), createInfo.windowRect.y(),
++                createInfo.windowRect.width(), createInfo.windowRect.height());
++        }
+         result = parentWindowProxy->createSubWindow(createInfo);
+ 
+         break;
