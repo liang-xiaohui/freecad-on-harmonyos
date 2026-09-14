@@ -16,6 +16,18 @@ interface StartupSplashSpec {
   heightVp: number;
 }
 
+// JSON.stringify() renders a BusinessError as "{}", because its name/message are
+// non-enumerable. Native setup failures are reported through napi_throw_error,
+// so surfacing .message is the only way to see what went wrong.
+function describeError(error: Object): string {
+  const candidate = error as Error;
+  if (candidate !== undefined && candidate !== null && typeof candidate.message === 'string' &&
+    candidate.message.length > 0) {
+    return candidate.name === undefined ? candidate.message : candidate.name + ': ' + candidate.message;
+  }
+  return JSON.stringify(error);
+}
+
 // Logical dimensions are half of the official _2x PNG canvas. The generated
 // resource adds 8 vp around every side for the expanded glass silhouette.
 const STARTUP_GLASS_PADDING_VP = 8;
@@ -379,7 +391,7 @@ export default class QAbility extends UIAbility {
       hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onCreate(): setupFreecadEnv done');
     } catch (e) {
       this.runtimeFailed = true;
-      hilog.error(LOG_DOMAIN, LOG_TAG, 'QAbility::onCreate(): setupFreecadEnv FAILED: ' + JSON.stringify(e));
+      hilog.error(LOG_DOMAIN, LOG_TAG, 'QAbility::onCreate(): setupFreecadEnv FAILED: ' + describeError(e));
       return;
     }
 
@@ -396,12 +408,12 @@ export default class QAbility extends UIAbility {
         this.forwardWindowStageIfReady();
       }).catch((e: Error) => {
         this.runtimeFailed = true;
-        hilog.error(LOG_DOMAIN, LOG_TAG, 'QAbility::onCreate(): materialize FAILED: ' + JSON.stringify(e));
+        hilog.error(LOG_DOMAIN, LOG_TAG, 'QAbility::onCreate(): materialize FAILED: ' + describeError(e));
       });
       hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onCreate(): native materialize queued; Qt start deferred');
     } catch (e) {
       this.runtimeFailed = true;
-      hilog.error(LOG_DOMAIN, LOG_TAG, 'QAbility::onCreate(): native materialize setup FAILED: ' + JSON.stringify(e));
+      hilog.error(LOG_DOMAIN, LOG_TAG, 'QAbility::onCreate(): native materialize setup FAILED: ' + describeError(e));
     }
   }
 

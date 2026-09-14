@@ -82,6 +82,18 @@ std::string libraryRoot()
     return parentDirectory(info.dli_fname);
 }
 
+// QAbilityStage::setAppArgsFromWant() is handed ApplicationContext.filesDir,
+// which is one level above the UIAbility files directory used by
+// setupFreecadEnv(): <app>/files versus <app>/haps/<module>/files. QPA snapshots
+// the argv of whichever caller reaches it first, and both orders have been
+// observed on device, so the script path FreeCAD is asked to execute can be
+// derived from either directory. Map a UIAbility files directory to its
+// application-level counterpart.
+std::string applicationFilesDirectory(const std::string& filesDir)
+{
+    return parentDirectory(parentDirectory(parentDirectory(filesDir))) + "/files";
+}
+
 // The HarmonyOS OpenGL wrapper reads NEED_OPENGL while the Qt/QPA application
 // is being initialized.  QAbilityStage performs that initialization before
 // QAbility::onCreate() can prepare the FreeCAD runtime, so keep this setup in
@@ -1405,9 +1417,8 @@ void materializeFreecadRuntimeDirectory(const std::string& filesDir)
                  root.c_str(), home.c_str());
 }
 
-std::string writeGuiStartupScript(const std::string& filesDir)
+void writeStartupScriptInto(const std::string& home)
 {
-    const std::string home = filesDir + "/freecad-home";
     ensureDirectory(home);
     const std::string script = home + "/harmonyos_startup.py";
     std::ofstream output(script, std::ios::trunc);
@@ -1424,7 +1435,21 @@ std::string writeGuiStartupScript(const std::string& filesDir)
         "    print('FreeCAD startup preference cleanup failed: %s' % exc)\n")) {
         throw std::runtime_error("cannot write FreeCAD GUI startup script");
     }
-    return script;
+}
+
+std::string writeGuiStartupScript(const std::string& filesDir)
+{
+    const std::string home = filesDir + "/freecad-home";
+    writeStartupScriptInto(home);
+    // QPA may hand FreeCAD the application-level path instead (see
+    // applicationFilesDirectory()); QAbilityStage and QAbility race to publish
+    // the argv. Install the same script under both roots so the file FreeCAD is
+    // asked to run always exists.
+    const std::string appFiles = applicationFilesDirectory(filesDir);
+    if (appFiles != filesDir) {
+        writeStartupScriptInto(appFiles + "/freecad-home");
+    }
+    return home + "/harmonyos_startup.py";
 }
 
 struct JobWork {

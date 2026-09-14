@@ -19,6 +19,13 @@ export default class QAbilityStage extends AbilityStage {
   // QPA consumes this as the argv passed to FreeCAD's real main(). The generic
   // startup script clears stale references to workbenches that are no longer
   // installed; product-specific workbenches are injected by their own launcher.
+  //
+  // NOTE: the *application* files directory is used here because an AbilityStage
+  // has no UIAbility context. QAbility::onCreate() republishes the same argv with
+  // its own (module-level) files directory, and whichever caller reaches
+  // initQtAppContextImpl() first wins the snapshot, so the two disagree. The
+  // native side therefore installs harmonyos_startup.py under both roots
+  // (see applicationFilesDirectory() in entry/src/main/cpp/acceptance.cpp).
   public static setAppArgsFromWant(want: Want, filesDir: string): void {
     let args: Array<string> = [APP_LIBRARY_NAME, filesDir + '/freecad-home/harmonyos_startup.py'];
     let parameters = want.parameters as Record<string, Object> | undefined;

@@ -27,13 +27,32 @@ diff --git a/src/App/ApplicationDirectories.cpp b/src/App/ApplicationDirectories
  #ifdef LIBRARYDIR
      // #6892: Conda may inject null characters
      fs::path path = sanitizePath(LIBRARYDIR);
-@@ -702,6 +714,11 @@
+@@ -702,6 +714,30 @@
  
  fs::path ApplicationDirectories::findHomePath(const char* sCall)
  {
++    // OHOS: there is no installed FreeCAD prefix and no meaningful argv[0] to
++    // derive one from. The HarmonyOS app runtime execs the process from
++    // /system/bin, so readlink("/proc/self/exe") below yields "/system/" and
++    // every derived directory (Mod, Ext, share, Macro) then points into the
++    // read-only system image. FreeCADInit.py reports "No modules found in
++    // /system/Mod", __ModDirs__ ends up empty and no workbench is ever
++    // registered. The launcher hands the writable runtime root over in
++    // FREECAD_APP_HOME, which is authoritative when set.
++    // The discovery code below always returns a path that ends with a separator
++    // (it slices absPath up to and including the last slash) and the rest of
++    // the application depends on that: configurePaths() builds BinPath/DocPath
++    // by appending "bin"/"doc" verbatim, and shipped modules such as
++    // Mod/PartDesign/WizardShaft/WizardShaft.py concatenate
++    // ConfigGet("AppHomePath") with relative paths the same way. Restore the
++    // separator when the environment supplies a plain directory name.
 +    if (const char* configuredHome = std::getenv("FREECAD_APP_HOME");
 +        configuredHome != nullptr && *configuredHome != '\0') {
-+        return Base::FileInfo::stringToPath(configuredHome);
++        std::string home(configuredHome);
++        if (home.back() != '/') {
++            home.push_back('/');
++        }
++        return Base::FileInfo::stringToPath(home);
 +    }
 +
      // We have three ways to start this application either use one of the two executables or
