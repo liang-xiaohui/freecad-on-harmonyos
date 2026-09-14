@@ -147,12 +147,12 @@ SketchObject::execute → buildInternals(闭合线框→内部面) → InternalS
 注意 `setupObject()` 只在新建对象时调用；已保存文档里的旧草绘仍带着
 存档的 `MakeInternals=false`，需要在属性面板手动打开（或重新创建）。
 
-同批改动：3D 视图的坐标轴十字默认开启
-（`patches/freecad-1.1.2/ohos-axis-cross-default.patch`，
-`View3DSettings`/`CommandDoc` 两处 `GetBool("ShowAxisCross", ...)` 默认值
-false→true，仍可在首选项关闭）；历史存量的显式 false 由同一个
-user.cfg 迁移（`dropStaleBoolPreferences`，带一次性标记
-`freecad-home/.prefs-migrated-*`，不会覆盖用户之后的选择）。
+同批曾把 3D 视图的原点坐标轴十字默认开启；真机 FEM 结果显示期间黑块、标签和
+箭头曾随该叠加路径变化，因此该默认开启改动已撤回。现在保持 FreeCAD 原本的默认
+关闭，用户仍可通过 View 菜单或 `Gui.ActiveDocument.ActiveView.setAxisCross(True)`
+手动打开做对照，但不能把“关闭后暂时不见黑块”当作根因或修复。角落导航立方体
+和右下角 feedback axis cross 仍由单独的 `ohos-enable-navicube-axiscross.patch`
+控制。
 
 **通用教训**：OHOS 上任何"默认值从关改开"的参数，要三处一起改——
 代码里的 GetBool 默认值、首选项 .ui 的控件默认值、以及存量 user.cfg 的
@@ -257,20 +257,26 @@ warning 弹成用户可见通知 → 洪泛。修复
 
 最终修复分两层：
 
-1. `ohos-fpe-scratch-lifetime.patch` 在释放 GL4ES 为 FPE 转换的客户端属性数组前
-   等待原生绘制完成，避免异步 GLES 消费已经释放的 scratch 内存。
+1. `ohos-fpe-scratch-lifetime.patch` 为每个 GL4ES context 保存批处理计数；BGRA
+   客户端颜色数组由 `ohos-fpe-client-array-vbo.patch` 转换后上传到临时 GLES VBO，
+   避免异步 GLES 消费已经释放的客户端数组，同时不需要逐绘制等待。
 2. `ohos-draw-batch-throttle.patch` 为每个 GL4ES context 统计 FPE 原生 draw，
-   每 4 条执行一次 `glFinish()`；普通和 instanced DrawArrays/DrawElements 都计数，
-   scratch 路径也会在释放前完成当前批次。限制只在 `__OHOS__` 下启用。
+   每 4 条执行一次非阻塞 `glFlush()`，限制单个 Zink 提交批次而不等待 GPU；普通和
+   instanced DrawArrays/DrawElements 都计数。限制只在 `__OHOS__` 下启用。
 
-4 条阈值已在真机的大 BIM 示例上连续旋转验证通过。以下实验不能解决大模型卡死：
+最终版本已在真机的大 BIM 示例上连续旋转验证通过：FreeCAD 进程持续存活，日志无
+`DEVICE LOST`、GPU reset 或页错误。启用 VBO 后，FreeCAD 的 3D `paintEvent()`
+耗时由约 100 ms 降至约 25 ms，但该数字不包含 QWidget/QOpenGLWidget 合成与
+`swapBuffers()`，不能据此推算 40 FPS；RenderService 的实际 Surface 帧率仍只有约
+10–18 FPS。以下实验不能解决大模型卡死：
 禁用全部 GL4ES VBO、只在每帧末 `glFinish()`、只保护 scratch 数组、临时把一次性
 renderlist 上传到 VBO，以及每 16 条 draw 同步。每条 FPE draw 都同步也能缓解，
-但交互明显更慢，因此最终采用实测可用的 4 条阈值。该修复以吞吐量换取驱动稳定性；
-若更换 GPU/系统版本，应重新用复杂 BIM 场景压测后再放宽阈值。
+每 4 条 `glFinish()` 也稳定但把帧率压到约 10 FPS；因此最终用每 4 条 `glFlush()`
+保留异步流水线。若更换 GPU/系统版本，应重新用复杂 BIM 场景压测后再放宽阈值。
 
-两个补丁必须按上述顺序应用，因为 draw 节流补丁会把 scratch 补丁中的直接
-`glFinish()` 改为统一的 pending-draw 完成函数。
+三个补丁按 `ohos-fpe-scratch-lifetime.patch`、`ohos-fpe-client-array-vbo.patch`、
+`ohos-draw-batch-throttle.patch` 顺序应用；VBO 补丁依赖 scratch 结构中的
+`ohos_pending_draw_count` 字段，节流补丁随后只使用非阻塞 `glFlush()`。
 
 ## 9. 调试方法论
 

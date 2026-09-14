@@ -1,3 +1,17 @@
+diff --git a/include/gl4esinit.h b/include/gl4esinit.h
+--- a/include/gl4esinit.h
++++ b/include/gl4esinit.h
+@@ -22,6 +22,9 @@ void set_getmainfbsize(void (APIENTRY_GL4ES *new_getMainFBSize)(int* width, int*
+ void initialize_gl4es(void);
+ // do this to uninitialize GL4ES if init constructors are disabled.
+ void close_gl4es(void);
++// Keep gl4es state in sync when EGL contexts are made current externally
++// instead of through gl4es' GLX context API.
++void gl4es_activate_external_context(void *native_context, void *shared_native_context);
+ // wrapped GetProcAddress
+ void* APIENTRY_GL4ES gl4es_GetProcAddress(const char *name);
+ 
+diff --git a/src/gl/init.c b/src/gl/init.c
 --- a/src/gl/init.c
 +++ b/src/gl/init.c
 @@ -15,6 +15,7 @@
@@ -8,7 +22,7 @@
  #include "init.h"
  #include "envvars.h"
  #if defined(__EMSCRIPTEN__) || defined(__APPLE__)
-@@ -59,6 +60,73 @@
+@@ -59,6 +60,101 @@ void glx_init();
  
  static int inited = 0;
  
@@ -65,11 +79,39 @@
 +    ActivateGLState(state);
 +
 +    // Qt may have used the native GLES context directly since GL4ES last saw
-+    // it. Force the next fixed-pipeline draw to restore the program, buffer
-+    // bindings and vertex-array enables that GL4ES tracks internally. In
-+    // particular, a Qt VBO left bound would make Coin's client pointers be
-+    // interpreted as offsets into that unrelated buffer.
++    // it. Restore native fixed-function state which GL4ES normally skips when
++    // its cache already holds the requested value, then force the next draw to
++    // restore program, buffer bindings and vertex-array enables. Without this,
++    // Qt's compositor can leave blending or depth testing disabled while GL4ES
++    // believes they are enabled, making transparent faces opaque and allowing
++    // later triangles to overwrite earlier geometry.
 +    if (glstate != NULL && glstate->gleshard != NULL && glstate->vao != NULL) {
++        LOAD_GLES(glEnable);
++        LOAD_GLES(glDisable);
++        LOAD_GLES(glBlendFunc);
++        LOAD_GLES(glDepthFunc);
++        LOAD_GLES(glDepthMask);
++
++#define RESTORE_NATIVE_CAP(cap, enabled) \
++        do { \
++            if (enabled) \
++                gles_glEnable(cap); \
++            else \
++                gles_glDisable(cap); \
++        } while (0)
++
++        RESTORE_NATIVE_CAP(GL_BLEND, glstate->enable.blend && !globals4es.shaderblend);
++        RESTORE_NATIVE_CAP(GL_CULL_FACE, glstate->enable.cull_face);
++        RESTORE_NATIVE_CAP(GL_DEPTH_TEST, glstate->enable.depth_test);
++        RESTORE_NATIVE_CAP(GL_STENCIL_TEST, glstate->enable.stencil_test);
++        RESTORE_NATIVE_CAP(GL_POLYGON_OFFSET_FILL, glstate->enable.polyfill_offset);
++#undef RESTORE_NATIVE_CAP
++
++        if (!globals4es.shaderblend)
++            gles_glBlendFunc(glstate->blendsfactorrgb, glstate->blenddfactorrgb);
++        gles_glDepthFunc(glstate->depth.func);
++        gles_glDepthMask(glstate->depth.mask);
++
 +        glstate->gleshard->program = 0;
 +        glstate->gleshard->glprogram = NULL;
 +        glstate->bind_buffer.array = ~0U;
@@ -82,15 +124,3 @@
  EXPORT
  void set_getmainfbsize(void (APIENTRY_GL4ES  *new_getMainFBSize)(int* w, int* h)) {
      gl4es_getMainFBSize = (void*)new_getMainFBSize;
---- a/include/gl4esinit.h
-+++ b/include/gl4esinit.h
-@@ -22,6 +22,9 @@
- void initialize_gl4es(void);
- // do this to uninitialize GL4ES if init constructors are disabled.
- void close_gl4es(void);
-+// Keep gl4es state in sync when EGL contexts are made current externally
-+// instead of through gl4es' GLX context API.
-+void gl4es_activate_external_context(void *native_context, void *shared_native_context);
- // wrapped GetProcAddress
- void* APIENTRY_GL4ES gl4es_GetProcAddress(const char *name);
- 

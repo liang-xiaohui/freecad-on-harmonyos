@@ -25,6 +25,8 @@ OCCT_PREFIX="${OCCT_PREFIX:-$CPP_LIB_ROOT/install/occt/7.8.1/ohos/$ABI}"
 YAML_CPP_PREFIX="${YAML_CPP_PREFIX:-$CPP_LIB_ROOT/install/yaml-cpp/0.8.0/ohos/$ABI}"
 VTK_PREFIX="${VTK_PREFIX:-$CPP_LIB_ROOT/install/vtk/9.3.1/ohos/$ABI}"
 VTK_DIR="${VTK_DIR:-$VTK_PREFIX/lib/cmake/vtk-9.3}"
+HDF5_PREFIX="${HDF5_PREFIX:-$CPP_LIB_ROOT/install/hdf5/1.14.6/ohos/$ABI}"
+MEDFILE_PREFIX="${MEDFILE_PREFIX:-$CPP_LIB_ROOT/install/medfile/6.0.1/ohos/$ABI}"
 FMT_SOURCE="${FMT_SOURCE:-$CPP_LIB_ROOT/sources/fmt/9.1.0}"
 PYBIND11_ROOT="${PYBIND11_ROOT:-$CPP_LIB_ROOT/sources/pybind11/pybind11-2.13.6}"
 PYTHON_ROOT="${PYTHON_ROOT:-$CPP_LIB_ROOT/install/python/3.11.4/ohos/$ABI}"
@@ -35,7 +37,7 @@ SWIG_VERSION="${SWIG_VERSION:-4.2.1}"
 PIVY_SITE="${PIVY_SITE:-$CPP_LIB_ROOT/install/pivy/ohos/$ABI/site-packages}"
 BUILD_MESH_PART="${FREECAD_BUILD_MESH_PART:-OFF}"
 BUILD_BIM="${FREECAD_BUILD_BIM:-OFF}"
-BUILD_FEM="${FREECAD_BUILD_FEM:-OFF}"
+BUILD_FEM="${FREECAD_BUILD_FEM:-ON}"
 BUILD_ASSEMBLY="${FREECAD_BUILD_ASSEMBLY:-ON}"
 BUILD_REVERSEENGINEERING="${FREECAD_BUILD_REVERSEENGINEERING:-ON}"
 BUILD_ADDONMGR="${FREECAD_BUILD_ADDONMGR:-ON}"
@@ -123,9 +125,19 @@ export LD_LIBRARY_PATH="$QT_PREFIX/lib:$PIVY_SITE:$COIN_PREFIX/lib:$GL4ES_DIR${L
 PREFIX_PATH="$QT_PREFIX;$COIN_PREFIX;$BOOST_PREFIX;$EIGEN_PREFIX;$XERCES_PREFIX;$OCCT_PREFIX;$YAML_CPP_PREFIX;$VTK_PREFIX;$PYTHON_ROOT;$PYSIDE6_PREFIX;$SHIBOKEN6_PREFIX"
 FIND_ROOT_PATH="$NATIVE_SDK;$QT_PREFIX;$COIN_PREFIX;$BOOST_PREFIX;$EIGEN_PREFIX;$XERCES_PREFIX;$OCCT_PREFIX;$YAML_CPP_PREFIX;$VTK_PREFIX;$PYTHON_ROOT;$PYSIDE6_PREFIX;$SHIBOKEN6_PREFIX"
 
-# FEM, BIM, and MeshPart pull in Salome SMESH, which additionally requires
-# MEDFile/HDF5. Those OHOS packages are not installed in this toolchain.
-# Keep the Mesh workbench itself enabled; MeshPart is an optional extension.
+# BIM is not gated here: it is pure Python and is installed after the C++ build
+# by scripts/install-bim-module-ohos.sh. Only FEM and MeshPart pull in SMESH.
+if [ "$BUILD_FEM" = ON ] || [ "$BUILD_MESH_PART" = ON ]; then
+    for required in "$HDF5_PREFIX/include/hdf5.h" "$HDF5_PREFIX/lib/libhdf5.so" \
+                    "$MEDFILE_PREFIX/include/med.h" "$MEDFILE_PREFIX/lib/libmedC.so"; do
+        [ -f "$required" ] || {
+            echo "缺少 SMESH 依赖：$required；先运行 build-hdf5-ohos.sh 和 build-medfile-ohos.sh" >&2
+            exit 1
+        }
+    done
+    PREFIX_PATH="$PREFIX_PATH;$HDF5_PREFIX;$MEDFILE_PREFIX"
+    FIND_ROOT_PATH="$FIND_ROOT_PATH;$HDF5_PREFIX;$MEDFILE_PREFIX"
+fi
 # OHOS libc exposes most pthread symbols but not pthread_cancel; Qt's
 # -pthread probe therefore fails before FindThreads can use libpthread.
 cmake_configure "$SRC" "$BUILD" "$PREFIX" \
@@ -171,12 +183,21 @@ cmake_configure "$SRC" "$BUILD" "$PREFIX" \
     -DFREECAD_USE_PYSIDE=ON \
     -DFREECAD_USE_3DCONNEXION_LEGACY=OFF \
     -DBUILD_FEM="$BUILD_FEM" \
-    -DBUILD_SMESH=OFF \
+    -DFREECAD_USE_EXTERNAL_SMESH=OFF \
+    -DHDF5_ROOT="$HDF5_PREFIX" \
+    -DHDF5_INCLUDE_DIR="$HDF5_PREFIX/include" \
+    -DHDF5_USE_STATIC_LIBRARIES=OFF \
+    -DMEDFILE_ROOT_DIR="$MEDFILE_PREFIX" \
     -DBUILD_FEM_NETGEN=OFF \
     -DBUILD_ADDONMGR="$BUILD_ADDONMGR" \
     -DBUILD_ARCH=OFF \
     -DBUILD_ASSEMBLY="$BUILD_ASSEMBLY" \
-    -DBUILD_BIM="$BUILD_BIM" \
+    # BUILD_BIM stays OFF for CMake on purpose. CheckInterModuleDependencies.cmake
+    # declares REQUIRES_MODS(BUILD_BIM ... BUILD_MESH_PART ...), and MeshPart
+    # would drag in C++ SMESH/VTK/MEDFile just to satisfy a dependency BIM only
+    # uses from two lazy code paths. scripts/install-bim-module-ohos.sh mirrors
+    # the BIM install manifest instead. FREECAD_BUILD_BIM controls that step.
+    -DBUILD_BIM=OFF \
     -DBUILD_CAM=ON \
     -DBUILD_CLOUD=OFF \
     -DBUILD_DRAFT=ON \
@@ -230,6 +251,14 @@ for target in ImportGui PartDesignGui SketcherGui; do
         exit 1
     }
 done
+if [ "$BUILD_FEM" = ON ]; then
+    for target in SMESH Fem FemGui FemScriptsTarget FemGuiScriptsTarget; do
+        grep -q "/CMakeFiles/$target.dir" "$TARGETS" || {
+            echo "错误：FEM 已启用但未生成 $target 目标" >&2
+            exit 1
+        }
+    done
+fi
 if [ "$BUILD_ASSEMBLY" = ON ]; then
     for target in Assembly AssemblyGui AssemblyScripts; do
         grep -q "/CMakeFiles/$target.dir" "$TARGETS" || {

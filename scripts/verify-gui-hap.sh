@@ -27,6 +27,7 @@ BUILD_ADDONMGR="${FREECAD_BUILD_ADDONMGR:-ON}"
 BUILD_START="${FREECAD_BUILD_START:-ON}"
 BUILD_ASSEMBLY="${FREECAD_BUILD_ASSEMBLY:-ON}"
 BUILD_REVERSEENGINEERING="${FREECAD_BUILD_REVERSEENGINEERING:-ON}"
+BUILD_FEM="${FREECAD_BUILD_FEM:-ON}"
 
 [ -f "$HAP" ] || { echo "错误：找不到 HAP：$HAP" >&2; exit 1; }
 for c in node unzip stat sha256sum; do
@@ -171,6 +172,28 @@ for lib in libfreecadqtapp.so FreeCAD.so FreeCADGui.so Part.so PartGui.so \
         exit 1
     fi
 done
+if [ "$BUILD_FEM" = ON ]; then
+    for lib in Fem.so FemGui.so; do
+        unzip -l "$HAP" | grep -qE "libs/arm64-v8a/$lib$" || {
+            echo "错误：FEM native 库缺失：$lib" >&2
+            exit 1
+        }
+        echo "    ✓ $lib"
+    done
+    for entry in Mod/Fem/Init.py Mod/Fem/InitGui.py Mod/Fem/ObjectsFem.py \
+                 Mod/Fem/femobjects/material_common.py \
+                 Mod/Fem/femviewprovider/view_material_common.py \
+                 share/licenses/fem-dependencies/HDF5-COPYING \
+                 share/licenses/fem-dependencies/MEDFile-COPYING \
+                 share/licenses/fem-dependencies/MEDFile-COPYING.LESSER \
+                 share/licenses/fem-dependencies/OHOS-native-NOTICE.txt; do
+        unzip -p "$RUNTIME_ZIP" "$entry" >/dev/null 2>&1 || {
+            echo "错误：freecad-runtime.zip 缺少 FEM 脚本：$entry" >&2
+            exit 1
+        }
+        echo "    ✓ $entry"
+    done
+fi
 if [ "$BUILD_ASSEMBLY" = ON ]; then
     for lib in AssemblyApp.so AssemblyGui.so; do
         unzip -l "$HAP" | grep -qE "libs/arm64-v8a/$lib$" || {

@@ -144,13 +144,13 @@ FreeCAD GUI 需要 `Mod/Ext/share` 与 Python stdlib；HAP rawfile 里的 `freec
 
 - 2026-08-25 真机已显示主窗口、New Document、Part/Cube 与复杂多色示例。3D 根因不是 FEM/Assembly 缺模块，也不是要把所有 RasterSurface 强制改成 GL backing store，而是 Qt 与 gl4es 共用 GLES context 时的缓存失配。`patches/gl4es-81547d9/ohos-external-context-state.patch` 与 QPA patch 02/11 完成 context 映射、proc address 解析和 program/VBO/EBO/vertex-attrib 缓存失效。
 - 2026-09-05 修复 Part 新建 Cube 时 `ViewFit` 放大动画的裁切变形。Coin 的自动裁剪面由延迟传感器更新，OHOS queued paint 偶尔先于传感器执行，导致某帧使用上一相机位置的 near/far。`ohos-view-all-clipping-sync.patch` 在每次动画相机更新后同步处理延迟队列；10 帧深度探针与真机观察均通过，诊断日志未进入生产补丁。
-- 2026-09-06 修复两类旋转卡住：Qt QPA patch 18 用 ArkUI 完整按键集合补偿丢失的鼠标 Press/Release/CANCEL，避免松键后视角持续摆动；`ohos-fpe-scratch-lifetime.patch` 与 `ohos-draw-batch-throttle.patch` 则处理复杂模型旋转时的 Zink/GPU `DEVICE LOST`，将 OHOS FPE 原生绘制限制为每 4 条同步一次。16 条阈值在 `BIMExample.FCStd` 上仍失败，4 条已通过真机连续旋转验证。该限制有同步开销，调整阈值必须用大 BIM 场景回归，详见 `docs/sketcher-rendering-debug-playbook.md` 第 8.6 节。
+- 2026-09-06 修复两类旋转卡住：Qt QPA patch 18 用 ArkUI 完整按键集合补偿丢失的鼠标 Press/Release/CANCEL，避免松键后视角持续摆动；GL4ES 的 scratch 客户端颜色数组现由 `ohos-fpe-client-array-vbo.patch` 上传到临时 GLES VBO，`ohos-draw-batch-throttle.patch` 每 4 条普通 FPE draw 使用非阻塞 `glFlush()`，共同避免复杂模型旋转时的 Zink/GPU `DEVICE LOST` 与逐绘制 `glFinish()`。FreeCAD 显示的约 25 ms 只统计 `QuarterWidget::paintEvent()`，不能换算为最终帧率；RenderService 实测仍约 10–18 FPS，候选包需用实际 Surface 帧率复核。详见 `docs/sketcher-rendering-debug-playbook.md` 第 8.6 节。
 - Edit → Preferences 已打开成功。`patches/freecad-1.1.2/ohos-native-uitools.patch` 恢复原生 QUiLoader、链接 `libQt6UiTools.so.6`，并为失败页面增加空值防线。
 - QPA patch 12 在输入法 controller detached 时延后 cursor rectangle 更新，避免数万条非侵入通知淹没界面。
 - 当前包 SHA-256 见 `docs/handoff-device-steps.md`。后续重点是长时间相机交互、更多工作台、文件对话框和前后台切换。
 - 如果下拉菜单仍只有 Part、Material、Mesh，先运行 `./scripts/verify-gui-hap.sh`；它会拒绝缺少三个 GUI native 库或使用旧 rawfile 的 HAP。
-- MeshPart/BIM 需要额外的 Salome SMESH、MEDFile 和 HDF5；依赖未安装时保持关闭，不影响 PartDesign/Sketcher/Import 等核心工作台。
-- Assembly 默认启用。FreeCAD 1.1.2 发布源码不包含 `OndselSolver` 子模块，重建脚本会固定准备标签记录的提交（`30e9b64e8bf881d438d4b88834f9ba3674865418`）。Reverse Engineering 同样默认启用；MeshPart、BIM、FEM 因 SMESH/MEDFile/HDF5 依赖未移植而保持关闭。
+- FEM 默认启用；构建脚本准备 HDF5 1.14.6、MEDFile 6.0.1，并编译 FreeCAD 内置 SMESH 7.7.1。staging 同时收集 MED/HDF5 和 SDK OpenMP runtime，并检查 FEM 原生库、Python 代理及依赖许可文件。构建和数据验收方法见 `docs/fem-ohos.md`；外部网格生成器和求解器不在本次接入范围内。
+- Assembly 默认启用。FreeCAD 1.1.2 发布源码不包含 `OndselSolver` 子模块，重建脚本会固定准备标签记录的提交（`30e9b64e8bf881d438d4b88834f9ba3674865418`）。Reverse Engineering 同样默认启用；MeshPart 本次仍保持关闭，不能因 FEM 依赖就绪就视为该工作台已经验收。BIM（Arch）已于 2026-09-14 接入，但它是纯 Python、由 `scripts/install-bim-module-ohos.sh` 在 `cmake --install` 之后按安装清单写入前缀（不走 CMake 的 `BUILD_BIM`，因为那会连带要求 `BUILD_MESH_PART`），详见 `docs/bim-ohos.md`。
 - Addon Manager 默认开启；发布源码不包含该子模块时，重建脚本会固定准备提交 `937b6877239dc78ef59eeefe8099e5f14243eda1`。无网络或不需要附加组件管理器时可设置 `FREECAD_BUILD_ADDONMGR=OFF`。
 - Start 默认开启；它使用 Microsoft.GSL 的 `gsl::owner` 头文件，重建脚本会固定准备 FreeCAD 1.1.2 记录的提交 `543d0dd3fe966ddf20e884b44e5fdbf12cb43784`。无网络时可设置 `FREECAD_BUILD_START=OFF`，但会失去 Start/StartGui 工作台。
 - 2026-08-24 本地端到端复验：**GUI HAP 运行时（Qt6 staged 集合）跑通全部 6 项验收**（OK: True）——OCCT、FreeCAD 1.1.2、Part/Import/Materials/Mesh/PartDesign/Sketcher 导入、Box/Cylinder/Boolean、FCStd、STEP、STL。可直接运行 `scripts/run-staged-freecad-acceptance.sh`。

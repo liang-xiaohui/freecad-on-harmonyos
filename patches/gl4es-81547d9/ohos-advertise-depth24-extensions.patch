@@ -1,0 +1,20 @@
+diff --git a/src/gl/getter.c b/src/gl/getter.c
+--- a/src/gl/getter.c
++++ b/src/gl/getter.c
+@@ -164,6 +164,15 @@
+                 "GL_ARB_draw_buffers "
+                 "GL_EXT_draw_buffers2 "
+                 );
++        // Advertise the OES depth formats this build reports. This does NOT
++        // influence Qt: Qt resolves GL entry points through the OHOS QPA's
++        // eglGetProcAddress, so QOpenGLExtensionMatcher reads the NATIVE
++        // driver's GL_EXTENSIONS string and never sees gl4es'. Kept only to
++        // report gl4es' own capabilities honestly to direct callers.
++        if(hardext.depthstencil)
++            strcat(extensions, "GL_OES_packed_depth_stencil ");
++        if(hardext.depth24)
++            strcat(extensions, "GL_OES_depth24 ");
+         if(hardext.pointsprite)
+             strcat(extensions, "GL_ARB_point_sprite ");
+         if(hardext.cubemap) {
+

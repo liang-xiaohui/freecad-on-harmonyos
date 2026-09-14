@@ -16,11 +16,15 @@ BUILD_ADDONMGR="${FREECAD_BUILD_ADDONMGR:-ON}"
 BUILD_START="${FREECAD_BUILD_START:-ON}"
 BUILD_ASSEMBLY="${FREECAD_BUILD_ASSEMBLY:-ON}"
 BUILD_REVERSEENGINEERING="${FREECAD_BUILD_REVERSEENGINEERING:-ON}"
+BUILD_FEM="${FREECAD_BUILD_FEM:-ON}"
+BUILD_BIM="${FREECAD_BUILD_BIM:-ON}"
 QT_PREFIX="$CPP_LIB_ROOT/install/qt/6.8.3/ohos/$ABI"
 PYTHON_ROOT="$CPP_LIB_ROOT/install/python/3.11.4/ohos/$ABI"
 OCCT_PREFIX="${OCCT_PREFIX:-$CPP_LIB_ROOT/install/occt/7.8.1/ohos/$ABI}"
 XERCES_PREFIX="${XERCES_PREFIX:-$CPP_LIB_ROOT/install/xerces-c/3.2.4/ohos/$ABI}"
 VTK_PREFIX="${VTK_PREFIX:-$CPP_LIB_ROOT/install/vtk/9.3.1/ohos/$ABI}"
+HDF5_PREFIX="${HDF5_PREFIX:-$CPP_LIB_ROOT/install/hdf5/1.14.6/ohos/$ABI}"
+MEDFILE_PREFIX="${MEDFILE_PREFIX:-$CPP_LIB_ROOT/install/medfile/6.0.1/ohos/$ABI}"
 LIBFFI_PREFIX="${LIBFFI_PREFIX:-$CPP_LIB_ROOT/install/libffi/3.4.2/ohos/$ABI}"
 COIN_PREFIX="$CPP_LIB_ROOT/install/coin/4.0.0/ohos/$ABI"
 GL4ES_DIR="$CPP_LIB_ROOT/install/gl4es/81547d9/ohos/$ABI/usr/lib/gl4es"
@@ -69,6 +73,16 @@ for required in \
         exit 1
     }
 done
+if [ "$BUILD_FEM" = ON ]; then
+    for required in lib/Fem.so lib/FemGui.so Mod/Fem/Init.py Mod/Fem/InitGui.py \
+                    Mod/Fem/ObjectsFem.py Mod/Fem/femobjects/material_common.py \
+                    Mod/Fem/femviewprovider/view_material_common.py; do
+        [ -f "$FREECAD_PREFIX/$required" ] || {
+            echo "错误：FEM 已启用但未安装完整：$required" >&2
+            exit 1
+        }
+    done
+fi
 if [ "$BUILD_ADDONMGR" = ON ]; then
     for required in \
         "$FREECAD_PREFIX/Mod/AddonManager/Init.py" \
@@ -85,6 +99,24 @@ if [ "$BUILD_START" = ON ]; then
         "$FREECAD_PREFIX/Mod/Start/InitGui.py"; do
         [ -f "$required" ] || {
             echo "错误：Start 工作台已启用但未安装：$required" >&2
+            exit 1
+        }
+    done
+fi
+if [ "$BUILD_BIM" = ON ]; then
+    # BIM is pure Python (no .so). Without it, PropertyPythonObject::Restore
+    # blocks every Arch* module and each Arch object loses its Proxy, so
+    # execute() never runs and the document silently degrades to a display-only
+    # copy of the stored shapes.
+    for required in \
+        Mod/BIM/Init.py \
+        Mod/BIM/InitGui.py \
+        Mod/BIM/ArchWall.py \
+        Mod/BIM/ArchStructure.py \
+        Mod/BIM/ArchComponent.py \
+        Mod/BIM/Arch_rc.py; do
+        [ -f "$FREECAD_PREFIX/$required" ] || {
+            echo "错误：BIM 已启用但未安装：$required" >&2
             exit 1
         }
     done
@@ -249,6 +281,17 @@ echo "==> Package Python and FreeCAD GUI runtime as rawfiles"
 (cd "$FREECAD_PREFIX" && \
     zip -q -r "$RAW_STAGE/freecad-runtime.zip" Mod Ext share \
         -x '*/__pycache__/*' '*.pyc' '*.so' '*.so.*')
+if [ "$BUILD_FEM" = ON ]; then
+    FEM_ARTIFACT_ROOT="${FREECAD_ARTIFACT_ROOT:-/storage/Users/currentUser/codex-freecad-artifacts}"
+    mkdir -p "$FEM_ARTIFACT_ROOT"
+    FEM_LICENSE_STAGE=$(mktemp -d "$FEM_ARTIFACT_ROOT/fem-licenses.XXXXXX")
+    mkdir -p "$FEM_LICENSE_STAGE/share/licenses/fem-dependencies"
+    cp "$HDF5_PREFIX/share/COPYING" "$FEM_LICENSE_STAGE/share/licenses/fem-dependencies/HDF5-COPYING"
+    cp "$MEDFILE_PREFIX/share/licenses/medfile/COPYING" "$FEM_LICENSE_STAGE/share/licenses/fem-dependencies/MEDFile-COPYING"
+    cp "$MEDFILE_PREFIX/share/licenses/medfile/COPYING.LESSER" "$FEM_LICENSE_STAGE/share/licenses/fem-dependencies/MEDFile-COPYING.LESSER"
+    cp "$NATIVE_SDK/NOTICE.txt" "$FEM_LICENSE_STAGE/share/licenses/fem-dependencies/OHOS-native-NOTICE.txt"
+    (cd "$FEM_LICENSE_STAGE" && zip -q -r "$RAW_STAGE/freecad-runtime.zip" share/licenses/fem-dependencies)
+fi
 # CAM/Material import the Python ``yaml`` package.  Keep the pure-Python
 # implementation in the runtime archive's Ext/ directory.  FreeCAD's GUI
 # startup adds freecad-home/Ext to sys.path after clearing PYTHONPATH; placing
@@ -282,6 +325,16 @@ if [ -d "$HEADLESS_QT6_PREFIX/Mod" ]; then
             -x '*/__pycache__/*' '*.pyc' '*.so' '*.so.*')
 fi
 
+if [ "$BUILD_FEM" = ON ]; then
+    for entry in Mod/Fem/Init.py Mod/Fem/InitGui.py Mod/Fem/ObjectsFem.py \
+                 Mod/Fem/femobjects/material_common.py \
+                 Mod/Fem/femviewprovider/view_material_common.py; do
+        unzip -p "$RAW_STAGE/freecad-runtime.zip" "$entry" >/dev/null 2>&1 || {
+            echo "错误：打包后的 runtime 缺少 FEM 脚本：$entry" >&2
+            exit 1
+        }
+    done
+fi
 for entry in Mod/Import/InitGui.py Mod/PartDesign/InitGui.py Mod/Sketcher/InitGui.py; do
     unzip -Z1 "$RAW_STAGE/freecad-runtime.zip" | grep -q "^${entry}$" || {
         echo "错误：打包后的 runtime 缺少 GUI 工作台注册脚本：$entry" >&2
@@ -465,6 +518,9 @@ $LIBFFI_PREFIX/lib
 $OCCT_PREFIX/lib
 $XERCES_PREFIX/lib
 $VTK_PREFIX/lib
+$HDF5_PREFIX/lib
+$MEDFILE_PREFIX/lib
+$NATIVE_SDK/llvm/lib/aarch64-linux-ohos
 $COIN_PREFIX/lib
 $GL4ES_DIR
 "

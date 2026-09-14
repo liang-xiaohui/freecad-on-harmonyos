@@ -1,0 +1,239 @@
+--- a/src/opengl/qopenglframebufferobject.cpp
++++ b/src/opengl/qopenglframebufferobject.cpp
+@@ -69,6 +69,18 @@
+ #define GL_DEPTH_COMPONENT24_OES 0x81A6
+ #endif
+ 
++// OHOS: used to interrogate the attachment the driver really allocated rather
++// than the one that was requested. An ES2 driver is free to accept a 24-bit
++// renderbuffer format without raising GL_INVALID_ENUM and still hand back a
++// 16-bit buffer, so glGetError() alone is not a usable verdict.
++#ifndef GL_RENDERBUFFER_DEPTH_SIZE
++#define GL_RENDERBUFFER_DEPTH_SIZE 0x8D54
++#endif
++
++#ifndef GL_RENDERBUFFER_STENCIL_SIZE
++#define GL_RENDERBUFFER_STENCIL_SIZE 0x8D41
++#endif
++
+ #ifndef GL_READ_FRAMEBUFFER
+ #define GL_READ_FRAMEBUFFER 0x8CA8
+ #endif
+@@ -474,6 +486,36 @@
+ 
+     funcs.initializeOpenGLFunctions();
+ 
++    // OHOS diagnostic: enumerate every distinct size Qt creates through this
++    // class. The 3D viewport's framebuffer is only allocated once the document
++    // subwindow is first painted, so a single-shot report makes it look as if
++    // that FBO never goes through QOpenGLFramebufferObject at all. The surface
++    // format's depth/stencil sizes describe the EGL config, which is what the
++    // *default* framebuffer (and not the widget FBO) actually uses.
++    {
++        static QSize reportedInitSizes[8];
++        static int reportedInitCount = 0;
++        bool seen = false;
++        for (int i = 0; i < reportedInitCount; ++i) {
++            if (reportedInitSizes[i] == size) {
++                seen = true;
++                break;
++            }
++        }
++        if (!seen && reportedInitCount < 8) {
++            reportedInitSizes[reportedInitCount++] = size;
++            qWarning("OHOS-FBO: init size=%dx%d attachment=%d target=0x%x internalFormat=0x%x "
++                     "samples=%d mipmap=%d es=%d fmt=%d.%d depthSize=%d stencilSize=%d",
++                     size.width(), size.height(), int(attachment), int(texture_target),
++                     int(internal_format), samples, mipmap ? 1 : 0,
++                     ctx && ctx->isOpenGLES() ? 1 : 0,
++                     ctx ? ctx->format().majorVersion() : -1,
++                     ctx ? ctx->format().minorVersion() : -1,
++                     ctx ? ctx->format().depthBufferSize() : -1,
++                     ctx ? ctx->format().stencilBufferSize() : -1);
++        }
++    }
++
+     if (!funcs.hasOpenGLFeature(QOpenGLFunctions::Framebuffers))
+         return;
+ 
+@@ -631,6 +673,83 @@
+     }
+ }
+ 
++// OHOS: keep the depth attachment as wide as the driver can actually provide.
++// GLES2 core only guarantees GL_DEPTH_COMPONENT16, and a driver is not obliged
++// to advertise GL_OES_depth24 even when it happily accepts a 24-bit
++// renderbuffer. A 16-bit depth buffer cannot resolve the sub-millimetre
++// distance between the (near-)coincident faces that CAD models routinely
++// contain, so the two surfaces win the depth test per pixel and the overlap
++// shows up as z-fighting stripes. Ask for 24-bit first and fall back to the
++// 16-bit core format only when the driver rejects the request or hands back
++// fewer than 24 bits.
++//
++// The verdict comes from GL_RENDERBUFFER_DEPTH_SIZE rather than glGetError():
++// an ES2 driver may accept GL_DEPTH_COMPONENT24 without raising an error and
++// still allocate 16 bits, which would leave the artifact in place while a pure
++// error check reported success.
++static GLenum reserveRenderbufferStorage(QOpenGLExtensions &funcs, bool multisample,
++                                         int samples, GLenum preferred, GLenum fallback,
++                                         const QSize &size)
++{
++    const auto drainErrors = [&]() {
++        while (funcs.glGetError() != GL_NO_ERROR) {
++        }
++    };
++    const auto store = [&](GLenum internalFormat) {
++        drainErrors();
++        if (multisample)
++            funcs.glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, internalFormat,
++                                                   size.width(), size.height());
++        else
++            funcs.glRenderbufferStorage(GL_RENDERBUFFER, internalFormat,
++                                        size.width(), size.height());
++        return funcs.glGetError() == GL_NO_ERROR;
++    };
++    const auto allocatedDepthBits = [&]() {
++        GLint bits = -1;
++        funcs.glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_DEPTH_SIZE, &bits);
++        return int(bits);
++    };
++
++    GLenum used = preferred;
++    const bool accepted = store(preferred);
++    int bits = accepted ? allocatedDepthBits() : -1;
++    const bool fellBack = !accepted || bits < 24;
++    if (fellBack) {
++        used = fallback;
++        if (store(fallback))
++            bits = allocatedDepthBits();
++    }
++
++    {
++        static int reportedDepth = 0;
++        if (reportedDepth < 8) {
++            ++reportedDepth;
++            QOpenGLContext *ctx = QOpenGLContext::currentContext();
++            qWarning("OHOS-DEPTH: wanted=0x%x accepted=%d used=0x%x actualBits=%d "
++                     "multisample=%d samples=%d size=%dx%d es=%d fmt=%d.%d "
++                     "packedDS=%d depth24Ext=%d",
++                     int(preferred), accepted ? 1 : 0, int(used), bits,
++                     multisample ? 1 : 0, samples, size.width(), size.height(),
++                     ctx && ctx->isOpenGLES() ? 1 : 0,
++                     ctx ? ctx->format().majorVersion() : -1,
++                     ctx ? ctx->format().minorVersion() : -1,
++                     funcs.hasOpenGLExtension(QOpenGLExtensions::PackedDepthStencil) ? 1 : 0,
++                     funcs.hasOpenGLExtension(QOpenGLExtensions::Depth24) ? 1 : 0);
++        }
++    }
++    if (fellBack) {
++        static bool warnedDepthFallback = false;
++        if (!warnedDepthFallback) {
++            warnedDepthFallback = true;
++            qWarning("OHOS: 0x%x depth renderbuffer unavailable, using 0x%x "
++                     "(expect depth-precision artifacts)",
++                     int(preferred), int(fallback));
++        }
++    }
++    return used;
++}
++
+ void QOpenGLFramebufferObjectPrivate::initDepthStencilAttachments(QOpenGLContext *ctx,
+                                                                   QOpenGLFramebufferObject::Attachment attachment)
+ {
+@@ -690,8 +809,13 @@
+         }
+     }
+ #else
++    // OHOS: a GLES driver that offers GL_DEPTH24_STENCIL8 as part of OpenGL ES 3
++    // is not required to advertise GL_OES_packed_depth_stencil as well. Accept
++    // both spellings of the capability so an ES3 context keeps a 24-bit depth
++    // attachment instead of silently degrading to the 16-bit GLES2 core format.
+     if (attachment == QOpenGLFramebufferObject::CombinedDepthStencil
+-        && funcs.hasOpenGLExtension(QOpenGLExtensions::PackedDepthStencil))
++        && (funcs.hasOpenGLExtension(QOpenGLExtensions::PackedDepthStencil)
++            || (ctx->isOpenGLES() && ctx->format().majorVersion() >= 3)))
+     {
+         // depth and stencil buffer needs another extension
+         funcs.glGenRenderbuffers(1, &depth_buffer);
+@@ -725,25 +849,16 @@
+         Q_ASSERT(funcs.glIsRenderbuffer(depth_buffer));
+         if (samples != 0 && funcs.hasOpenGLExtension(QOpenGLExtensions::FramebufferMultisample)) {
+             if (ctx->isOpenGLES()) {
+-                if (funcs.hasOpenGLExtension(QOpenGLExtensions::Depth24))
+-                    funcs.glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples,
+-                                                           GL_DEPTH_COMPONENT24, dsSize.width(), dsSize.height());
+-                else
+-                    funcs.glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples,
+-                                                           GL_DEPTH_COMPONENT16, dsSize.width(), dsSize.height());
++                reserveRenderbufferStorage(funcs, true, samples,
++                                           GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT16, dsSize);
+             } else {
+                 funcs.glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples,
+                                                        GL_DEPTH_COMPONENT, dsSize.width(), dsSize.height());
+             }
+         } else {
+             if (ctx->isOpenGLES()) {
+-                if (funcs.hasOpenGLExtension(QOpenGLExtensions::Depth24)) {
+-                    funcs.glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24,
+-                                                dsSize.width(), dsSize.height());
+-                } else {
+-                    funcs.glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16,
+-                                                dsSize.width(), dsSize.height());
+-                }
++                reserveRenderbufferStorage(funcs, false, 0,
++                                           GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT16, dsSize);
+             } else {
+                 funcs.glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, dsSize.width(), dsSize.height());
+             }
+@@ -786,6 +901,51 @@
+     // The FBO might have become valid after removing the depth or stencil buffer.
+     valid = checkFramebufferStatus(ctx);
+ 
++    // OHOS diagnostic: report what was actually attached, and -- crucially --
++    // how many depth bits the driver really allocated, for every distinct
++    // attachment size. This is the only place that can tell "the 3D viewport
++    // FBO was never created through this path" apart from "it was created, with
++    // a 16-bit depth attachment". Earlier single-shot reporting only ever
++    // captured Qt's first (tiny) internal FBO and hid the viewport one.
++    {
++        static QSize reportedDsSizes[8];
++        static int reportedDsCount = 0;
++        bool seen = false;
++        for (int i = 0; i < reportedDsCount; ++i) {
++            if (reportedDsSizes[i] == dsSize) {
++                seen = true;
++                break;
++            }
++        }
++        if (!seen && reportedDsCount < 8) {
++            reportedDsSizes[reportedDsCount++] = dsSize;
++            GLint depthBits = -1;
++            GLint stencilBits = -1;
++            GLint rbSamples = -1;
++            if (depth_buffer) {
++                funcs.glBindRenderbuffer(GL_RENDERBUFFER, depth_buffer);
++                funcs.glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_DEPTH_SIZE,
++                                                   &depthBits);
++                funcs.glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_STENCIL_SIZE,
++                                                   &stencilBits);
++                funcs.glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_SAMPLES,
++                                                   &rbSamples);
++            }
++            qWarning("OHOS-FBO: depth attachment=%d requestedSamples=%d dsSize=%dx%d "
++                     "depthBuf=%u stencilBuf=%u separate=%d depthBits=%d stencilBits=%d "
++                     "rbSamples=%d packedDSext=%d es=%d fmt=%d.%d valid=%d",
++                     int(attachment), requestedSamples, dsSize.width(), dsSize.height(),
++                     unsigned(depth_buffer), unsigned(stencil_buffer),
++                     (depth_buffer && stencil_buffer && depth_buffer != stencil_buffer) ? 1 : 0,
++                     int(depthBits), int(stencilBits), int(rbSamples),
++                     funcs.hasOpenGLExtension(QOpenGLExtensions::PackedDepthStencil) ? 1 : 0,
++                     ctx && ctx->isOpenGLES() ? 1 : 0,
++                     ctx ? ctx->format().majorVersion() : -1,
++                     ctx ? ctx->format().minorVersion() : -1,
++                     valid ? 1 : 0);
++        }
++    }
++
+ #ifdef Q_OS_WASM
+     if (depth_buffer) {
+ #else

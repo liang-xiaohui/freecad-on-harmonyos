@@ -1,17 +1,17 @@
 # 真机交接：需要用户执行的剩余步骤
 
-更新时间：2026-09-05。**全工作台 GUI 构建、staging、签名 HAP、基础 3D、Preferences、Recovery、Cube ViewFit 动画与单 Ability 无框 splash 均已在真机通过**。
+更新时间：2026-09-09。**FEM 的编译、安装、签名 HAP 打包与本机数据验收已完成；Axis Cross 黑块、标签和箭头当前已恢复。针对 BIM 材质与帧率回归，已移除 Coin 材质诊断循环，并将 GL4ES BGRA 客户端颜色数组改为临时 GLES VBO，重新生成待真机复验的 HAP。**
 
 ## 当前就绪状态（已验证）
 
 | 产物 | 验证 |
 |---|---|
 | Qt 6.8.3 全 GUI 模块 + OHOS QPA（libqohos.so） | 构建/加载/注册 ✓ |
-| FreeCAD v1.1.2 GUI（Qt6）全工作台 | bin/FreeCAD + libFreeCADGui + CAM/Draft/Import/Inspection/Measure/PartDesign/Points/Robot/Sketcher/Spreadsheet/Start/Surface/TechDraw GUI ✓ |
+| FreeCAD v1.1.2 GUI（Qt6）已启用工作台 | bin/FreeCAD + libFreeCADGui + CAM/Draft/FEM/Import/Inspection/Measure/PartDesign/Points/Robot/Sketcher/Spreadsheet/Start/Surface/TechDraw GUI 编译安装 ✓ |
 | Pivy / Shiboken6 / PySide6（Core/Gui/Widgets/Network/Svg/SvgWidgets/OpenGL/OpenGLWidgets） | 全部构建+导入验证 ✓；已 staged 进 HAP runtime（Ext/） |
-| GUI HAP staging | 155 个 AArch64 ELF + rawfile；签名 HAP 内 229 个 `.so*`，内容/新鲜度验证通过 |
-| headless 6 项验收（本地） | **6/6 PASS**（2026-08-24 当前 staging 复验） |
-| GUI 真机 | FreeCAD 1.1.2 主窗口、New Document、Part/Cube、Cube ViewFit 动画、复杂多色示例、Preferences、Recovery ✓ |
+| GUI HAP staging | 226 个 AArch64 ELF + rawfile；签名 HAP 内 243 个 `.so*`，内容/新鲜度验证通过 |
+| headless 验收（本地） | **8/8 PASS**（2026-09-06，原有六项 + FEM 示例恢复及 UNV/MED 往返） |
+| GUI 真机 | FEM 包曾安装并启动，用户确认模型基本加载；当前候选包的 BIM 帧时间、材质/透明度和 FEM 结果仍待复验。Axis Cross 的 label/箭头/黑块现象已在候选包中恢复正常。此前版本的主窗口、New Document、Part/Cube、Cube ViewFit 动画、复杂多色示例、Preferences、Recovery ✓ |
 | 单 Ability splash | 13 张官方高清图随机显示、异形玻璃外扩、无系统圆角/矩形阴影、ArkUI/XComponent 交接和完整主窗恢复均已真机验证 |
 
 ## 2026-09-05 真机问题结论
@@ -39,6 +39,37 @@
 - **修复**：`patches/qt-6.8-ohos/16-reuse-startup-content.patch` 检测 Qt 主窗原点与 ArkUI 节点原点是否不一致；启动过渡期若不一致，嵌入式对话框统一使用 Qt 主窗原点换算。主窗装饰调用也改为首次 `showWindow()` 后执行并独立捕获异常，避免 WindowManager `1300002` 连带跳过 splash 创建。
 - **验证**：Recovery 弹窗居中、内容完整，`Cleanup` 真机点击成功。`aa force-stop` 会走正常销毁并清理恢复状态；复测恢复流程应等待 autosave 后用 `SIGKILL` 模拟异常退出。
 
+## 2026-09-06 FEM 接入：数据验收通过，真机初步加载通过
+
+- 原先包里有 `FEMExample.FCStd`，但配置为 `BUILD_FEM=OFF`，没有 `Fem.so`、`FemGui.so` 或 `Mod/Fem`，因此每个 FEM 对象恢复失败；缺失 Python 包也会进入恢复检查的 `blocked import` 分支。本次没有放宽安全导入规则。
+- HDF5 1.14.6、MEDFile 6.0.1 与 FreeCAD 内置 SMESH 7.7.1 已编译安装，FEM 默认启用。staging 递归收集 `libmedC.so.14`、`libhdf5.so.310`、SDK `libomp.so`，并验证 FEM Python 材料代理与许可文件。
+- 当前包对应的本机原生八项验收全部通过：示例完整恢复 43 个对象、17 个 FEM Python 代理、6 份网格（1,956 个节点）和 3 组结果；四面体 UNV/MED 写入读回正确。结果在 `/storage/Users/currentUser/codex-freecad-artifacts/fem-port-20260906/acceptance-packaged/freecad-acceptance.json`。
+- 独立 offscreen GUI 探针未完成：复制自签名的 `bin/FreeCAD` 在启动时收到 SIGSEGV，回溯位于 `/lib/ld-musl-aarch64.so.1`，没有执行 FEM 验收宏。该结果不能代替 `QAbility` 真机回归，也不能据此归因于 FEM。记录为同目录下的 `gui-native-probe.log`；继续工作时不要把旧 `gui-probe.json` 当作成功结果。
+- 用户要求安装后，22:04 通过 HDC server `127.0.0.1:8710` 向 `192.168.3.16:39405` 执行 `install -r`，返回 `install bundle successfully`；重启 `QAbility` 返回成功，进程 PID 为 `24844`。随后默认值回退包再次以同一目标安装并启动，最新进程 PID 为 `32618`。最新记录位于 `/storage/Users/currentUser/codex-freecad-artifacts/fem-warp-render-20260906/axis-default-off/`。材料 ViewProvider、结果颜色/变形及编辑仍需逐项核对；外部 Gmsh/CalculiX/Elmer/Netgen 尚未接入，MeshPart/BIM 也仍默认关闭。
+- 用户截图仍显示 PartDesign 的 `Cannot find icon: .../freecad-homeMod/PartDesign/WizardShaft/WizardShaft.svg`。已确认 runtime 包内存在该 SVG；`WizardShaft.py` 第 221、247 行直接把 `AppHomePath` 与 `Mod/...` 拼接，当前路径缺少目录分隔符。这是独立的图标路径问题，不是 FEM 模块缺失；本轮仅记录，未修改代码或为此重建。
+- 可复现构建与验收命令见 `docs/fem-ohos.md`。原签名 HAP 已备份到 `/storage/Users/currentUser/codex-freecad-artifacts/fem-port-20260906/entry-before-fem-signed.hap`；当前候选 HAP 的 SHA-256 为 `83a0bd9aa38dd965b8f70343368f7d26ec2477b5e854e66f48b1183d210d744a`。Coin/GL4ES 材质诊断已从生产构建移除，正式补丁记录见 `patches/coin-4.0.0/ohos-remove-material-diagnostics.patch` 与 `patches/gl4es-81547d9/ohos-fpe-client-array-vbo.patch`。
+
+## 2026-09-06 历史记录：BIM 材质与透明度异常（2026-09-13 更正根因归属）
+
+- **2026-09-13 二次更正（推翻 09-12 的修复层）**：09-12 那条"gl4es 广告缺失 → Qt 退回 16 位深度"的因果链在 **Qt 侧不成立**。OHOS QPA 在 `makeCurrent` 时把 gl4es 的 GLES 入口解析器指向原生 EGL（`src/plugins/platforms/ohos/qohoseglplatformcontext.cpp:22-49`，`setGetProcAddress(resolveCurrentGlesProcAddress)` 且 `resolveCurrentGlesProcAddress = eglGetProcAddress`），而 Qt 的扩展判定走 `QOpenGLExtensionMatcher`（`src/gui/opengl/qopengl.cpp:41` → `funcs->glGetString(GL_EXTENSIONS)`，判别逻辑在 `src/gui/opengl/qopenglfunctions.cpp:314-370`），读到的是**原生驱动**的扩展串。gl4es 通过链接替换提供的 `glGetString` 不在 Qt 的解析路径上，因此 `ohos-advertise-depth24-extensions.patch` 广告什么 Qt 都看不到；本机 `hardext.depth24` / `hardext.depthstencil` 实测（`EXT_DIAG` 探针）也恒为 0 —— 原生 ES2 上下文普遍不声明 `GL_OES_depth24`（该扩展已被 ES3 吸收为核心功能），所以 `if(hardext.depth24)` 永远为假。该补丁因此是**双重不生效的死代码**，其注释已在 2026-09-13 改写以记录这一点，保留它只为 gl4es 自身扩展串的语义诚实。
+- **真实根因与正确修复层（2026-09-13）**：根因仍是 **Qt 拿到的是 16 位深度缓冲**，但决策点在 Qt 自己：原生 ES2 不声明 `GL_OES_depth24` → `QOpenGLExtensions::Depth24` 未置位 → `src/opengl/qopenglframebufferobject.cpp:744` 静默回落 `GL_DEPTH_COMPONENT16` → 16 位分辨不了 BIM 的亚毫米近共面几何 → 逐像素抢深度。修复落在 `patches/qt-6.8-ohos/19-prefer-24bit-depth-attachment.patch`：新增 `reserveRenderbufferStorage()` 先尝试 `GL_DEPTH_COMPONENT24`、以 `glGetError()` 判定驱动是否接受、失败才降级 16 位并打印一次性告警；`PackedDepthStencil` 门控同时放宽到 ES3。该方案**不依赖任何扩展声明**，所以不受上面那条"Qt 读原生串"的限制。由 `scripts/build-qt6-gui-ohos.sh` 应用。
+- **几何侧铁证（2026-09-13）**：红色 `Wall014` 是零厚度 `Part::Part2DObjectPython`（diffuse `(255,99,85)`，全模型仅 2 条 red 材质条目，`Transparency=0`）。解析全部 201 个 `.Shape.brp` 的 `Surfaces` 段确认：它**全部 10 个平面**与 `BuildingPart003`（313 曲面）、`BuildingPart005`（3014 曲面）逐位共面 —— 即用户观察到的"红色灰色两个重叠的集合"。量化验收指标 `Metric.java`（矩形 x=2060 y=1380 200×140 的中性灰占比）修复前基线为 **40.207%**。
+- **2026-09-12 首次定位（结论部分成立，修复层已由上文更正）**：本节此前记录的"外部 context blend/depth 恢复"方向当天已被真机证伪（包括恢复激活态、延迟恢复、`glFinish` A/B、VBO 逐面材质补丁）。2026-09-12 用对照实验重新定位：手工构造的 `TranspTest.FCStd`（前盒绿色 70% 透明 + 后盒不透明）在设备上混合完全正确，证明基础透明管线无问题；BIM 玻璃上的细密斜纹只出现在透明面上，是近共面几何的深度冲突 —— **这一观察成立**。当时认为修复点是 gl4es 的扩展广告，现已确认该层对 Qt 无效，实际修复见上面两条。
+- **2026-09-12 附带修复（启动参数顺序）**：`QAbilityStage.onAcceptWant()` 先于 `QAbility.onCreate()` 初始化 Qt，导致 `--ps fcstdPath <文件>` 从未进入 FreeCAD 的 argv（此前"用 fcstdPath 打开文件"其实都靠 FreeCAD 崩溃恢复在还原上次的文档）。现已在 `onAcceptWant`/`onNewProcessRequest` 中先调 `setAppArgsFromWant` 再初始化。另注意：应用沙箱读不到 `/data/local/tmp`，真机传测试文件需走 HAP rawfile（`freecad-home/share/examples/`）内路径。
+- **现象**：打开 `BIMExample.FCStd` 后，部分红色/浅色表面出现不属于模型的白色重叠条纹；玻璃仍按不透明表面显示。旋转期间 FreeCAD 的 `paintEvent()` 约为 25–30 ms，但 RenderService 实际只有约 10–18 FPS。当前先解决材质正确性，不再继续性能调优。
+- **与 Python 恢复警告的关系**：报告视图中的 `PropertyPythonObject::Restore: blocked import of module 'Arch...'` 表示 Arch/BIM Python Proxy 被安全导入规则阻止，可能影响对象重算、编辑或代理行为，需要作为独立兼容性问题处理。现有证据表明几何、视图材质及透明度数组已经进入 Coin/GL4ES，因此该警告不是当前白色条纹和玻璃不透明的直接原因。
+- **已确认的透明 draw 状态**：颜色 attribute 是 normalized `GL_UNSIGNED_BYTE`，原生颜色和法线 attribute 均已启用且指针有效；混合为 `GL_SRC_ALPHA / GL_ONE_MINUS_SRC_ALPHA`，深度测试开启且 `depthmask=0`。Coin cache 同时具有对应的 diffuse/transparency 数组，并能看到 `alpha=38..255`、`alpha=77..255` 等范围。由此已排除 attribute 未归一化、原生 attribute 未启用、指针/VBO 绑定错误、混合关闭、混合因子错误和透明 draw 写深度。
+- **已证伪的修改**：给 `SoBrepFaceSet` VBO 顶点颜色补写 packed transparency 后，真机画面没有任何变化。`ohos-brep-vbo-materials.patch` 及其 `prepare-freecad-source.sh` 接入已删除，CPPLib 的 FreeCAD 源码也已恢复到试验前版本，不要恢复该实验。现有 build/install、staged HAP 和设备安装包仍可能包含最后一次试验生成的旧二进制；建立干净验证基线时必须重新编译、install、stage、构建并安装 HAP。
+- **材质线索**：从示例文件提取的 `GuiDocument.xml` 中，序列化 `ShapeMaterial` 的 `specularColor="255"`，即 RGB 为黑色；白色条纹不是文件设计的正常镜面高光。更可能的方向是 GL4ES FPE 材质/灯光状态陈旧、多余 light 状态，或透明/不透明面合并绘制时后部三角形的材质索引处理。
+- **下一步**：先用 `/data/local/tmp/MaterialControl.FCStd` 对照普通整体透明对象是否正常；再让 Coin 日志记录每个 cache 中第一个 `alpha < 255` 三角形的索引和 RGBA，并记录 GL4ES 的 lighting、normalize/rescale、前表面 material 以及每个启用 light 的参数。根据结果做单变量材质/灯光实验，确认根因后再形成正式补丁。
+- **诊断资料**：原生 attribute/state 日志位于 `/storage/Users/currentUser/codex-freecad-artifacts/material-debug-20260906/native-attrs/current-native-attrs.log`，示例的材质 XML 位于同目录下的 `GuiDocument.xml`。临时诊断仍在 `/storage/Users/currentUser/CPPLib/sources/gl4es/81547d9/src/gl/fpe.c` 和 `/storage/Users/currentUser/CPPLib/sources/coin/4.0.0/src/caches/SoPrimitiveVertexCache.cpp`；相应备份位于该 artifact 目录的 `fpe.before-indexed-material-diag.c` 与 `coin-before-diag/SoPrimitiveVertexCache.cpp`。这些诊断不属于正式仓库补丁，继续构建或清理前要明确是否保留。
+
+## 2026-09-09 当前候选：先验证性能与材质
+
+- 已移除 Coin `SoPrimitiveVertexCache` 中每次 cache/triangle 的 OHOS 材质日志和 `dlopen` 路径，避免复杂 BIM 在渲染线程中反复格式化和输出。
+- GL4ES 的 `GL_BGRA` 客户端颜色数组仍会做 RGBA 转换，但转换结果现在上传到短生命周期 GLES VBO；删除 VBO 名称由驱动延迟回收，不再对每个 scratch draw 调用 `glFinish()`。普通 FPE draw 仍每 4 条调用非阻塞 `glFlush()`。
+- 该候选 HAP 已完成 stage/build/verify，SHA-256 为 `83a0bd9aa38dd965b8f70343368f7d26ec2477b5e854e66f48b1183d210d744a`。HDC 当前未确认在线，因此还没有把候选包的 BIM 帧时间、材质透明度和 FEM 结果视觉结论写成“真机已通过”。
+
 ## 构建后核对
 
 DevEco 构建完成后先跑 GUI HAP 验证（native/rawfile/新鲜度一键核对）：
@@ -48,12 +79,13 @@ DevEco 构建完成后先跑 GUI HAP 验证（native/rawfile/新鲜度一键核�
 ./scripts/verify-gui-hap.sh
 ```
 
-当前包：`entry/build/default/outputs/default/entry-default-signed.hap`，SHA-256
-`9a0c3325cdde9d4c7c160a852953bdf6819c34d9b147a5480f8740461c57cda3`。该包包含 13 张
-随机官方高清 splash、异形玻璃轮廓、19 个简体中文 `.qm` 的编译嵌入及原生对话框
-SubWindow 路径，并通过 rawfile 一致性、新鲜度、229 个 native `.so`、GUI 工作台、
-RUNPATH、Python 绑定和 splash 生成资源检查。中文默认值、独立对话框及最终 splash
-视觉效果均已完成真机交互验证。
+当前待复验包：`entry/build/default/outputs/default/entry-default-signed.hap`，SHA-256
+`83a0bd9aa38dd965b8f70343368f7d26ec2477b5e854e66f48b1183d210d744a`。
+该包新增 FEM/SMESH、MED/HDF5/OpenMP runtime，并包含移除 Coin 材质诊断、BGRA 临时
+VBO 及 Axis Cross 修复后的 GL4ES/FreeCAD 路径；已通过 rawfile 一致性、新鲜度、243 个 native `.so*`、GUI 工作台、RUNPATH、
+Python 绑定和 splash 生成资源检查，以及本机八项数据验收。它尚未在设备上完成
+BIM 帧时间、材质/透明度、FEM 结果显示和 Axis Cross 复验；此前中文默认值、独立
+对话框及 splash 的真机通过结论不应自动升级为本包已验证。
 
 GL4ES 增量构建后还必须对对应 build tree 执行 `cmake --install`，再运行
 `stage-gui-hap.sh`；只运行 Ninja 会让新库停留在源码/构建树，最终 HAP 仍可能

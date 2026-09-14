@@ -4,7 +4,7 @@
 
 ## 构建
 
-1. 在可执行 OHOS SDK 环境运行 `./scripts/rebuild-freecad-all-workbenches.sh`；不要只运行 hvigor，旧 staging 会保留不完整的工作台集合。脚本会准备 Addon Manager、Microsoft.GSL 和 Assembly 所需的固定版本 OndselSolver；Assembly 与 Reverse Engineering 默认启用。MeshPart、BIM、FEM 需要尚未提供的 SMESH/MEDFile/HDF5 依赖，仍保持关闭。
+1. 在可执行 OHOS SDK 环境运行 `./scripts/rebuild-freecad-all-workbenches.sh`；不要只运行 hvigor，旧 staging 会保留不完整的工作台集合。脚本会准备 Addon Manager、Microsoft.GSL 和 Assembly 所需的固定版本 OndselSolver，以及 FEM 所需的 HDF5/MEDFile；FEM、Assembly 与 Reverse Engineering 默认启用，SMESH 使用 FreeCAD 内置源码。MeshPart 仍保持关闭。BIM（Arch）默认接入：它是纯 Python，脚本在 install 之后调用 `install-bim-module-ohos.sh` 按安装清单写入前缀，`FREECAD_BUILD_BIM=OFF` 可关闭，见 `docs/bim-ohos.md`。FEM 数据验收及外部求解器限制见 `docs/fem-ohos.md`。
 2. 运行 `./scripts/stage-gui-hap.sh`，再运行 `./scripts/build-gui-hap-ohos.sh`；也可在 DevEco Studio 对 `default` product 执行 Sync → Build Hap。
 3. Build Hap 完成后运行 `./scripts/verify-gui-hap.sh`，确认 HAP 内含 `ImportGui.so`、`PartDesignGui.so`、`SketcherGui.so` 以及 AddonManager/核心工作台注册脚本。FreeCAD 配置阶段还会检查 Qt6 `LinguistTools/lrelease`；构建日志应出现 `FreeCAD_zh-CN.qm` 及各已启用工作台的 `_zh-CN.qm`，而不是 `RCC: Warning: No resources`。
 4. 若改动过 C++/ArkTS，DevEco 会自动重编 `libfreecadacceptance.so` 与 ArkTS。

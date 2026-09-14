@@ -1,18 +1,12 @@
---- a/src/gl/fpe.c
-+++ b/src/gl/fpe.c
-@@ -39,6 +39,15 @@
- #endif
- 
- void free_scratch(scratch_t* scratch) {
+--- a/src/gl/glstate.h
++++ b/src/gl/glstate.h
+@@ -106,6 +106,9 @@ struct glstate_s {
+     GLsizei             scratch_vertex_size;
+     GLuint              scratch_indices;
+     GLsizei             scratch_indices_size;
 +#if defined(__OHOS__)
-+    if(scratch->size) {
-+        // Zink on HarmonyOS can return before it has consumed client attribute
-+        // memory. Keep GL4ES' converted arrays alive until this draw completes.
-+        LOAD_GLES(glFinish);
-+        gles_glFinish();
-+
-+    }
++    unsigned int        ohos_pending_draw_count;
 +#endif
-     for(int i=0; i<scratch->size; ++i)
-         free(scratch->scratch[i]);
- }
+     // Implementation read
+     GLenum              readf; // implementation Read Format
+     GLenum              readt; // implementation Read Type

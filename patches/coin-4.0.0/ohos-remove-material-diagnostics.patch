@@ -1,0 +1,134 @@
+--- a/src/caches/SoPrimitiveVertexCache.cpp
++++ b/src/caches/SoPrimitiveVertexCache.cpp
+@@ -42,11 +42,6 @@
+ #include <cstddef>
+ #include <cstdlib>
+ #include <cstring>
+-#if defined(__OHOS__)
+-#include <cstdarg>
+-#include <cstdio>
+-#include <dlfcn.h>
+-#endif
+ 
+ #include <Inventor/C/glue/gl.h>
+ #include <Inventor/C/tidbits.h>
+@@ -171,11 +166,6 @@
+   SoGLLazyElement::GLState prestate;
+   SoGLLazyElement::GLState poststate;
+ 
+-#if defined(__OHOS__)
+-  SbBool materialdiag;
+-  int materialdiagtriangles;
+-#endif
+-
+   void addVertex(const Vertex & v);
+ 
+   void renderImmediate(const cc_glglue * glue,
+@@ -219,27 +209,6 @@
+ // *************************************************************************
+ 
+ namespace {
+-#if defined(__OHOS__)
+-  void coin_ohos_material_diag(const char * format, ...) {
+-    typedef int (*OhLogPrintFn)(int, int, unsigned int, const char *, const char *, ...);
+-    static OhLogPrintFn ohlog = []() -> OhLogPrintFn {
+-      void * handle = dlopen("libhilog_ndk.z.so", RTLD_NOW | RTLD_LOCAL);
+-      return handle ? reinterpret_cast<OhLogPrintFn>(dlsym(handle, "OH_LOG_Print")) : NULL;
+-    }();
+-    if (!ohlog) return;
+-
+-    char message[768];
+-    va_list args;
+-    va_start(args, format);
+-    vsnprintf(message, sizeof(message), format, args);
+-    va_end(args);
+-    ohlog(0, 4, 0x3204, "CoinMaterial", "%{public}s", message);
+-  }
+-
+-  int coin_ohos_material_diag_opaque_budget = 48;
+-  int coin_ohos_material_diag_triangle_budget = 160;
+-#endif
+-
+   // SoGLLazyElement shares the same class stack index as
+   // SoLazyElement. Do a type check to test if SoGLLazyElement is
+   // enabled but not SoLazyElement
+@@ -281,40 +250,6 @@
+     PRIVATE(this)->transpptr = lelem->getTransparencyPointer();
+   }
+ 
+-#if defined(__OHOS__)
+-  PRIVATE(this)->materialdiag = FALSE;
+-  PRIVATE(this)->materialdiagtriangles = 0;
+-  int alphamin = 255;
+-  int alphamax = 0;
+-  float transpmin = 1.0f;
+-  float transpmax = 0.0f;
+-  if (PRIVATE(this)->packedptr) {
+-    for (int i = 0; i < PRIVATE(this)->numdiffuse; ++i) {
+-      const int alpha = PRIVATE(this)->packedptr[i] & 0xff;
+-      if (alpha < alphamin) alphamin = alpha;
+-      if (alpha > alphamax) alphamax = alpha;
+-      if (alpha < 255) PRIVATE(this)->materialdiag = TRUE;
+-    }
+-  }
+-  else {
+-    for (int i = 0; i < PRIVATE(this)->numtransp; ++i) {
+-      const float transp = PRIVATE(this)->transpptr[i];
+-      if (transp < transpmin) transpmin = transp;
+-      if (transp > transpmax) transpmax = transp;
+-      if (transp > 0.0f) PRIVATE(this)->materialdiag = TRUE;
+-    }
+-    alphamin = static_cast<int>((1.0f - transpmax) * 255.0f + 0.5f);
+-    alphamax = static_cast<int>((1.0f - transpmin) * 255.0f + 0.5f);
+-  }
+-  if (PRIVATE(this)->materialdiag || coin_ohos_material_diag_opaque_budget-- > 0) {
+-    coin_ohos_material_diag(
+-      "COIN_MATERIAL_DIAG cache=%p packed=%d numDiffuse=%d numTransp=%d transparent=%d alpha=%d..%d transp=%.3f..%.3f",
+-      this, PRIVATE(this)->packedptr != NULL, PRIVATE(this)->numdiffuse,
+-      PRIVATE(this)->numtransp, PRIVATE(this)->materialdiag, alphamin, alphamax,
+-      transpmin, transpmax);
+-  }
+-#endif
+-
+   // set up variables to test if we need to supply color per vertex
+   PRIVATE(this)->colorpervertex = FALSE;
+ 
+@@ -558,38 +493,6 @@
+   }
+   const SoPrimitiveVertex *vp[3] = { v0, v1, v2 };
+ 
+-#if defined(__OHOS__)
+-  if (PRIVATE(this)->materialdiag &&
+-      PRIVATE(this)->materialdiagtriangles < 8 &&
+-      coin_ohos_material_diag_triangle_budget-- > 0) {
+-    int midx[3];
+-    int didx[3];
+-    int tidx[3];
+-    int alpha[3];
+-    float transp[3];
+-    for (int i = 0; i < 3; ++i) {
+-      midx[i] = vp[i]->getMaterialIndex();
+-      didx[i] = SbClamp(midx[i], 0, PRIVATE(this)->numdiffuse - 1);
+-      if (PRIVATE(this)->packedptr) {
+-        tidx[i] = didx[i];
+-        alpha[i] = PRIVATE(this)->packedptr[didx[i]] & 0xff;
+-        transp[i] = (255.0f - alpha[i]) / 255.0f;
+-      }
+-      else {
+-        tidx[i] = SbClamp(midx[i], 0, PRIVATE(this)->numtransp - 1);
+-        transp[i] = PRIVATE(this)->transpptr[tidx[i]];
+-        alpha[i] = static_cast<int>((1.0f - transp[i]) * 255.0f + 0.5f);
+-      }
+-    }
+-    coin_ohos_material_diag(
+-      "COIN_MATERIAL_DIAG triangle cache=%p tri=%d midx=%d,%d,%d didx=%d,%d,%d tidx=%d,%d,%d transp=%.3f,%.3f,%.3f alpha=%d,%d,%d",
+-      this, PRIVATE(this)->materialdiagtriangles, midx[0], midx[1], midx[2],
+-      didx[0], didx[1], didx[2], tidx[0], tidx[1], tidx[2],
+-      transp[0], transp[1], transp[2], alpha[0], alpha[1], alpha[2]);
+-    ++PRIVATE(this)->materialdiagtriangles;
+-  }
+-#endif
+-
+   int32_t triangleindices[3];
+ 
+   for (int i = 0; i < 3; i++) {

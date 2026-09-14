@@ -30,8 +30,9 @@ if [ -n "${FREECAD_PROBE_OUTPUT_DIR:-}" ]; then
     OUTPUT_DIR=$FREECAD_PROBE_OUTPUT_DIR
     mkdir -p "$OUTPUT_DIR"
 else
-    mkdir -p "$PROJECT_DIR/logs"
-    OUTPUT_DIR=$(mktemp -d "$PROJECT_DIR/logs/gui-acceptance.XXXXXX")
+    ARTIFACT_ROOT="${FREECAD_ARTIFACT_ROOT:-/storage/Users/currentUser/codex-freecad-artifacts}"
+    mkdir -p "$ARTIFACT_ROOT"
+    OUTPUT_DIR=$(mktemp -d "$ARTIFACT_ROOT/gui-acceptance.XXXXXX")
 fi
 
 mkdir -p \
@@ -78,4 +79,4 @@ RESULT="$OUTPUT_DIR/freecad-acceptance.json"
 "$PYTHON_BIN" -S -c \
     'import json,sys; result=json.load(open(sys.argv[1], encoding="utf-8")); print(json.dumps(result, ensure_ascii=False, indent=2)); raise SystemExit(0 if result.get("ok") else 1)' \
     "$RESULT"
-echo "FreeCAD staged 6 项验收通过：$RESULT"
+echo "FreeCAD staged 验收通过（FREECAD_PROBE_FEM=${FREECAD_PROBE_FEM:-OFF}）：$RESULT"

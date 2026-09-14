@@ -43,6 +43,7 @@ QPA_ORPHAN_QLABEL_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/15-embed-orphan-qlabel
 QPA_STARTUP_CONTENT_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/16-reuse-startup-content.patch"
 QPA_NATIVE_DIALOG_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/17-native-dialog-subwindows.patch"
 QPA_MOUSE_BUTTON_STATE_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/18-reconcile-native-mouse-buttons.patch"
+OPENGL_FBO_DEPTH_PATCH="$PROJECT_DIR/patches/qt-6.8-ohos/19-prefer-24bit-depth-attachment.patch"
 QPA_GL4ES_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohoseglplatformcontext.cpp"
 QPA_GL4ES_HEADER="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohoseglplatformcontext.h"
 QPA_OFFSCREEN_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohosplatformoffscreensurface.cpp"
@@ -58,6 +59,7 @@ QPA_ARKUI_INPUT_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platfor
 QPA_INPUT_EVENT_HEADER="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohosinputmethodeventhandler.h"
 QPA_INPUT_EVENT_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/qohosinputmethodeventhandler.cpp"
 QPA_NATIVE_MOUSE_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/plugins/platforms/ohos/render/qohosnativemouseeventshandler.cpp"
+OPENGL_FBO_SOURCE="$CPP_LIB_ROOT/sources/qt/$QT_VERSION/src/opengl/qopenglframebufferobject.cpp"
 
 SRC="$CPP_LIB_ROOT/sources/qt/$QT_VERSION"
 BUILD="$CPP_LIB_ROOT/build/qt/$QT_VERSION-ohos-gui"
@@ -70,6 +72,7 @@ export LD_LIBRARY_PATH="$PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 [ -f "$SRC/CMakeLists.txt" ] || { echo "Qt source is missing: $SRC" >&2; exit 1; }
 [ -f "$QPA_GL4ES_SOURCE" ] || { echo "Qt OHOS QPA source is missing: $QPA_GL4ES_SOURCE" >&2; exit 1; }
+[ -f "$OPENGL_FBO_SOURCE" ] || { echo "Qt OpenGL FBO source is missing: $OPENGL_FBO_SOURCE" >&2; exit 1; }
 
 apply_gl4es_qpa_patch() {
     # The OHOS Qt source archive ships these files with CRLF.  The local
@@ -90,7 +93,8 @@ apply_gl4es_qpa_patch() {
         "$QPA_ARKUI_INPUT_SOURCE" \
         "$QPA_INPUT_EVENT_HEADER" \
         "$QPA_INPUT_EVENT_SOURCE" \
-        "$QPA_NATIVE_MOUSE_SOURCE"; do
+        "$QPA_NATIVE_MOUSE_SOURCE" \
+        "$OPENGL_FBO_SOURCE"; do
         [ -f "$qpa_source" ] || continue
         sed -i 's/\r$//' "$qpa_source"
     done
@@ -216,6 +220,17 @@ apply_gl4es_qpa_patch() {
         apply_qpa_patch "$QPA_MOUSE_BUTTON_STATE_PATCH" "$QPA_INPUT_EVENT_SOURCE" \
             'MouseButtonStateRecovery' \
             "使用 ArkUI 当前按键集合恢复丢失的鼠标 Press/Release"
+    fi
+
+    # QOpenGLWidget 的 FBO 用 CombinedDepthStencil。OHOS GLES2 驱动既不报
+    # GL_OES_packed_depth_stencil 也不报 GL_OES_depth24，上游 Qt 因此静默退回
+    # GL_DEPTH_COMPONENT16；16 位深度分辨不了 CAD 模型里大量近共面实体，会表现
+    # 为红/灰相间的 z-fighting 条纹（BIMExample 的 Wall014 与 BuildingPart 重叠）。
+    # 改为优先申请 24 位、仅在被驱动拒绝时退回 16 位，不假设任何未声明的能力。
+    if ! grep -Fq 'reserveRenderbufferStorage' "$OPENGL_FBO_SOURCE"; then
+        apply_qpa_patch "$OPENGL_FBO_DEPTH_PATCH" "$OPENGL_FBO_SOURCE" \
+            'reserveRenderbufferStorage' \
+            "让 QOpenGLWidget 的深度附件优先使用 24 位格式"
     fi
 
     # v11 is the last QPA binary that survived startup and painted the FreeCAD

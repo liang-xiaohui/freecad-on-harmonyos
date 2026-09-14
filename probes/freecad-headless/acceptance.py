@@ -4,6 +4,7 @@ import os
 import pathlib
 import sys
 import traceback
+import xml.etree.ElementTree as ElementTree
 import zipfile
 
 
@@ -182,6 +183,74 @@ def test_stl():
     }
 
 
+def test_fem_mesh_io():
+    import Fem
+    import ObjectsFem
+    import femobjects.material_common
+
+    mesh = Fem.FemMesh()
+    for node_id, coordinates in enumerate(
+        ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)),
+        start=1,
+    ):
+        mesh.addNode(*coordinates, node_id)
+    mesh.addVolume([1, 2, 3, 4])
+    formats = {}
+    for extension in ("unv", "med"):
+        path = OUTPUT_DIR / f"fem-tetrahedron.{extension}"
+        mesh.write(str(path))
+        check(path.is_file() and path.stat().st_size > 0, f"empty FEM {extension} export")
+        restored = Fem.read(str(path))
+        check(restored.NodeCount == 4, f"FEM {extension} node count changed")
+        check(restored.VolumeCount == 1, f"FEM {extension} volume count changed")
+        for node_id, coordinates in mesh.Nodes.items():
+            check(
+                (restored.Nodes[node_id] - coordinates).Length < 1.0e-9,
+                f"FEM {extension} node coordinates changed: {node_id}",
+            )
+        formats[extension] = {"bytes": path.stat().st_size, "nodes": 4, "volumes": 1}
+    return formats
+
+
+def test_fem_example_restore():
+    App = STATE["App"]
+    path = pathlib.Path(os.environ["FREECAD_APP_RESOURCE_DIR"]) / "examples" / "FEMExample.FCStd"
+    with zipfile.ZipFile(path) as archive:
+        serialized = ElementTree.fromstring(archive.read("Document.xml"))
+    expected = {
+        entry.get("name"): entry.get("type")
+        for entry in serialized.find("Objects").findall("Object")
+    }
+    proxy_names = {
+        entry.get("name")
+        for entry in serialized.find("ObjectData")
+        if any(value.get("module", "").startswith("femobjects.") for value in entry.iter("Python"))
+    }
+    document = App.openDocument(str(path))
+    try:
+        restored = {obj.Name: obj for obj in document.Objects}
+        check(set(restored) == set(expected), f"FEM objects missing: {sorted(set(expected) - set(restored))}")
+        for name, type_name in expected.items():
+            check(restored[name].TypeId == type_name, f"FEM object type changed: {name}")
+        for name in proxy_names:
+            check(restored[name].Proxy is not None, f"FEM Python proxy not restored: {name}")
+        meshes = [obj for obj in document.Objects if hasattr(obj, "FemMesh")]
+        check(meshes, "FEM example restored no meshes")
+        check(all(obj.FemMesh.NodeCount > 0 for obj in meshes), "FEM example contains an empty restored mesh")
+        results = [obj for obj in document.Objects if obj.TypeId == "Fem::FemResultObjectPython"]
+        check(results, "FEM example restored no result objects")
+        check(all(len(obj.NodeNumbers) > 0 for obj in results), "FEM result node arrays were not restored")
+        return {
+            "objects": len(restored),
+            "proxies": len(proxy_names),
+            "meshes": len(meshes),
+            "results": len(results),
+            "meshNodes": sum(obj.FemMesh.NodeCount for obj in meshes),
+        }
+    finally:
+        App.closeDocument(document.Name)
+
+
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 try:
     prepare_freecad_layout()
@@ -191,6 +260,9 @@ try:
     run_test("fcstd_save_reopen", test_fcstd)
     run_test("step_write_read", test_step)
     run_test("stl_export_read", test_stl)
+    if os.environ.get("FREECAD_PROBE_FEM") == "ON":
+        run_test("fem_example_restore", test_fem_example_restore)
+        run_test("fem_mesh_unv_med_roundtrip", test_fem_mesh_io)
 except Exception as error:
     TESTS.append(
         {

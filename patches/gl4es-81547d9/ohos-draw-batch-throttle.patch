@@ -1,54 +1,218 @@
---- a/src/gl/glstate.h
-+++ b/src/gl/glstate.h
-@@ -106,6 +106,9 @@ struct glstate_s {
-     GLsizei             scratch_vertex_size;
-     GLuint              scratch_indices;
-     GLsizei             scratch_indices_size;
-+#if defined(__OHOS__)
-+    unsigned int        ohos_pending_draw_count;
-+#endif
-     // Implementation read
-     GLenum              readf; // implementation Read Format
-     GLenum              readt; // implementation Read Type
 --- a/src/gl/fpe.c
 +++ b/src/gl/fpe.c
-@@ -39,14 +39,32 @@
+@@ -14,7 +14,7 @@
+ #include "fpe.h"
+ #include "sketch_diag.h"
+ 
+-#if defined(FREECAD_OHOS_SKETCH_DIAG)
++#if defined(FREECAD_OHOS_SKETCH_DIAG) && 0
+ #define gles_glDrawArrays(...) \
+     freecad_sketch_diag_draw_arrays(__FILE__, __LINE__, __VA_ARGS__)
+ #endif
+@@ -38,6 +38,192 @@
  #define DBG(a)
  #endif
  
 +#if defined(__OHOS__)
 +#define OHOS_DRAW_BATCH_LIMIT 4U
 +
-+static void ohos_finish_pending_draws(void) {
++static void ohos_flush_pending_draws(void) {
 +    if(!glstate->ohos_pending_draw_count)
 +        return;
 +
-+    LOAD_GLES(glFinish);
-+    gles_glFinish();
++    LOAD_GLES(glFlush);
++    gles_glFlush();
 +    glstate->ohos_pending_draw_count = 0;
 +}
 +
 +static void ohos_throttle_after_draw(void) {
 +    if(++glstate->ohos_pending_draw_count >= OHOS_DRAW_BATCH_LIMIT)
-+        ohos_finish_pending_draws();
++        ohos_flush_pending_draws();
 +}
 +#else
 +static void ohos_throttle_after_draw(void) {}
 +#endif
 +
++#if defined(FREECAD_OHOS_SKETCH_DIAG)
++static unsigned int freecad_material_diag_budget = 96;
++static unsigned int freecad_material_diag_baseline = 12;
++
++static int freecad_material_diag_colors(GLint first, GLsizei count,
++                                        GLenum index_type, const void *indices,
++                                        GLfloat *min_color, GLfloat *max_color,
++                                        unsigned int *sample_count)
++{
++    vertexattrib_t *color = &glstate->vao->vertexattrib[ATT_COLOR];
++    for (int component = 0; component < 4; ++component) {
++        min_color[component] = 1.0f;
++        max_color[component] = 0.0f;
++    }
++    *sample_count = 0;
++    if (!color->enabled || color->size < 4 || color->stride < 0 ||
++        (color->type != GL_FLOAT && color->type != GL_UNSIGNED_BYTE))
++        return 0;
++
++    const size_t offset = (size_t)(uintptr_t)color->pointer;
++    const size_t component_size = color->type == GL_FLOAT ? sizeof(GLfloat) : 1;
++    const size_t stride = color->stride ? (size_t)color->stride
++                                        : (size_t)color->size * component_size;
++    const unsigned char *base;
++    if (color->buffer && color->buffer->data) {
++        if (offset + 4 * component_size > (size_t)color->buffer->size ||
++            stride < 4 * component_size)
++            return 0;
++        base = (const unsigned char *)color->buffer->data + offset;
++    }
++    else {
++        if (!color->pointer || stride < 4 * component_size)
++            return 0;
++        base = (const unsigned char *)color->pointer;
++    }
++    if (!base)
++        return 0;
++
++    const size_t step = count > 512 ? (size_t)count / 512 : 1;
++    for (size_t element = 0; element < (size_t)count; element += step) {
++        size_t vertex;
++        if (!index_type) {
++            vertex = (size_t)first + element;
++        }
++        else if (index_type == GL_UNSIGNED_INT) {
++            vertex = ((const GLuint *)indices)[element];
++        }
++        else if (index_type == GL_UNSIGNED_SHORT) {
++            vertex = ((const GLushort *)indices)[element];
++        }
++        else {
++            return 0;
++        }
++        if (color->buffer &&
++            offset + vertex * stride + 4 * component_size > (size_t)color->buffer->size)
++            continue;
++        for (int component = 0; component < 4; ++component) {
++            GLfloat value;
++            if (color->type == GL_FLOAT) {
++                memcpy(&value, base + vertex * stride + component * sizeof(GLfloat), sizeof(value));
++            }
++            else {
++                value = base[vertex * stride + component] / 255.0f;
++            }
++            if (value < min_color[component]) min_color[component] = value;
++            if (value > max_color[component]) max_color[component] = value;
++        }
++        ++*sample_count;
++    }
++    return *sample_count && min_color[3] < 0.999f;
++}
++
++static void freecad_material_diag_draw(const char *kind, GLenum mode, GLint first,
++                                       GLsizei count, GLenum index_type,
++                                       const void *indices)
++{
++    if (!freecad_material_diag_budget || mode != GL_TRIANGLES)
++        return;
++
++    GLfloat min_color[4], max_color[4];
++    unsigned int samples;
++    const int has_alpha = freecad_material_diag_colors(
++        first, count, index_type, indices, min_color, max_color, &samples);
++    const int interesting = has_alpha || glstate->enable.blend || !glstate->depth.mask;
++    if (!interesting && (!freecad_material_diag_baseline || count < 300))
++        return;
++    if (!interesting)
++        --freecad_material_diag_baseline;
++
++    LOAD_GLES(glGetIntegerv);
++    LOAD_GLES(glIsEnabled);
++    LOAD_GLES2(glGetVertexAttribiv);
++    LOAD_GLES2(glGetVertexAttribPointerv);
++    GLint native_depth_mask = -1;
++    GLint native_program = -1;
++    GLint native_array_buffer = -1;
++    GLint native_element_buffer = -1;
++    gles_glGetIntegerv(GL_DEPTH_WRITEMASK, &native_depth_mask);
++    gles_glGetIntegerv(GL_CURRENT_PROGRAM, &native_program);
++    gles_glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &native_array_buffer);
++    gles_glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &native_element_buffer);
++    vertexattrib_t *color = &glstate->vao->vertexattrib[ATT_COLOR];
++    GLint native_color[5] = {-1, -1, -1, -1, -1};
++    GLint native_normal[5] = {-1, -1, -1, -1, -1};
++    void *native_color_pointer = NULL;
++    void *native_normal_pointer = NULL;
++    if (gles_glGetVertexAttribiv && gles_glGetVertexAttribPointerv) {
++        gles_glGetVertexAttribiv(ATT_COLOR, GL_VERTEX_ATTRIB_ARRAY_ENABLED, &native_color[0]);
++        gles_glGetVertexAttribiv(ATT_COLOR, GL_VERTEX_ATTRIB_ARRAY_SIZE, &native_color[1]);
++        gles_glGetVertexAttribiv(ATT_COLOR, GL_VERTEX_ATTRIB_ARRAY_TYPE, &native_color[2]);
++        gles_glGetVertexAttribiv(ATT_COLOR, GL_VERTEX_ATTRIB_ARRAY_NORMALIZED, &native_color[3]);
++        gles_glGetVertexAttribiv(ATT_COLOR, GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING, &native_color[4]);
++        gles_glGetVertexAttribPointerv(ATT_COLOR, GL_VERTEX_ATTRIB_ARRAY_POINTER,
++                                      &native_color_pointer);
++        gles_glGetVertexAttribiv(ATT_NORMAL, GL_VERTEX_ATTRIB_ARRAY_ENABLED, &native_normal[0]);
++        gles_glGetVertexAttribiv(ATT_NORMAL, GL_VERTEX_ATTRIB_ARRAY_SIZE, &native_normal[1]);
++        gles_glGetVertexAttribiv(ATT_NORMAL, GL_VERTEX_ATTRIB_ARRAY_TYPE, &native_normal[2]);
++        gles_glGetVertexAttribiv(ATT_NORMAL, GL_VERTEX_ATTRIB_ARRAY_NORMALIZED, &native_normal[3]);
++        gles_glGetVertexAttribiv(ATT_NORMAL, GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING, &native_normal[4]);
++        gles_glGetVertexAttribPointerv(ATT_NORMAL, GL_VERTEX_ATTRIB_ARRAY_POINTER,
++                                      &native_normal_pointer);
++    }
++    --freecad_material_diag_budget;
++    LOGD("MATERIAL_DIAG %s count=%d rgba=%.3f..%.3f,%.3f..%.3f,%.3f..%.3f,%.3f..%.3f samples=%u "
++         "color={enabled=%d size=%d type=0x%04x stride=%d ptr=%p rptr=%p norm=%d buffer=%u real=%u bytes=%d} "
++         "blend=%d/%d factors=0x%04x,0x%04x depthmask=%d/%d depth=%d/%d "
++         "lighting=%d colmat=%d cmmode=%d/%d matalpha=%.3f coloralpha=%.3f program=%d "
++         "nativebuf=%d/%d nativecolor={enabled=%d size=%d type=0x%04x norm=%d buffer=%d ptr=%p} "
++         "nativenormal={enabled=%d size=%d type=0x%04x norm=%d buffer=%d ptr=%p}\n",
++         kind, count,
++         min_color[0], max_color[0], min_color[1], max_color[1],
++         min_color[2], max_color[2], min_color[3], max_color[3], samples,
++         color->enabled, color->size, color->type, color->stride,
++         color->pointer, color->real_pointer, color->normalized,
++         color->buffer ? color->buffer->buffer : 0,
++         color->buffer ? color->buffer->real_buffer : 0,
++         color->buffer ? (int)color->buffer->size : 0,
++         glstate->enable.blend, gles_glIsEnabled(GL_BLEND),
++         glstate->blendsfactorrgb, glstate->blenddfactorrgb,
++         glstate->depth.mask, native_depth_mask,
++         glstate->enable.depth_test, gles_glIsEnabled(GL_DEPTH_TEST),
++         glstate->fpe_state ? glstate->fpe_state->lighting : -1,
++         glstate->fpe_state ? glstate->fpe_state->color_material : -1,
++         glstate->fpe_state ? glstate->fpe_state->cm_front_mode : -1,
++         glstate->fpe_state ? glstate->fpe_state->cm_back_mode : -1,
++         glstate->material.front.diffuse[3], glstate->color[3], native_program,
++         native_array_buffer, native_element_buffer,
++         native_color[0], native_color[1], native_color[2], native_color[3],
++         native_color[4], native_color_pointer,
++         native_normal[0], native_normal[1], native_normal[2], native_normal[3],
++         native_normal[4], native_normal_pointer);
++}
++#else
++static void freecad_material_diag_draw(const char *kind, GLenum mode, GLint first,
++                                       GLsizei count, GLenum index_type,
++                                       const void *indices)
++{
++    (void)kind;
++    (void)mode;
++    (void)first;
++    (void)count;
++    (void)index_type;
++    (void)indices;
++}
++#endif
++
  void free_scratch(scratch_t* scratch) {
- #if defined(__OHOS__)
-     if(scratch->size) {
-         // Zink on HarmonyOS can return before it has consumed client attribute
-         // memory. Keep GL4ES' converted arrays alive until this draw completes.
--        LOAD_GLES(glFinish);
--        gles_glFinish();
--
-+        ohos_finish_pending_draws();
-     }
- #endif
      for(int i=0; i<scratch->size; ++i)
-@@ -855,6 +873,7 @@ void APIENTRY_GL4ES fpe_glDrawArrays(GLenum mode, GLint first, GLsizei count) {
+         free(scratch->scratch[i]);
+@@ -815,7 +1001,8 @@ void APIENTRY_GL4ES fpe_glDrawArrays(GLenum mode, GLint first, GLsizei count) {
+     DBG(printf("fpe_glDrawArrays(%s, %d, %d), program=%d, instanceID=%u\n", PrintEnum(mode), first, count, glstate->glsl->program, glstate->instanceID);)
+     scratch_t scratch = {0};
+     realize_glenv(mode==GL_POINTS, first, count, 0, NULL, &scratch);
+-#if defined(FREECAD_OHOS_SKETCH_DIAG)
++    freecad_material_diag_draw("arrays", mode, first, count, 0, NULL);
++#if defined(FREECAD_OHOS_SKETCH_DIAG) && 0
+     if (freecad_sketch_diag_budget > 0 &&
+         (mode==GL_LINES || mode==GL_LINE_STRIP || mode==GL_POINTS)) {
+         --freecad_sketch_diag_budget;
+@@ -846,6 +1033,7 @@ void APIENTRY_GL4ES fpe_glDrawArrays(GLenum mode, GLint first, GLsizei count) {
  #endif
      LOAD_GLES(glDrawArrays);
      gles_glDrawArrays(mode, first, count);
@@ -56,7 +220,17 @@
      free_scratch(&scratch);
  }
  
-@@ -900,6 +919,7 @@ void APIENTRY_GL4ES fpe_glDrawElements(GLenum mode, GLsizei count, GLenum type,
+@@ -853,7 +1041,8 @@ void APIENTRY_GL4ES fpe_glDrawElements(GLenum mode, GLsizei count, GLenum type,
+     DBG(printf("fpe_glDrawElements(%s, %d, %s, %p), program=%d, instanceID=%u\n", PrintEnum(mode), count, PrintEnum(type), indices, glstate->glsl->program, glstate->instanceID);)
+     scratch_t scratch = {0};
+     realize_glenv(mode==GL_POINTS, 0, count, type, indices, &scratch);
+-#if defined(FREECAD_OHOS_SKETCH_DIAG)
++    freecad_material_diag_draw("elements", mode, 0, count, type, indices);
++#if defined(FREECAD_OHOS_SKETCH_DIAG) && 0
+     if (freecad_sketch_diag_budget > 0 &&
+         (mode==GL_LINES || mode==GL_LINE_STRIP || mode==GL_POINTS)) {
+         --freecad_sketch_diag_budget;
+@@ -892,6 +1081,7 @@ void APIENTRY_GL4ES fpe_glDrawElements(GLenum mode, GLsizei count, GLenum type,
      }
      realize_bufferIndex();
      gles_glDrawElements(mode, count, type, indices);
@@ -64,7 +238,7 @@
      if(use_vbo)
          wantBufferIndex(0);
      free_scratch(&scratch);
-@@ -952,6 +972,7 @@ void APIENTRY_GL4ES fpe_glDrawArraysInstanced(GLenum mode, GLint first, GLsizei
+@@ -943,6 +1133,7 @@ void APIENTRY_GL4ES fpe_glDrawArraysInstanced(GLenum mode, GLint first, GLsizei
              }
          }
          gles_glDrawArrays(mode, first, count);
@@ -72,7 +246,7 @@
      }
      free_scratch(&scratch);
  }
-@@ -1013,6 +1034,7 @@ void APIENTRY_GL4ES fpe_glDrawElementsInstanced(GLenum mode, GLsizei count, GLen
+@@ -1004,6 +1195,7 @@ void APIENTRY_GL4ES fpe_glDrawElementsInstanced(GLenum mode, GLsizei count, GLen
              }
          }
          gles_glDrawElements(mode, count, type, inds);

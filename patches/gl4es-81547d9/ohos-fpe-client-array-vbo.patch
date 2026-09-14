@@ -1,0 +1,106 @@
+--- a/src/gl/fpe.h
++++ b/src/gl/fpe.h
+@@ -234,6 +234,11 @@
+ typedef struct scratch_s {
+     void*       scratch[16];
+     int         size;
++    // Converted attribute data is uploaded into short-lived GLES buffers.
++    // Buffer object lifetime is managed by the driver, so freeing these after
++    // the draw does not require a CPU/GPU glFinish fence.
++    GLuint      vbo[16];
++    int         vbo_size;
+ } scratch_t;
+ void free_scratch(scratch_t* scratch);
+ 
+--- a/src/gl/fpe.c
++++ b/src/gl/fpe.c
+@@ -224,9 +224,41 @@
+ }
+ #endif
+ 
++static GLuint upload_bgra_scratch(scratch_t *scratch, const void *ptr,
++                                  GLint stride, GLsizei count) {
++    if (!ptr || count <= 0 || scratch->vbo_size >= 16)
++        return 0;
++
++    // GLES2 does not accept GL_BGRA vertex attributes. Convert once on the
++    // CPU, then hand ownership of the converted bytes to a GLES buffer. The
++    // driver keeps a deleted buffer alive while a queued draw references it.
++    GLvoid *converted = copy_gl_pointer_color_bgra(ptr, stride, 4, 0, count);
++    if (!converted)
++        return 0;
++
++    GLuint buffer = 0;
++    LOAD_GLES(glGenBuffers);
++    LOAD_GLES(glBufferData);
++    if (gles_glGenBuffers)
++        gles_glGenBuffers(1, &buffer);
++    if (!buffer || !gles_glBufferData) {
++        free(converted);
++        return 0;
++    }
++    bindBuffer(GL_ARRAY_BUFFER, buffer);
++    gles_glBufferData(GL_ARRAY_BUFFER,
++                      (GLsizeiptr)count * 4 * (GLsizeiptr)sizeof(GLfloat),
++                      converted, GL_STREAM_DRAW);
++    free(converted);
++    scratch->vbo[scratch->vbo_size++] = buffer;
++    return buffer;
++}
++
+ void free_scratch(scratch_t* scratch) {
+     for(int i=0; i<scratch->size; ++i)
+         free(scratch->scratch[i]);
++    for(int i=0; i<scratch->vbo_size; ++i)
++        deleteSingleBuffer(scratch->vbo[i]);
+ }
+ 
+ void fpe_Init(glstate_t *glstate) {
+@@ -1720,7 +1752,7 @@
+                     // need to adjust, so first need the min/max (a shame as I already must have that somewhere)
+                     int imin, imax;
+                     if(type==0) {
+-                        imin = first; imax = count;
++                        imin = first; imax = first + count;
+                     } else {
+                         if(type==GL_UNSIGNED_INT)
+                             getminmax_indices_ui(indices, &imax, &imin, count);
+@@ -1729,15 +1761,31 @@
+                         ++imax;
+                     }
+                     if(w->size==GL_BGRA) {
++                        // Upload the complete [0, imax) range so both array
++                        // draws with a non-zero first vertex and indexed
++                        // draws can keep their original indices.
++                        GLuint buffer = upload_bgra_scratch(
++                            scratch, ptr, w->stride, imax);
+                         v->size = 4;
+                         v->type = GL_FLOAT;
+                         v->normalized = 0;
+                         v->integer = 0;
+-                        v->pointer = scratch->scratch[scratch->size++] = copy_gl_pointer_color_bgra(ptr, w->stride, 4, imin, imax);
+-                        v->pointer = (char*)v->pointer - imin*4*sizeof(GLfloat);   // adjust for min...
+                         v->stride = 0;
+                         v->buffer = NULL;
+-                        v->real_buffer = 0;
++                        if (buffer) {
++                            v->pointer = NULL;
++                            v->real_pointer = NULL;
++                            v->real_buffer = buffer;
++                        }
++                        else {
++                            v->pointer = scratch->scratch[scratch->size++] =
++                                copy_gl_pointer_color_bgra(ptr, w->stride, 4,
++                                                           imin, imax);
++                            v->pointer = (char*)v->pointer -
++                                imin * 4 * sizeof(GLfloat);
++                            v->real_pointer = NULL;
++                            v->real_buffer = 0;
++                        }
+                     } else if (w->type == GL_DOUBLE) {
+                         // TODO
+                         static int warn = 1;
+                         if(warn) {
+                             printf("LIBGL: VertexAttribArray using GL_DOUBLE unimplemented!\\n");
+                             warn=0;
+                         }

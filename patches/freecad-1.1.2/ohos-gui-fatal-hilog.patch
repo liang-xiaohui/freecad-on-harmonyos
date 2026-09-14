@@ -11,14 +11,15 @@
  #include <boost/interprocess/sync/file_lock.hpp>
  #include <Inventor/errors/SoDebugError.h>
  #include <Inventor/errors/SoError.h>
-@@ -2195,6 +2199,22 @@
+@@ -2200,6 +2204,23 @@
  using _qt_msg_handler_old = void (*)(QtMsgType, const QMessageLogContext&, const QString&);
  _qt_msg_handler_old old_qtmsg_handler = nullptr;
  
 +#if defined(FREECAD_OHOS)
-+// OHOS: Base::Console output is invisible in hilog, so mirror critical/fatal
-+// Qt messages (e.g. QPA qFatal) there before the deliberate abort.
-+static void ohosLogCriticalToHilog(const char* text)
++// OHOS: Base::Console output is invisible in hilog, so mirror warning-level and
++// above Qt messages (QPA warnings, GL capability reports such as the depth
++// attachment format, ...) there. Fatal messages are mirrored before the abort.
++static void ohosLogQtMessageToHilog(int priority, const char* text)
 +{
 +    using OhLogPrintFn = int (*)(int, int, unsigned int, const char*, const char*, ...);
 +    static OhLogPrintFn ohLogPrint = []() -> OhLogPrintFn {
@@ -26,7 +27,7 @@
 +        return handle ? reinterpret_cast<OhLogPrintFn>(dlsym(handle, "OH_LOG_Print")) : nullptr;
 +    }();
 +    if (ohLogPrint) {
-+        ohLogPrint(0, 6, 0xFC00, "FreeCADProbe", "%{public}s", text);  // LOG_APP, LOG_FATAL
++        ohLogPrint(0, priority, 0xFC00, "FreeCADProbe", "%{public}s", text);  // LOG_APP
 +    }
 +}
 +#endif
@@ -34,12 +35,24 @@
  void messageHandler(QtMsgType type, const QMessageLogContext& context, const QString& msg)
  {
      QByteArray output;
-@@ -2224,6 +2244,9 @@
+@@ -2223,12 +2244,21 @@
+ #endif
+             break;
+         case QtWarningMsg:
++#if defined(FREECAD_OHOS)
++            ohosLogQtMessageToHilog(5, output.constData());  // LOG_WARN
++#endif
+             Base::Console().warning("%s\n", output.constData());
+             break;
+         case QtCriticalMsg:
++#if defined(FREECAD_OHOS)
++            ohosLogQtMessageToHilog(6, output.constData());  // LOG_ERROR
++#endif
              Base::Console().error("%s\n", output.constData());
              break;
          case QtFatalMsg:
 +#if defined(FREECAD_OHOS)
-+            ohosLogCriticalToHilog(output.constData());
++            ohosLogQtMessageToHilog(6, output.constData());  // LOG_ERROR
 +#endif
              Base::Console().error("%s\n", output.constData());
              abort();  // deliberately core dump

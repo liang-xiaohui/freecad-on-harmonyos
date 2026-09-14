@@ -76,6 +76,7 @@ export default class QAbilityStage extends AbilityStage {
 
   onNewProcessRequest(want: Want): string {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onNewProcessRequest: want.parameters: ' + JSON.stringify(want.parameters));
+    QAbilityStage.setAppArgsFromWant(want, this.context.getApplicationContext().filesDir);
     QAbilityStage.initQtAppContextIfNeeded(this.context.getApplicationContext());
     let processKey: string = qpa.handleAbilityStageOnNewProcessRequest(this, want);
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onNewProcessRequest: processKey: "' + processKey + '"');
@@ -84,6 +85,7 @@ export default class QAbilityStage extends AbilityStage {
 
   onAcceptWant(want: Want): string {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onAcceptWant: want.parameters: ' + JSON.stringify(want.parameters));
+    QAbilityStage.setAppArgsFromWant(want, this.context.getApplicationContext().filesDir);
     QAbilityStage.initQtAppContextIfNeeded(this.context.getApplicationContext());
     let instanceKey: string = qpa.handleAbilityStageOnAcceptWant(this, want);
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onAcceptWant: instanceKey: "' + instanceKey + '"');
