@@ -14,6 +14,7 @@ def main() -> None:
     parser.add_argument("--source", required=True, type=Path)
     parser.add_argument("--python-prefix", required=True, type=Path)
     parser.add_argument("--libffi-prefix", required=True, type=Path)
+    parser.add_argument("--openssl-prefix", required=True, type=Path)
     parser.add_argument("--build-temp", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
     args = parser.parse_args()
@@ -21,6 +22,7 @@ def main() -> None:
     source = args.source.resolve()
     python_prefix = args.python_prefix.resolve()
     libffi_prefix = args.libffi_prefix.resolve()
+    openssl_prefix = args.openssl_prefix.resolve()
     build_temp = args.build_temp.resolve()
     output_dir = args.output_dir.resolve()
     modules = source / "Modules"
@@ -80,6 +82,16 @@ def main() -> None:
                 ("HAVE_FFI_PREP_CLOSURE_LOC", "1"),
                 ("HAVE_FFI_CLOSURE_ALLOC", "1"),
             ],
+        ),
+        # The SDK runtime ships no _ssl, so urllib/requests can only speak
+        # plain HTTP. The AI workbench talks to LLM APIs over TLS, so the
+        # module is rebuilt here against the CPPLib OpenSSL build for OHOS.
+        Extension(
+            "_ssl",
+            sources=[str(modules / "_ssl.c")],
+            include_dirs=common_include_dirs + [str(openssl_prefix / "include")],
+            library_dirs=python_library_dirs + [str(openssl_prefix / "lib")],
+            libraries=common_libraries + ["ssl", "crypto"],
         ),
     ]
 

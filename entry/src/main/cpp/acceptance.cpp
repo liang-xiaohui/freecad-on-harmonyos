@@ -359,6 +359,29 @@ WritableRuntimePaths configureWritableRuntime(const std::string& outputDir)
     setenv("FREECAD_USER_HOME", paths.home.c_str(), 1);
     setenv("FREECAD_USER_DATA", paths.data.c_str(), 1);
     setenv("FREECAD_USER_TEMP", paths.temp.c_str(), 1);
+
+    // TLS trust store. CPython's _ssl links against the OHOS OpenSSL build,
+    // whose compiled-in OPENSSLDIR is the CPPLib build prefix - a host path
+    // that does not exist inside the app sandbox, so every HTTPS request would
+    // fail with CERTIFICATE_VERIFY_FAILED. Point OpenSSL at a readable bundle.
+    // The system bundle is read-only and OS-maintained; the fallback ships in
+    // the runtime archive (freecad-home/share/cacert.pem) and may only appear
+    // once the background materialize worker has unpacked it.
+    const char* systemCaBundle = "/etc/ssl/certs/cacert.pem";
+    const std::string bundledCaBundle = paths.home + "/share/cacert.pem";
+    if (access(systemCaBundle, R_OK) == 0) {
+        setenv("SSL_CERT_FILE", systemCaBundle, 1);
+        OH_LOG_Print(LOG_APP, LOG_INFO, PROBE_LOG_DOMAIN, PROBE_LOG_TAG,
+                     "SSL_CERT_FILE=%{public}s (system bundle)", systemCaBundle);
+    }
+    else {
+        setenv("SSL_CERT_FILE", bundledCaBundle.c_str(), 1);
+        OH_LOG_Print(LOG_APP, LOG_INFO, PROBE_LOG_DOMAIN, PROBE_LOG_TAG,
+                     "SSL_CERT_FILE=%{public}s (bundled fallback)", bundledCaBundle.c_str());
+    }
+    if (access("/etc/ssl/certs", R_OK) == 0) {
+        setenv("SSL_CERT_DIR", "/etc/ssl/certs", 1);
+    }
     return paths;
 }
 

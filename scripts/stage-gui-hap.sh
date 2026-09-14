@@ -26,6 +26,10 @@ VTK_PREFIX="${VTK_PREFIX:-$CPP_LIB_ROOT/install/vtk/9.3.1/ohos/$ABI}"
 HDF5_PREFIX="${HDF5_PREFIX:-$CPP_LIB_ROOT/install/hdf5/1.14.6/ohos/$ABI}"
 MEDFILE_PREFIX="${MEDFILE_PREFIX:-$CPP_LIB_ROOT/install/medfile/6.0.1/ohos/$ABI}"
 LIBFFI_PREFIX="${LIBFFI_PREFIX:-$CPP_LIB_ROOT/install/libffi/3.4.2/ohos/$ABI}"
+# The CPython _ssl extension rebuilt for OHOS links against this OpenSSL build;
+# the NEEDED closure pass below picks libssl.so.3/libcrypto.so.3 up from here.
+OPENSSL_PREFIX="${OPENSSL_PREFIX:-$CPP_LIB_ROOT/install/openssl/3.5.7/ohos/$ABI}"
+CA_BUNDLE="${CA_BUNDLE:-$PROJECT_DIR/runtime/cacert.pem}"
 COIN_PREFIX="$CPP_LIB_ROOT/install/coin/4.0.0/ohos/$ABI"
 GL4ES_DIR="$CPP_LIB_ROOT/install/gl4es/81547d9/ohos/$ABI/usr/lib/gl4es"
 QTAPP_LIB="${QTAPP_LIB:-$CPP_LIB_ROOT/build/freecad-qtapp/libfreecadqtapp.so}"
@@ -275,6 +279,16 @@ cp -L "$COIN_PREFIX/lib/libCoin.so.4.0.0" "$STAGE/libCoin.so.4.0.0"
 copy_named_library "$GL4ES_DIR/libGL.so" libGL.so
 
 echo "==> Stage CPython 3.11 runtime"
+for required in \
+    "$PYTHON_ROOT/lib/python3.11/lib-dynload/_ssl.cpython-311-aarch64-linux-ohos.so" \
+    "$OPENSSL_PREFIX/lib/libssl.so.3" \
+    "$OPENSSL_PREFIX/lib/libcrypto.so.3" \
+    "$CA_BUNDLE"; do
+    [ -e "$required" ] || {
+        echo "错误：缺少 TLS 运行时输入：$required（先跑 scripts/build-python-runtime-ohos.sh）" >&2
+        exit 1
+    }
+done
 mkdir -p "$STAGE/lib/python3.11/lib-dynload"
 for extension in "$PYTHON_ROOT"/lib/python3.11/lib-dynload/*.so; do
     [ -f "$extension" ] || continue
@@ -282,6 +296,13 @@ for extension in "$PYTHON_ROOT"/lib/python3.11/lib-dynload/*.so; do
 done
 copy_named_library "$PYTHON_ROOT/lib/libpython3.11.so.1.0" libpython3.11.so.1.0
 cp -L "$PYTHON_ROOT/lib/libpython3.11.so.1.0" "$STAGE/lib/libpython3.11.so.1.0"
+
+# _ssl has a $ORIGIN/../.. RUNPATH (it is loaded from lib/python3.11/lib-dynload),
+# so libssl/libcrypto must also exist in <libs>/lib next to libpython3.11.so.
+for openssl_library in libssl.so.3 libcrypto.so.3; do
+    copy_named_library "$OPENSSL_PREFIX/lib/$openssl_library" "$openssl_library"
+    cp -L "$OPENSSL_PREFIX/lib/$openssl_library" "$STAGE/lib/$openssl_library"
+done
 
 if [ -e "$PYTHON_ROOT/lib/libffi.so.8" ]; then
     copy_named_library "$PYTHON_ROOT/lib/libffi.so.8" libffi.so.8
@@ -298,6 +319,15 @@ echo "==> Package Python and FreeCAD GUI runtime as rawfiles"
 (cd "$FREECAD_PREFIX" && \
     zip -q -r "$RAW_STAGE/freecad-runtime.zip" Mod Ext share \
         -x '*/__pycache__/*' '*.pyc' '*.so' '*.so.*')
+# TLS trust store. OpenSSL's OPENSSLDIR is the build-host prefix and does not
+# exist in the app sandbox, so the app points SSL_CERT_FILE at this copy
+# (see configureWritableRuntime in entry/src/main/cpp/acceptance.cpp). It is
+# extracted to freecad-home/share/cacert.pem together with the runtime.
+CA_STAGE=$(mktemp -d "$RAW_STAGE/.cacert.XXXXXX")
+mkdir -p "$CA_STAGE/share"
+cp "$CA_BUNDLE" "$CA_STAGE/share/cacert.pem"
+(cd "$CA_STAGE" && zip -q -r "$RAW_STAGE/freecad-runtime.zip" share/cacert.pem)
+rm -rf "$CA_STAGE"
 if [ "$BUILD_FEM" = ON ]; then
     FEM_ARTIFACT_ROOT="${FREECAD_ARTIFACT_ROOT:-/storage/Users/currentUser/codex-freecad-artifacts}"
     mkdir -p "$FEM_ARTIFACT_ROOT"
@@ -520,6 +550,10 @@ cp "$PROJECT_DIR/probes/freecad-headless/acceptance.py" \
     "$RAW_STAGE/freecad_headless_acceptance.py"
 unzip -tq "$RAW_STAGE/python311.zip" >/dev/null
 unzip -tq "$RAW_STAGE/freecad-runtime.zip" >/dev/null
+unzip -Z1 "$RAW_STAGE/freecad-runtime.zip" | grep -q '^share/cacert\.pem$' || {
+    echo "错误：runtime zip 缺少 TLS 信任库 share/cacert.pem" >&2
+    exit 1
+}
 if unzip -Z1 "$RAW_STAGE/freecad-runtime.zip" |
    grep -Eq '\.so([.]|$)'; then
     echo "错误：freecad-runtime.zip 不得包含 native ELF" >&2
@@ -532,6 +566,7 @@ $HEADLESS_QT6_PREFIX/lib
 $QT_PREFIX/lib
 $PYTHON_ROOT/lib
 $LIBFFI_PREFIX/lib
+$OPENSSL_PREFIX/lib
 $OCCT_PREFIX/lib
 $XERCES_PREFIX/lib
 $VTK_PREFIX/lib

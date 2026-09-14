@@ -10,6 +10,9 @@ PYTHON_SOURCE="$CPP_LIB_ROOT/sources/python/openharmony-master"
 SDK_PYTHON="$NATIVE_SDK/llvm/python3"
 SDK_PYTHON_BIN="$SDK_PYTHON/bin/python3"
 LIBFFI_PREFIX="${LIBFFI_PREFIX:-$CPP_LIB_ROOT/install/libffi/3.4.2/ohos/$ABI}"
+# _ssl links against the OHOS OpenSSL build in CPPLib; the matching
+# libssl.so.3/libcrypto.so.3 are staged into the HAP alongside the module.
+OPENSSL_PREFIX="${OPENSSL_PREFIX:-$CPP_LIB_ROOT/install/openssl/3.5.7/ohos/$ABI}"
 BUILD="$CPP_LIB_ROOT/build/python/$PYTHON_VERSION/ohos-$ABI-extensions"
 PREFIX="$CPP_LIB_ROOT/install/python/$PYTHON_VERSION/ohos/$ABI"
 DYNLOAD="$PREFIX/lib/python3.11/lib-dynload"
@@ -18,6 +21,10 @@ STAGED_DYNLOAD="$BUILD/lib-dynload"
 "$PROJECT_DIR/scripts/prepare-python-runtime-sources.sh"
 [ -f "$LIBFFI_PREFIX/lib/libffi.so.8" ] || \
     "$PROJECT_DIR/scripts/build-libffi-ohos.sh"
+[ -f "$OPENSSL_PREFIX/lib/libssl.so.3" ] || {
+    echo "OpenSSL OHOS build is missing: $OPENSSL_PREFIX/lib/libssl.so.3" >&2
+    exit 1
+}
 [ -x "$SDK_PYTHON_BIN" ] || {
     echo "SDK Python is not executable: $SDK_PYTHON_BIN" >&2
     exit 1
@@ -32,6 +39,19 @@ mv -f "$PREFIX/lib/libffi.so.8.1.0.new" "$PREFIX/lib/libffi.so.8.1.0"
 ln -sfn libffi.so.8.1.0 "$PREFIX/lib/libffi.so.8"
 ln -sfn libffi.so.8 "$PREFIX/lib/libffi.so"
 
+# _ssl resolves libssl/libcrypto through its $ORIGIN/../.. RUNPATH, i.e. the
+# Python prefix lib dir. Keeping them here makes the prefix self-contained for
+# the local runtime probe, and stage-gui-hap.sh picks them up from this
+# directory when it resolves the DT_NEEDED closure for the HAP.
+for openssl_library in libssl.so.3 libcrypto.so.3; do
+    [ -f "$OPENSSL_PREFIX/lib/$openssl_library" ] || {
+        echo "OpenSSL runtime library is missing: $OPENSSL_PREFIX/lib/$openssl_library" >&2
+        exit 1
+    }
+    cp -L "$OPENSSL_PREFIX/lib/$openssl_library" "$PREFIX/lib/$openssl_library.new"
+    mv -f "$PREFIX/lib/$openssl_library.new" "$PREFIX/lib/$openssl_library"
+done
+
 mkdir -p "$BUILD"
 export CC="$CLANG_BIN --target=aarch64-linux-ohos --sysroot=$NATIVE_SDK/sysroot"
 export LDSHARED="$CLANG_BIN --target=aarch64-linux-ohos --sysroot=$NATIVE_SDK/sysroot -shared -fuse-ld=lld -Wl,-z,relro,-z,now -Wl,-z,noexecstack -Wl,-rpath,\$ORIGIN/../.."
@@ -43,10 +63,11 @@ export LDFLAGS="-L$PREFIX/lib -L$LIBFFI_PREFIX/lib"
     --source "$PYTHON_SOURCE" \
     --python-prefix "$PREFIX" \
     --libffi-prefix "$LIBFFI_PREFIX" \
+    --openssl-prefix "$OPENSSL_PREFIX" \
     --build-temp "$BUILD/objects" \
     --output-dir "$STAGED_DYNLOAD"
 
-for module in _socket binascii zlib _ctypes; do
+for module in _socket binascii zlib _ctypes _ssl; do
     staged_file=$(find "$STAGED_DYNLOAD" -maxdepth 1 \
         -name "$module.cpython-311-*.so" -print | head -n 1)
     [ -n "$staged_file" ] || {

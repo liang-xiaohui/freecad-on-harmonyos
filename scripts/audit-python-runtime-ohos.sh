@@ -9,7 +9,7 @@ PREFIX="${PYTHON_ROOT:-$CPP_LIB_ROOT/install/python/$PYTHON_VERSION/ohos/$ABI}"
 DYNLOAD="$PREFIX/lib/python3.11/lib-dynload"
 READELF_BIN="${READELF_BIN:-$(command -v readelf)}"
 EXPECTED_RUNPATH='$ORIGIN/../..'
-MODULES="_socket binascii zlib _ctypes"
+MODULES="_socket binascii zlib _ctypes _ssl"
 
 for module in $MODULES; do
     file=$(find "$DYNLOAD" -maxdepth 1 -name "$module.cpython-311-*.so" -print | head -n 1)

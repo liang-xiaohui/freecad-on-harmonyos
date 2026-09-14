@@ -116,6 +116,16 @@ done
 copy_named_library "$PYTHON_ROOT/lib/libpython3.11.so.1.0" libpython3.11.so.1.0
 cp -L "$PYTHON_ROOT/lib/libpython3.11.so.1.0" "$STAGE/lib/libpython3.11.so.1.0"
 
+# _ssl is loaded from lib/python3.11/lib-dynload and resolves its OpenSSL
+# dependencies through the $ORIGIN/../.. RUNPATH, so keep them in <libs>/lib
+# as well as at the top level.
+for openssl_library in libssl.so.3 libcrypto.so.3; do
+    if [ -e "$PYTHON_ROOT/lib/$openssl_library" ]; then
+        copy_named_library "$PYTHON_ROOT/lib/$openssl_library" "$openssl_library"
+        cp -L "$PYTHON_ROOT/lib/$openssl_library" "$STAGE/lib/$openssl_library"
+    fi
+done
+
 if [ -e "$PYTHON_ROOT/lib/libffi.so.8" ]; then
     copy_named_library "$PYTHON_ROOT/lib/libffi.so.8" libffi.so.8
     cp -L "$PYTHON_ROOT/lib/libffi.so.8" "$STAGE/lib/libffi.so.8"
