@@ -121,6 +121,23 @@ if [ "$BUILD_BIM" = ON ]; then
         }
     done
 fi
+if [ -d "$FREECAD_PREFIX/Mod/freecad-ai" ]; then
+    # FreeCAD AI (https://github.com/ghbalf/freecad-ai) is a third-party pure
+    # Python workbench installed by scripts/install-freecad-ai-module-ohos.sh.
+    # It ships no native extensions, so it passes the no-native-ELF rule for the
+    # runtime archive. The directory name must stay exactly "freecad-ai" because
+    # Init.py hardcodes it when extending sys.path.
+    for required in \
+        Mod/freecad-ai/Init.py \
+        Mod/freecad-ai/InitGui.py \
+        Mod/freecad-ai/freecad_ai/__init__.py \
+        Mod/freecad-ai/freecad_ai/ui/chat_widget.py; do
+        [ -f "$FREECAD_PREFIX/$required" ] || {
+            echo "错误：freecad-ai 目录存在但内容不完整：$required" >&2
+            exit 1
+        }
+    done
+fi
 if [ "$BUILD_ASSEMBLY" = ON ]; then
     for required in \
         "$FREECAD_PREFIX/lib/AssemblyApp.so" \

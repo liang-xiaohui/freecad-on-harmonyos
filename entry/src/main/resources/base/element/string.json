@@ -11,6 +11,10 @@
     {
       "name": "QAbility_desc",
       "value": "FreeCAD GUI Qt application"
+    },
+    {
+      "name": "reason_internet",
+      "value": "Connect to the configured LLM provider from the FreeCAD AI workbench"
     }
   ]
 }

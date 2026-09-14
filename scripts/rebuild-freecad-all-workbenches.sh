@@ -4,6 +4,9 @@
 # FEM 默认启用（Salome SMESH 走外部 HDF5/MEDFile）。BIM 是纯 Python，不参与
 # CMake 构建，由 install-bim-module-ohos.sh 在 install 之后镜像安装清单写入
 # 安装前缀；FREECAD_BUILD_BIM=OFF 可关闭。
+# FreeCAD AI（第三方 AI 助手工作台）同样是纯 Python，由
+# install-freecad-ai-module-ohos.sh 在 install 之后装进前缀的 Mod/freecad-ai；
+# FREECAD_BUILD_FREECAD_AI=OFF 可关闭。
 set -e
 
 PROJECT_DIR=/storage/Users/currentUser/github/freecad-on-harmonyos
@@ -18,6 +21,7 @@ BUILD_ADDONMGR="${FREECAD_BUILD_ADDONMGR:-ON}"
 BUILD_START="${FREECAD_BUILD_START:-ON}"
 BUILD_FEM="${FREECAD_BUILD_FEM:-ON}"
 BUILD_BIM="${FREECAD_BUILD_BIM:-ON}"
+BUILD_FREECAD_AI="${FREECAD_BUILD_FREECAD_AI:-ON}"
 
 if [ "$BUILD_FEM" = ON ] || [ "${FREECAD_BUILD_MESH_PART:-OFF}" = ON ]; then
   echo "==> 准备 SMESH 的 HDF5 / MEDFile 依赖"
@@ -78,6 +82,13 @@ if [ "$BUILD_BIM" = ON ]; then
   FREECAD_GUI_PREFIX="$PREFIX" sh "$PROJECT_DIR/scripts/install-bim-module-ohos.sh"
 else
   echo "==> BIM 已关闭（设置 FREECAD_BUILD_BIM=ON 可启用）"
+fi
+
+if [ "$BUILD_FREECAD_AI" = ON ]; then
+  echo "==> Step 4c/5: 安装 FreeCAD AI 助手工作台（第三方纯 Python addon）"
+  FREECAD_GUI_PREFIX="$PREFIX" sh "$PROJECT_DIR/scripts/install-freecad-ai-module-ohos.sh"
+else
+  echo "==> FreeCAD AI 已关闭（设置 FREECAD_BUILD_FREECAD_AI=ON 可启用）"
 fi
 
 echo "==> Step 5/5: 打包到 HAP"

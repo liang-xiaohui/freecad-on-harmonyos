@@ -13,6 +13,25 @@
     "installationFree": false,
     "pages": "$profile:main_pages",
 
+    // The FreeCAD AI workbench (Mod/freecad-ai) talks to LLM providers over
+    // HTTP from inside the embedded CPython runtime. Without this the socket
+    // layer is denied at bind/connect time and every request fails with a bare
+    // EPERM, which is hard to tell apart from an unreachable endpoint.
+    // INTERNET is a system_grant permission: declaring it is enough, there is
+    // no runtime prompt.
+    "requestPermissions": [
+      {
+        "name": "ohos.permission.INTERNET",
+        "reason": "$string:reason_internet",
+        "usedScene": {
+          "abilities": [
+            "QAbility"
+          ],
+          "when": "inuse"
+        }
+      }
+    ],
+
     "abilities": [
       {
         "name": "EntryAbility",
