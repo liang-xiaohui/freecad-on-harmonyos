@@ -1,0 +1,30 @@
+--- a/src/Gui/Stylesheets/FreeCAD.qss
++++ b/src/Gui/Stylesheets/FreeCAD.qss
+@@ -172,6 +172,11 @@
+   border-style: none;
+   spacing: 0px;
+   padding: 1px;
++  /* OHOS: the stock 4px extent is unreachable with a finger, and a touch
++     screen has no hover to reveal it, so the dock handle was effectively
++     undraggable. Widen the grab area and give it a faint fill so it can be
++     found at all. */
++  background-color: @GeneralAlternateBackgroundColor;
+ }
+ 
+ QMainWindow::separator:vertical:hover {
+@@ -183,13 +188,13 @@
+ }
+ 
+ QMainWindow::separator:horizontal {
+-  width: 4px;
++  width: 12px;
+   margin-top: 0.1px;
+   margin-bottom: 0.1px;
+ }
+ 
+ QMainWindow::separator:vertical {
+-  height: 4px;
++  height: 12px;
+   margin-left: 0.1px;
+   margin-right: 0.1px;
+ }
