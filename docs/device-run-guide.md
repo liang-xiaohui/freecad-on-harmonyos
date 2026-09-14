@@ -302,8 +302,16 @@ HL2 REDC glcolor=0.800,0.200,0.200 count=228 depthmask=1 depthtest=1
 glDepthFunc(GL_LESS);
 ```
 
-不改 gl4es、不改 Coin、不影响 BIM 修复。真机复验通过，签名 HAP 尺寸回到
-494,480,552 B（实验版为 494,512,664 B）。
+不改 gl4es、不改 Coin、不影响 BIM 修复。补丁落位后重跑完整标准序列
+（build → `cmake --install` → `install-bim-module-ohos.sh` → `stage-gui-hap.sh` →
+`build-gui-hap-ohos.sh`）并真机复验：单击一个面出现绿色选中高亮（点击地面时整个
+Site 变绿），状态栏同步显示 `Preselected: <object>.FaceN` 与所选面面积。最终签名
+HAP 为 **494,484,645 B**（排查期间只换单个 `.so` 的实验版是 494,512,664 B）。
+
+注意 `cmake --install` 会把 `libFreeCADGui.so` 的 RUNPATH 从 build 树里的宿主机
+绝对路径规范化为 `$ORIGIN`，所以 install 产物与 build 产物哈希不同 —— 两者
+`.text`/`.rodata` 段完全一致，507 字节差异全部在 RUNPATH 上。`stage-gui-hap.sh`
+从 install 前缀取库，因此**必须跑 install 再 stage**，不要手工从 build 目录拷贝。
 
 ### 顺带修复：configure 脚本续行被注释截断
 
