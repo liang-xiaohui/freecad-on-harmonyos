@@ -4,6 +4,10 @@
 
 > 唯一上游基线是 FreeCAD v1.1.2。旧的 0.21.2 构建只属于历史验证，不再作为移植产物或回退路线。
 
+> 本仓库公开可访问：分发修改过的 LGPL 组件（FreeCAD 主体、Qt 补丁、Coin3D 等）时，
+> 由此满足 LGPL-2.1 的**源码提供义务**。应用隐私政策见 [简体中文](PRIVACY.md) /
+> [English](PRIVACY.en.md)；上架合规材料与提审清单见 [AppGallery 发布](docs/appgallery-release.md)。
+
 ## 当前状态
 
 截至 2026-09-05：

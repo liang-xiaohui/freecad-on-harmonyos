@@ -484,13 +484,15 @@ AI 相关资质或说明。我们的实际情况是"用户自带 API Key 调用�
 | 触摸体验有限、建议鼠标 | QPA 滚轮不认 `TOUCH`、原生 QTouchEvent 不合成鼠标（见第 2 节平板决策） |
 | "应用自身不提供大模型服务" | 与 `AI` 标签的追问口径对齐，避免被认定为生成式 AI 服务提供者 |
 
-**两个必须自己拍板的点**（文案里已刻意回避，不替你做主张）：
+**两个必须自己拍板的点（其一已于 2026-09-15 定案）**：
 
-1. **LGPL-2.1 的源码提供义务**。分发修改过的 LGPL 库（FreeCAD 主体、Qt、Coin3D 等）时，
-   许可要求能拿到对应源码。当前文案只写了"各组件均按其原始许可分发，许可文本随应用提供"，
-   **没有写"源码以开源方式提供"**——因为仓库还没确认是否公开。要么把仓库公开（或另提供一个
-   源码获取渠道并在文案里写明），要么接受这一条被审核或权利人追问的风险。这不是文案问题，
-   是发布策略问题。
+1. ~~**LGPL-2.1 的源码提供义务**~~ **已解决（2026-09-15，仓库转为 public）**。
+   仓库 `https://github.com/liang-xiaohui/freecad-on-harmonyos` 现在公开可访问，修改过的
+   LGPL 组件（FreeCAD 主体、Qt 补丁、Coin3D 等）所在工程的源码可公开获取，义务履行。
+   原顾虑是文案只写了"各组件均按其原始许可分发，许可文本随应用提供"、**没写"源码以开源方式提供"**；
+   现在可以（也建议）在文案里把这一句加强成"源码以开源方式提供，见项目仓库"。
+   公开前的核查已做：历史中**从未**提交过 FlexiMind 私有 worker 脚本，没有密钥类文件，
+   最大的历史对象是 splash PNG（1.4MB），仓库总量 13.3MB。
 2. **应用名沿用 `FreeCAD`**（AGC 已登记）。这是上游项目名，非官方移植沿用同名有被判"名称侵权/
    攀附"的可能。低成本的做法是在介绍首句与开头元数据里把"非官方社区移植、与官方无隶属关系"
    放在最显眼处（当前文案已在首段与开源声明各写了一次）。
@@ -520,29 +522,26 @@ AI 相关资质或说明。我们的实际情况是"用户自带 API Key 调用�
 | 数据全在本机、卸载即删 | 沙箱路径 `/data/storage/el2/base/haps/entry/files/freecad-home/`，开发者无副本 |
 | 与上游无隶属关系 | 与第 7 节末"应用名沿用 `FreeCAD`"的拍板点同口径，政策第 12 节再声明一次 |
 
-**两个仍卡在外部的点（不在这份文件里能解决的）**：
+**链接：仓库 2026-09-15 已转为 public，但"公开"解决的是归属与 LGPL，不等于"审核员一定打得开"**
 
-1. **链接必须公网可达**。AGC 的隐私政策 URL 是给审核员点的，而当前仓库**是私有的**：
-   同一时刻 `api.github.com/repos/liang-xiaohui/freecad-on-harmonyos` 返回 **404**、
-   `api.github.com/repos/FreeCAD/FreeCAD` 返回 **200**。所以 `github.com/.../blob/main/PRIVACY.md`
-   这类链接审核员打开是 404。两条出路：
-   - **把仓库转公开**：一次同时解决这里的链接问题与第 7 节拍板点 1 的 LGPL 源码提供义务，
-     是最省事的做法；转公开后链接为 `https://github.com/liang-xiaohui/freecad-on-harmonyos/blob/main/PRIVACY.md`，
-     开启 Pages（或用 `docs/privacy/`）还能得到纯网页版链接。
-   - **单独托管**：把 `docs/privacy/` 发布到一个公开托管上，仓库继续私有。**当前走的就是这条**：
+AGC 的隐私政策 URL 是给审核员点的，而审核侧同样在国内网络。四个候选在本机实测：
 
-     已在 WorkBuddy 站点上原样托管 `docs/privacy/` 整目录（无构建步骤，纯静态），
-     首页与 `en.html` 均实测返回 200：
+| 链接 | 本机实测 | 域名归属 | 页面形态 |
+| --- | --- | --- | --- |
+| `https://2c2701d6a0784c1eb0de0535c7c365f2.app.workbuddy.host`（WorkBuddy 托管） | **即时 200** | 非自有 | 纯网页，中英双语 |
+| `https://github.com/liang-xiaohui/freecad-on-harmonyos/blob/main/PRIVACY.md` | 3 次里 **1 次 20s 超时**，成功也需 8–20s | 自有账号 | GitHub 文件视图（带 Raw/Blame 工具栏），非纯网页 |
+| `https://raw.githubusercontent.com/.../main/PRIVACY.md` | 200 | 自有账号 | `text/plain`，浏览器里是纯文本 Markdown，不适合当政策页 |
+| GitHub Pages（**尚未启用**，API `has_pages: false`） | 未测 | 自有账号 | 开启后为 `https://liang-xiaohui.github.io/freecad-on-harmonyos/privacy/`，归属与形态最合适 |
 
-     ```
-     https://2c2701d6a0784c1eb0de0535c7c365f2.app.workbuddy.host          ← 填进 AGC
-     https://2c2701d6a0784c1eb0de0535c7c365f2.app.workbuddy.host/en.html
-     ```
+**结论**：AGC 里填的那个 URL 首要看**能不能顺利打开**，所以当前仍是 **WorkBuddy 链接首选**；
+`github.com` 的地址建议只当"源码/仓库地址"写在开源声明与文案里，不要作为政策 URL 提交。
+想两全就开 GitHub Pages（`liang-xiaohui.github.io`，归属自有 + 纯网页），开完再实测一次可达性。
 
-     管理入口在「设置 — 数据管理 — 我发布的应用」。**注意这是过渡方案**：域名不在自己名下，
-     长期稳定性不如自有域名或 GitHub Pages；提审前若能把仓库转公开，建议换成 GitHub 链接。
-   注意：政策第 1 节的联系方式当前写的是仓库 Issues 页，**若仓库保持私有，这条联系方式也要一并换成邮箱**。
-2. **应用内入口**。隐私政策除提审填链接外，通常还要求在应用内可打开。当前应用内没有任何入口，
+**已随公开解决**：政策第 1 节的联系方式是仓库 Issues 页，此前因仓库私有打不开，现在可达，
+不必再换成邮箱（想更稳妥也可以补一个邮箱）。
+
+**仍缺的一项**：
+1. **应用内入口**。隐私政策除提审填链接外，通常还要求在应用内可打开。当前应用内没有任何入口，
    属于待补项，实现方式未定（见第 8 节）。
 
 ### FlexiMind 面的清除（已完成 2026-09-15）
@@ -617,6 +616,24 @@ README「可复跑入口」、`docs/fleximind-runtime.md` 顶部、`docs/device-
 这种半途状态不会漏网。日志在
 `codex-freecad-artifacts/t1-{stage,build,verify}-{off,on}.log`。
 
+#### 仓库转为 public 后的保密复核（2026-09-15）
+
+对外包清干净了，但**仓库本身现在也公开**，所以又核了一遍 FlexiMind 的暴露面。结论：
+
+| 项 | 状态 |
+| --- | --- |
+| FlexiMind 的 **worker 实现**（夹指参数化 / 人工设计的几何脚本本体） | **从未进入 git 历史** ✓ —— `git log --all --format="" --name-only --diff-filter=A \| sort -u` 全量枚举后只匹配到下面三个宿主侧文件 |
+| `docs/fleximind-runtime.md` | **可见**：无头作业契约（job JSON 字段、四种路径参数）、`FlexiMindGripDesign` 工作台名、FlexiMind 仓库自持 workbench 生命周期的做法 |
+| `runtime/fleximind_job_runner.py` | **可见**：worker 脚本名 `worker-a.py`、`worker-b.py`、`worker-c.py`，操作名 `procedural-finger` / `parametric-finger` / `manual-design`，以及各参数键 |
+| `scripts/stage-fleximind-runtime.sh`（及若干脚本里 39/37/26/24/16… 处引用） | **可见**：载荷取自 FlexiMind 交付 ZIP、打包进 `freecad-runtime.zip` 的细节 |
+| `.workbuddy/`（内部工作记录） | **未跟踪** ✓，`git ls-files` 命中 0 |
+| 密钥类文件 / 大对象 | 无（`*.p12`/`*.p7b`/`*.key` 均未跟踪；最大历史对象是 1.4MB 的 splash PNG；仓库总量 13.3MB） |
+
+也就是说：**接口与命名可见，实现不可见**。若 FlexiMind 的接口设计本身也要保密，
+仅删当前文件**不够** —— git 历史里同样查得到，必须重写历史并 force push，
+而且要认清公开期间可能已被爬虫/镜像抓走。三个选项：
+① 维持现状（只公开宿主侧接口）；② 撤掉上述文件并重写历史；③ 拆一个只放桥接的私有 fork。
+
 ## 8. 待办顺序
 
 1. ~~重签调试 Profile（新包名 + ACL）~~ **已完成（2026-09-15）**：AGC 手动新建调试
@@ -632,13 +649,20 @@ README「可复跑入口」、`docs/fleximind-runtime.md` 顶部、`docs/device-
    对齐上游 `1.1.2`）、应用简介与详细描述（文案已成稿：`store-assets/appgallery-text-zh-CN.txt`）、
    ~~隐私政策链接~~ **已完成（2026-09-15）**：正文三份（`PRIVACY.md` / `PRIVACY.en.md`）
    + 双语网页版（`docs/privacy/`），公网 URL 已发布并可访问，AGC 直接填那个链接 —— 见
-   第 7 节「隐私政策」小节。仓库若日后转公开，建议换成 GitHub 链接（域名更稳）。
+   第 7 节「隐私政策」小节。仓库已于同日转为 public；链接怎么选按该节的实测结论
+   （当前 WorkBuddy 地址首选，`github.com` 地址只当仓库地址写）。
 5. ~~截图素材~~ **已完成（2026-09-15）**：5 张 1920×1080 介绍套图，见第 6 节末
    「应用截图：16:9 介绍套图」，产物在 `store-assets/screenshots-16x9/`，可用
    `node tools/promo/make_promo.js` 重出。
-6. **定仓库公开性**（一个决定同时影响三件事，见第 7 节「隐私政策」小节）：
-   ① 隐私政策链接能不能给审核员点；② 政策第 1 节的联系方式（Issues 链接是否可达，
-   否则换成邮箱）；③ 第 7 节 LGPL-2.1 的源码提供义务。转公开最省事，不转就要另找公开托管。
+6. ~~定仓库公开性~~ **已完成（2026-09-15）**：仓库已转为 **public**。三件事一次解决：
+   ① 隐私政策链接与政策里的联系方式都可公网直达；② **LGPL-2.1 的源码提供义务已履行**
+   （第 7 节拍板点 1 结案）；③ 介绍文案里"源码以开源方式提供"这句现在可以写了。
+   公开前的核查：历史中从未提交过 FlexiMind 私有 worker 脚本、无密钥类文件、
+   最大历史对象 1.4MB splash PNG、仓库总量 13.3MB。**仍待办的两件小事**：
+   ① `docs/appgallery-release.md` 与 `AppScope/app.json5` 里写着调试证书序列号
+   （`63E4DC…EDA`）与签名材料本机路径（`~/Documents/ohos/config/default_cloudcompare-…`）——
+   公开仓库里通常不写密钥材料的存放位置，建议改成占位描述；
+   ② 仓库 `license` 仍为 `None`（GitHub 识别不到 LICENSE 文件），公开仓库建议明确许可声明。
 7. **补应用内隐私政策入口**：政策要在应用内也能打开。实现方式未定（建议挂在 Help 菜单或
    Start 工作台的一个链接上，指向公网 URL 或包内随附的副本）。
 8. AGC 建发布证书与发布 Profile → 加 release 签名配置 → 出正式包 → 提审时补
