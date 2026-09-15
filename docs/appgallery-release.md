@@ -44,15 +44,14 @@ the generated SigningConfigs. At file: build-profile.json5
 
 **实测结果**：新 Profile 的 `bundle-name=com.liangxiaohui.freecad`、
 `app-identifier=6917614499915791877`、`acls.allowed-acls=["ohos.permission.READ_PASTEBOARD"]`、
-`debug-info.device-ids` 只剩 1 条 = 本机 UDID `本机 UDID（不记录）`。构建
+`debug-info.device-ids` 只剩 1 条 = 本机 UDID（这里不记录，见 AGC 的 Profile 详情页）。构建
 `Finishing :entry:default@SignHap` 通过，`bm install` 成功，启动后 hilog 出现
 `QAbility: READ_PASTEBOARD requested -> authResults=[0]`（PC/2in1 不弹框，系统直接授予）。
 
 **一个易踩的坑**：AGC 里可以选的历史调试证书很多（每建一次工程/证书就多一张），
-Profile 绑的是哪张，本地就必须用哪张 `.cer`+`.p12`。这次 Profile 绑的正是
-`cloudcompare-on-harmonyos` 那张（序列号 `（序列号不记录）`，签发于
-2026-09-08），所以 `build-profile.json5` 现在指向
-`~/Documents/ohos/config/default_cloudcompare-on-harmonyos*.{cer,p12}`。
+Profile 绑的是哪张，本地就必须用哪张 `.cer`+`.p12`。这次 Profile 绑的是**本机另一个工程**的
+一张调试证书（序列号与签发日期见 AGC 后台，这里不记录），所以 `build-profile.json5`
+现在指向该工程的 `default_<工程名>*.{cer,p12}`（具体文件名见本机签名材料目录，同样不记录）。
 用 `scripts/check-signing-profile.py` 能看出 Profile 与工程是否对得上，但**看不住证书**；
 对不上时 `SignHap` 会报签名错误（私钥与证书不匹配）。若不希望跨工程共用，就在 AGC 用
 本工程的 `.csr` 新建一张调试证书，再重新签发 Profile。
@@ -232,23 +231,23 @@ bridge 壳，跑不起来，所以用上面的脚本。）
 
 | 项 | 值 |
 | --- | --- |
-| profile | `~/Documents/ohos/config/default_freecad-on-harmonyos-acl-debug.p7b`（AGC 下载，含 ACL） |
+| profile | AGC 下载的 `default_freecad-on-harmonyos-acl-debug.p7b`（含 ACL） |
 | bundle-name | `com.liangxiaohui.freecad` |
 | app-identifier | `6917614499915791877` |
 | acls | `["ohos.permission.READ_PASTEBOARD"]` |
-| device-ids | 1 条 = 本机 UDID `本机 UDID（不记录）` |
-| cert / key | `default_cloudcompare-on-harmonyos*.cer` / `.p12`，密钥别名 `debugKey` |
+| device-ids | 1 条 = 本机 UDID（不在此记录，见 AGC 的 Profile 详情页） |
+| cert / key | 另一个工程那套调试证书的 `.cer` / `.p12`，密钥别名 `debugKey` |
 
-**为什么证书用的是 cloudcompare 那套**：AGC 里 Profile 必须绑定一张调试证书，这次新建
-Profile 时选中的是 2026-09-08 签发的那张（序列号 `（序列号不记录）`），
-它的私钥在本机只存在于 cloudcompare 那套 `.p12` 里，所以 `certpath`/`storeFile` 指过去、
-口令沿用它的（`storePassword`/`keyPassword` 是 DevEco 加密串，跨工程可直接复用）。
+**为什么证书用的是另一套**：AGC 里 Profile 必须绑定一张调试证书，这次新建 Profile 时选中的是
+早先为另一个工程签发的那张（序列号与签发日期见 AGC 后台，这里不记录），它的私钥在本机只存在于
+那套 `.p12` 里，所以 `certpath`/`storeFile` 指过去、口令沿用它的
+（`storePassword`/`keyPassword` 是 DevEco 加密串，跨工程可直接复用）。
 hvigor 会校验"证书公钥 == .p12 私钥"，配错在 `SignHap` 阶段直接失败。
 
 若不想跨工程共用材料：在 AGC 用本工程的 `.csr` 新建一张调试证书，重新签发 Profile，
 再把三件套（p7b/cer/p12）都指回本工程的文件。
 
-改动前的旧材料（`default_freecad-on-harmonyosjQeoJc1u7….p7b`）绑的是旧包名
+改动前的旧材料（`default_freecad-on-harmonyos<jc>…` 那份，随机后缀省略）绑的是旧包名
 `com.freecad.headless.acceptance` 且 `acls: []`，已作废 —— 那时构建报的就是：
 
 ```
@@ -522,20 +521,30 @@ AI 相关资质或说明。我们的实际情况是"用户自带 API Key 调用�
 | 数据全在本机、卸载即删 | 沙箱路径 `/data/storage/el2/base/haps/entry/files/freecad-home/`，开发者无副本 |
 | 与上游无隶属关系 | 与第 7 节末"应用名沿用 `FreeCAD`"的拍板点同口径，政策第 12 节再声明一次 |
 
-**链接：仓库 2026-09-15 已转为 public，但"公开"解决的是归属与 LGPL，不等于"审核员一定打得开"**
+**链接：最终选 GitHub Pages（2026-09-15）；"公开"解决归属与 LGPL，但可达性要单独测**
 
-AGC 的隐私政策 URL 是给审核员点的，而审核侧同样在国内网络。四个候选在本机实测：
+AGC 的隐私政策 URL 是给审核员点的，而审核侧同样在国内网络 —— 所以"域名归谁"和"打不打得开"
+是两个维度。四个候选的本机实测（同一天、同一网络，取稳定态）：
 
-| 链接 | 本机实测 | 域名归属 | 页面形态 |
-| --- | --- | --- | --- |
-| `https://2c2701d6a0784c1eb0de0535c7c365f2.app.workbuddy.host`（WorkBuddy 托管） | **即时 200** | 非自有 | 纯网页，中英双语 |
-| `https://github.com/liang-xiaohui/freecad-on-harmonyos/blob/main/PRIVACY.md` | 3 次里 **1 次 20s 超时**，成功也需 8–20s | 自有账号 | GitHub 文件视图（带 Raw/Blame 工具栏），非纯网页 |
-| `https://raw.githubusercontent.com/.../main/PRIVACY.md` | 200 | 自有账号 | `text/plain`，浏览器里是纯文本 Markdown，不适合当政策页 |
-| GitHub Pages（**尚未启用**，API `has_pages: false`） | 未测 | 自有账号 | 开启后为 `https://liang-xiaohui.github.io/freecad-on-harmonyos/privacy/`，归属与形态最合适 |
+| 链接 | 实测 | 域名归属 | 页面形态 | 结论 |
+| --- | --- | --- | --- | --- |
+| **`https://liang-xiaohui.github.io/freecad-on-harmonyos/privacy/`** | **200，0.26 s**（英文页 0.44 s） | **自有账号** | 纯网页，中英双语，自带样式 | ✅ **AGC 填这个** |
+| `https://github.com/.../blob/main/PRIVACY.md` | 200 时 1.16 s，但曾 3 次里 1 次 20 s 超时 | 自有账号 | GitHub 文件视图（带 Raw/Blame 工具栏） | 只当"仓库地址"写在开源声明里 |
+| `https://raw.githubusercontent.com/.../main/PRIVACY.md` | 200 | 自有账号 | `text/plain`，浏览器里是纯文本 Markdown | 不适合当政策页 |
+| `https://2c2701d6…app.workbuddy.host`（WorkBuddy 托管） | 200，3.66 s | 非自有 | 纯网页，中英双语 | 备用；域名不归自己 |
 
-**结论**：AGC 里填的那个 URL 首要看**能不能顺利打开**，所以当前仍是 **WorkBuddy 链接首选**；
-`github.com` 的地址建议只当"源码/仓库地址"写在开源声明与文案里，不要作为政策 URL 提交。
-想两全就开 GitHub Pages（`liang-xiaohui.github.io`，归属自有 + 纯网页），开完再实测一次可达性。
+Pages 通过 API 开启，源为 `main` 分支的 `/docs` 目录，所以 `docs/privacy/` 下的两页直接成为站点：
+
+```bash
+curl -X POST -H "Authorization: token $TOKEN" -H "Accept: application/vnd.github+json" \
+  -H "Content-Type: application/json" \
+  -d '{"source":{"branch":"main","path":"/docs"}}' \
+  https://api.github.com/repos/liang-xiaohui/freecad-on-harmonyos/pages
+```
+
+**踩过的判断**：`github.com` 网页端在这条网络上**慢且不稳**（成功 8–20 s，偶发 20 s 超时），
+而 `api.github.com` / `codeload.github.com` 一直正常 —— 所以"API 通"不能证明"页面开得开"，
+`raw.githubusercontent.com` 也只证明文件可取，不证明浏览器体验。要判断可达性就**直接测那个 URL**。
 
 **已随公开解决**：政策第 1 节的联系方式是仓库 Issues 页，此前因仓库私有打不开，现在可达，
 不必再换成邮箱（想更稳妥也可以补一个邮箱）。
@@ -591,13 +600,15 @@ PACKAGE_FLEXIMIND=ON ./scripts/build-gui-hap-ohos.sh
 PACKAGE_FLEXIMIND=ON ./scripts/verify-gui-hap.sh
 ```
 
-或者跑完默认 stage 之后再用 `scripts/stage-fleximind-runtime.sh` 单独把载荷刷进 zip
-（那条路本来就是"不带 SDK 的增量刷新"，但它**不管** `EntryAbility` 声明与验收脚本）。
+**ON 侧的私有知识在仓库之外**（2026-09-15 起）：输入清单（worker / helper 文件名、私有源码根）、
+打包逻辑、内部包条目断言全部放在外部钩子 `scripts/private/fleximind-stage.sh`（在 `.gitignore` 里），
+公开侧只留开关与加载器 [`scripts/fleximind-hook.sh`](../scripts/fleximind-hook.sh)；
+钩子缺失时 `PACKAGE_FLEXIMIND=ON` 会明确报错退出，而不是静默产出半成品。
+钩子要实现哪些函数、能读到哪些环境变量，写在加载器顶部的注释里。
 
 默认值故意设成 `OFF`：这个 HAP 是对外分发/上架的产物，"默认干净"比"默认带私有脚本"安全，
 万一忘了加开关，代价是丢功能（自己会发现）而不是泄露（发出去收不回）。
-README「可复跑入口」、`docs/fleximind-runtime.md` 顶部、`docs/device-run-guide.md`
-的设备侧验收一节都已同步这个开关。
+README「可复跑入口」与 `docs/device-run-guide.md` 的设备侧验收一节都已同步这个开关。
 
 **实测（2026-09-15，两个方向各跑一遍 stage → build → verify）**：
 
@@ -616,23 +627,24 @@ README「可复跑入口」、`docs/fleximind-runtime.md` 顶部、`docs/device-
 这种半途状态不会漏网。日志在
 `codex-freecad-artifacts/t1-{stage,build,verify}-{off,on}.log`。
 
-#### 仓库转为 public 后的保密复核（2026-09-15）
+#### 仓库转为 public 后的保密复核与撤出（2026-09-15）
 
-对外包清干净了，但**仓库本身现在也公开**，所以又核了一遍 FlexiMind 的暴露面。结论：
+对外包清干净了，但**仓库本身也公开**，所以又核了一遍 FlexiMind 的暴露面，并按"撤出实现细节"处理。
+现状：
 
 | 项 | 状态 |
 | --- | --- |
-| FlexiMind 的 **worker 实现**（夹指参数化 / 人工设计的几何脚本本体） | **从未进入 git 历史** ✓ —— `git log --all --format="" --name-only --diff-filter=A \| sort -u` 全量枚举后只匹配到下面三个宿主侧文件 |
-| `docs/fleximind-runtime.md` | **可见**：无头作业契约（job JSON 字段、四种路径参数）、`FlexiMindGripDesign` 工作台名、FlexiMind 仓库自持 workbench 生命周期的做法 |
-| `runtime/fleximind_job_runner.py` | **可见**：worker 脚本名 `worker-a.py`、`worker-b.py`、`worker-c.py`，操作名 `procedural-finger` / `parametric-finger` / `manual-design`，以及各参数键 |
-| `scripts/stage-fleximind-runtime.sh`（及若干脚本里 39/37/26/24/16… 处引用） | **可见**：载荷取自 FlexiMind 交付 ZIP、打包进 `freecad-runtime.zip` 的细节 |
-| `.workbuddy/`（内部工作记录） | **未跟踪** ✓，`git ls-files` 命中 0 |
-| 密钥类文件 / 大对象 | 无（`*.p12`/`*.p7b`/`*.key` 均未跟踪；最大历史对象是 1.4MB 的 splash PNG；仓库总量 13.3MB） |
+| FlexiMind 的 **worker 实现**（夹指参数化 / 人工设计的几何脚本本体） | **从未进入 git 历史** ✓（`git log --all --format="" --name-only --diff-filter=A \| sort -u` 全量枚举确认） |
+| 作业运行器、打包脚本、作业契约文档 | **已从当前树撤出并重写历史**：`runtime/fleximind_job_runner.py`、`scripts/stage-fleximind-runtime.sh`、`docs/fleximind-runtime.md` 三份都由 `git filter-branch` 从所有提交移除 |
+| worker / helper 文件名、私有源码根路径、GUI 工作台源码结构 | **已从脚本里撤出**：原先散在 `stage-gui-hap.sh` / `stage-headless-hap.sh` / `verify-gui-hap.sh` / `verify-headless-hap.sh` 四处的清单与断言，改为由外部钩子提供数据（见上一小节） |
+| `entry/src/main/cpp/acceptance.cpp` | **仍可见**：无头桥按 `<filesDir>/FlexiMind/fleximind_job_runner.py` 定位运行器。只暴露载荷目录名与运行器文件名，不含 worker 名与作业契约；改动要重编 `libfreecadacceptance.so` 并重新验证 GUI，收益小风险大，故保留 |
+| `.workbuddy/`（内部工作记录） | **未跟踪** ✓（`git ls-files` 命中 0） |
+| 密钥类文件 / 大对象 | 无（`*.p12`/`*.p7b`/`*.key` 均未跟踪；最大历史对象 1.4MB splash PNG；仓库总量 13.3MB） |
 
-也就是说：**接口与命名可见，实现不可见**。若 FlexiMind 的接口设计本身也要保密，
-仅删当前文件**不够** —— git 历史里同样查得到，必须重写历史并 force push，
-而且要认清公开期间可能已被爬虫/镜像抓走。三个选项：
-① 维持现状（只公开宿主侧接口）；② 撤掉上述文件并重写历史；③ 拆一个只放桥接的私有 fork。
+**重写历史的边界（必须说清楚）**：force push 之后，GitHub 上原来的提交对象**不会立刻消失** ——
+只要知道旧提交 hash，一段时间内仍可直接访问，直到 GitHub 侧回收，或联系 Support 主动清除；
+公开期间被爬虫/镜像/fork 抓走的内容更是收不回。所以这类判断本该在转公开**之前**做。
+本地保留了三份副本在 `scripts/private/`（未跟踪），功能随时可恢复。
 
 ## 8. 待办顺序
 
@@ -648,9 +660,10 @@ README「可复跑入口」、`docs/fleximind-runtime.md` 顶部、`docs/device-
 4. **AGC 填写项**：应用分类与标签（第 7 节末）、版本号（第 6 节，当前 `0.1.0`，首版建议
    对齐上游 `1.1.2`）、应用简介与详细描述（文案已成稿：`store-assets/appgallery-text-zh-CN.txt`）、
    ~~隐私政策链接~~ **已完成（2026-09-15）**：正文三份（`PRIVACY.md` / `PRIVACY.en.md`）
-   + 双语网页版（`docs/privacy/`），公网 URL 已发布并可访问，AGC 直接填那个链接 —— 见
-   第 7 节「隐私政策」小节。仓库已于同日转为 public；链接怎么选按该节的实测结论
-   （当前 WorkBuddy 地址首选，`github.com` 地址只当仓库地址写）。
+   + 双语网页版（`docs/privacy/`）。**AGC 填这个链接**：
+   `https://liang-xiaohui.github.io/freecad-on-harmonyos/privacy/`（GitHub Pages，
+   源 = `main` 的 `/docs`，实测 0.26 s；英文页 `/privacy/en.html`）。
+   四个候选的对比与开启命令见第 7 节「隐私政策」小节。
 5. ~~截图素材~~ **已完成（2026-09-15）**：5 张 1920×1080 介绍套图，见第 6 节末
    「应用截图：16:9 介绍套图」，产物在 `store-assets/screenshots-16x9/`，可用
    `node tools/promo/make_promo.js` 重出。
@@ -658,11 +671,12 @@ README「可复跑入口」、`docs/fleximind-runtime.md` 顶部、`docs/device-
    ① 隐私政策链接与政策里的联系方式都可公网直达；② **LGPL-2.1 的源码提供义务已履行**
    （第 7 节拍板点 1 结案）；③ 介绍文案里"源码以开源方式提供"这句现在可以写了。
    公开前的核查：历史中从未提交过 FlexiMind 私有 worker 脚本、无密钥类文件、
-   最大历史对象 1.4MB splash PNG、仓库总量 13.3MB。**仍待办的两件小事**：
-   ① `docs/appgallery-release.md` 与 `AppScope/app.json5` 里写着调试证书序列号
-   （`63E4DC…EDA`）与签名材料本机路径（`~/Documents/ohos/config/default_cloudcompare-…`）——
-   公开仓库里通常不写密钥材料的存放位置，建议改成占位描述；
-   ② 仓库 `license` 仍为 `None`（GitHub 识别不到 LICENSE 文件），公开仓库建议明确许可声明。
+   最大历史对象 1.4MB splash PNG、仓库总量 13.3MB。转公开后补做的三件：
+   ① ~~脱敏~~ **已完成**：调试证书序列号、本机 UDID 与签名材料路径已从本文件移除，
+   只保留"用的是哪一套、怎么查、怎么换"这类可操作信息；
+   ② ~~加许可声明~~ **已完成**：仓库根新增 `LICENSE`（LGPL-2.1 全文，取自上游），
+   README 增加「许可」一节说明衍生部分的许可与源码提供方式；
+   ③ **FlexiMind 实现细节撤出 + 重写历史**，见第 7 节末「保密复核与撤出」小节。
 7. **补应用内隐私政策入口**：政策要在应用内也能打开。实现方式未定（建议挂在 Help 菜单或
    Start 工作台的一个链接上，指向公网 URL 或包内随附的副本）。
 8. AGC 建发布证书与发布 Profile → 加 release 签名配置 → 出正式包 → 提审时补

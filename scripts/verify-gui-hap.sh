@@ -11,10 +11,10 @@
 set -eu
 
 PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-FLEXIMIND_ROOT="${FLEXIMIND_ROOT:-/path/to/FlexiMind}"
 # 与 stage-gui-hap.sh / build-gui-hap-ohos.sh / entry/hvigorfile.ts 同一个开关：
 # OFF（默认）＝对外包，要求包里**没有** FlexiMind/、没有验收脚本、不声明 EntryAbility；
 # ON ＝内部包，三者必须都在。构建时三处取值必须一致，本脚本负责把不一致拦下来。
+# ON 时的私有输入清单与条目断言由外部钩子提供，见 scripts/fleximind-hook.sh。
 PACKAGE_FLEXIMIND="${PACKAGE_FLEXIMIND:-OFF}"
 case "$PACKAGE_FLEXIMIND" in
     ON | on | 1 | true | yes) PACKAGE_FLEXIMIND=ON ;;
@@ -22,9 +22,13 @@ case "$PACKAGE_FLEXIMIND" in
 esac
 if [ "$PACKAGE_FLEXIMIND" = "ON" ]; then
     RAWFILE_REQUIRED="python311.zip freecad-runtime.zip freecad_headless_acceptance.py"
+    . "$PROJECT_DIR/scripts/fleximind-hook.sh"
+    fleximind_load_hook
 else
     RAWFILE_REQUIRED="python311.zip freecad-runtime.zip"
 fi
+# 载荷顶层目录名：钩子可覆盖，这里给同一个默认值，供 OFF 侧的"不得包含"断言使用。
+FLEXIMIND_PAYLOAD_DIR="${FLEXIMIND_PAYLOAD_DIR:-FlexiMind}"
 PY_YAML_ROOT="$PROJECT_DIR/runtime/pyyaml"
 PACKAGING_ROOT="$PROJECT_DIR/runtime/packaging"
 CPP_LIB_ROOT="${CPP_LIB_ROOT:-/storage/Users/currentUser/CPPLib}"
@@ -117,14 +121,7 @@ for f in "$STAGED_DIR"/plugins/platforms/libqohos.so "$STAGED_DIR"/libqohos.so "
     [ "$m" -gt "$newest_input" ] && newest_input=$m
 done
 if [ "$PACKAGE_FLEXIMIND" = ON ]; then
-    for f in \
-        "$RAWFILE_DIR/freecad_headless_acceptance.py" \
-        "$PROJECT_DIR/runtime/fleximind_job_runner.py" \
-        "$FLEXIMIND_ROOT/workers/worker-a.py" \
-        "$FLEXIMIND_ROOT/workers/worker-b.py" \
-        "$FLEXIMIND_ROOT/workers/worker-c.py" \
-        "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/registered_base.py" \
-        "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/reference_geometry.py"; do
+    for f in "$RAWFILE_DIR/freecad_headless_acceptance.py" $(fleximind_input_files); do
         [ -f "$f" ] || { echo "错误：staging 输入缺失：$f" >&2; exit 1; }
         m=$(stat -c '%Y' "$f")
         [ "$m" -gt "$newest_input" ] && newest_input=$m
@@ -147,33 +144,30 @@ if [ -n "$newer_packaging" ]; then
 fi
 
 if [ "$PACKAGE_FLEXIMIND" = ON ]; then
-    for entry in \
-        FlexiMind/fleximind_job_runner.py \
-        FlexiMind/workers/worker-a.py \
-        FlexiMind/workers/worker-b.py \
-        FlexiMind/workers/worker-c.py \
-        FlexiMind/tools/freecad/FlexiMindGripDesign/__init__.py \
-        FlexiMind/tools/freecad/FlexiMindGripDesign/registered_base.py \
-        FlexiMind/tools/freecad/FlexiMindGripDesign/reference_geometry.py; do
-        if ! unzip -p "$HAP" resources/rawfile/freecad-runtime.zip > "$RUNTIME_ZIP" || \
-           ! unzip -Z1 "$RUNTIME_ZIP" | grep -q "^${entry}$"; then
+    unzip -p "$HAP" resources/rawfile/freecad-runtime.zip > "$RUNTIME_ZIP"
+    for entry in $(fleximind_payload_entries); do
+        unzip -Z1 "$RUNTIME_ZIP" | grep -Fqx "$entry" || {
             echo "错误：freecad-runtime.zip 缺少 $entry" >&2
             exit 1
-        fi
+        }
     done
     echo "    FlexiMind 载荷在位（PACKAGE_FLEXIMIND=ON）✓"
-else
-    unzip -p "$HAP" resources/rawfile/freecad-runtime.zip > "$RUNTIME_ZIP"
-    if unzip -Z1 "$RUNTIME_ZIP" | grep -q '^FlexiMind/'; then
-        echo "错误：对外包不得包含 FlexiMind/ 载荷，请用（默认的）PACKAGE_FLEXIMIND=OFF 重新 stage 并重打包" >&2
+    if unzip -Z1 "$RUNTIME_ZIP" | grep -Eq "$(fleximind_forbidden_pattern)"; then
+        echo "错误：已禁用的 FlexiMindGripDesign GUI 工作台仍存在于 freecad-runtime.zip" >&2
         exit 1
     fi
-    echo "    HAP 不含 FlexiMind/ 载荷（PACKAGE_FLEXIMIND=OFF）✓"
-fi
-if unzip -Z1 "$RUNTIME_ZIP" |
-   grep -Eq '^(Mod/FlexiMindGripDesign/|FlexiMind/tools/freecad/FlexiMindGripDesign/(Init.py|InitGui.py|commands.py|scene_state.py|Resources/))'; then
-    echo "错误：已禁用的 FlexiMindGripDesign GUI 工作台仍存在于 freecad-runtime.zip" >&2
-    exit 1
+else
+    unzip -p "$HAP" resources/rawfile/freecad-runtime.zip > "$RUNTIME_ZIP"
+    if unzip -Z1 "$RUNTIME_ZIP" | grep -q "^$FLEXIMIND_PAYLOAD_DIR/"; then
+        echo "错误：对外包不得包含 $FLEXIMIND_PAYLOAD_DIR/ 载荷，请用（默认的）PACKAGE_FLEXIMIND=OFF 重新 stage 并重打包" >&2
+        exit 1
+    fi
+    echo "    HAP 不含 $FLEXIMIND_PAYLOAD_DIR/ 载荷（PACKAGE_FLEXIMIND=OFF）✓"
+    # 对外包只做工作台顶层路径这一级防护；源码结构级的断言由私有钩子在 ON 时负责。
+    if unzip -Z1 "$RUNTIME_ZIP" | grep -q '^Mod/FlexiMindGripDesign/'; then
+        echo "错误：已禁用的 FlexiMindGripDesign GUI 工作台仍存在于 freecad-runtime.zip" >&2
+        exit 1
+    fi
 fi
 if [ "$hap_mtime" -lt "$newest_input" ]; then
     echo "错误：HAP 早于 staging/验收源码，请重新 Build Hap" >&2

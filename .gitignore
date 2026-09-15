@@ -27,3 +27,8 @@ oh_modules/
 **/__pycache__/
 *.py[cod]
 .workbuddy/
+
+# 不进公开仓库的私有侧材料：外部钩子、私有工作台的作业运行器与其契约文档。
+# PACKAGE_FLEXIMIND=ON 时的打包/校验逻辑全部由这里定义的函数提供，
+# 公开脚本只负责装载（见 scripts/fleximind-hook.sh）。
+scripts/private/

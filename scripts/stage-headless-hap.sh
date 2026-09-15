@@ -16,11 +16,12 @@ LIBS_PARENT="$PROJECT_DIR/entry/libs"
 LIBS_DIR="$LIBS_PARENT/$ABI"
 RAWFILE_PARENT="$PROJECT_DIR/entry/src/main/resources"
 RAWFILE_DIR="$RAWFILE_PARENT/rawfile"
-FLEXIMIND_ROOT="${FLEXIMIND_ROOT:-/path/to/FlexiMind}"
 # 这个脚本产出的是内部包（无头验收 + FlexiMind 作业），按定义就是 ON：FlexiMind 载荷与
 # 验收脚本都照进，audit-headless-hap.sh 也按 ON 校验 rawfile。对外包走 stage-gui-hap.sh
 # （默认 OFF，不声明 EntryAbility、不带载荷与验收脚本）。两边共用 entry/module.json5，
 # 能力清单的差异由 entry/hvigorfile.ts 在构建期按同一个开关裁掉。
+# ON 侧的私有输入清单与打包逻辑来自外部钩子（本仓库是公开的，不含这些信息），
+# 见 scripts/fleximind-hook.sh；钩子默认放在 scripts/private/（.gitignore）。
 PACKAGE_FLEXIMIND=ON
 export PACKAGE_FLEXIMIND
 PY_YAML_ROOT="$PROJECT_DIR/runtime/pyyaml"
@@ -74,17 +75,9 @@ for required in \
     }
 done
 
-for required in \
-    "$FLEXIMIND_ROOT/workers/worker-a.py" \
-    "$FLEXIMIND_ROOT/workers/worker-b.py" \
-    "$FLEXIMIND_ROOT/workers/worker-c.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/registered_base.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/reference_geometry.py"; do
-    [ -f "$required" ] || {
-        echo "错误：缺少 FlexiMind FreeCAD runtime 输入：$required" >&2
-        exit 1
-    }
-done
+. "$PROJECT_DIR/scripts/fleximind-hook.sh"
+fleximind_load_hook
+fleximind_check_inputs
 
 for command_name in readelf zip unzip; do
     command -v "$command_name" >/dev/null 2>&1 || {
@@ -208,31 +201,7 @@ done
     zip -q -r "$RAW_STAGE/freecad-runtime.zip" Ext/numpy \
         -x '*.pyc' '*/__pycache__/*' '*.so' '*.so.*' '*.a')
 rm -rf "$NUMPY_STAGE"
-echo "==> Package FlexiMind headless jobs (GUI Workbench excluded)"
-FLEXIMIND_STAGE="$RAW_STAGE/fleximind"
-FLEXIMIND_HELPERS="$FLEXIMIND_STAGE/FlexiMind/tools/freecad/FlexiMindGripDesign"
-mkdir -p "$FLEXIMIND_STAGE/FlexiMind/workers" "$FLEXIMIND_HELPERS"
-cp "$PROJECT_DIR/runtime/fleximind_job_runner.py" "$FLEXIMIND_STAGE/FlexiMind/"
-printf '%s\n' '"""FlexiMind runtime package."""' > "$FLEXIMIND_STAGE/FlexiMind/__init__.py"
-printf '%s\n' '"""Headless modeling helpers shared with FlexiMind."""' > "$FLEXIMIND_HELPERS/__init__.py"
-for worker in \
-    worker-a.py \
-    worker-b.py \
-    worker-c.py; do
-    cp "$FLEXIMIND_ROOT/workers/$worker" "$FLEXIMIND_STAGE/FlexiMind/workers/$worker"
-done
-for helper in registered_base.py reference_geometry.py; do
-    cp "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/$helper" "$FLEXIMIND_HELPERS/$helper"
-done
-(cd "$FLEXIMIND_STAGE" && \
-    zip -q -r "$RAW_STAGE/freecad-runtime.zip" FlexiMind \
-        -x '*/__pycache__/*' '*.pyc')
-rm -rf "$FLEXIMIND_STAGE"
-if unzip -Z1 "$RAW_STAGE/freecad-runtime.zip" |
-   grep -Eq '^(Mod/FlexiMindGripDesign/|FlexiMind/tools/freecad/FlexiMindGripDesign/(Init.py|InitGui.py|commands.py|scene_state.py|Resources/))'; then
-    echo "错误：FlexiMindGripDesign GUI 工作台当前禁用，不得进入 runtime" >&2
-    exit 1
-fi
+fleximind_stage_payload "$RAW_STAGE"
 cp "$PROJECT_DIR/probes/freecad-headless/acceptance.py" \
     "$RAW_STAGE/freecad_headless_acceptance.py"
 unzip -tq "$RAW_STAGE/python311.zip" >/dev/null

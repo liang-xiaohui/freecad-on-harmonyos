@@ -31,7 +31,7 @@
   - **GUI HAP staging 已完成**（见 [GUI HAP 集成](docs/gui-hap-integration.md)）：Qt 应用库 `libfreecadqtapp.so`（导出 main）已构建；entry/ 已按 tqtc 官方模板改造（QAbilityStage/QAbility + XComponent 页）；`scripts/stage-gui-hap.sh` 已 staged 完整 GUI native 依赖闭包（数量由验证脚本动态校验）+ rawfile（python311.zip + freecad-runtime.zip + 验收脚本），headless 验收能力保留在 EntryAbility。
   - 首次 GUI 构建尝试（Qt 5.12.12 + Coin 4.0.0）卡在 `FreeCADGui/MainWindow.cpp`：Qt5.12 头缺 `QTime` 定义、`QSignalMapper::mappedWidget` 需 Qt ≥ 5.15；Qt 5.15 源码获取失败（tqtc 分支不存在），故按计划转向 Qt6。
 - Pivy、Shiboken6、**PySide6 全绑定栈（Core/Gui/Widgets/Network/Svg/SvgWidgets/OpenGL/OpenGLWidgets）均已构建并验证**（v6.8.3，QWidget 可创建）。
-  - FlexiMind headless runtime 已接入：`EntryAbility` 提供参数化夹指、参数化模型和人工 FCStd job bridge。普通 GUI HAP 不打包或自动激活 `FlexiMindGripDesign`；该工作台由 FlexiMind 设计交付包的 launcher 按需注入。接口与设备调用见 [FlexiMind runtime](docs/fleximind-runtime.md)。
+  - FlexiMind headless runtime 已接入：`EntryAbility` 提供参数化夹指、参数化模型和人工 FCStd job bridge。普通 GUI HAP 不打包或自动激活 `FlexiMindGripDesign`；该工作台由 FlexiMind 设计交付包的 launcher 按需注入。接口与设备调用见外部私有材料。**私有侧的输入清单、作业运行器与作业契约文档不进本仓库**（本仓库公开）：`PACKAGE_FLEXIMIND=ON` 时由外部钩子 `scripts/private/fleximind-stage.sh` 提供，加载器见 [`scripts/fleximind-hook.sh`](scripts/fleximind-hook.sh)。
 
 当前 FreeCAD 安装前缀：
 
@@ -45,7 +45,7 @@
 - [依赖与技术闸门矩阵](docs/dependency-matrix.md)
 - [Headless HAP 验收](docs/headless-hap-acceptance.md)
 - [上架发布清单（AppGallery）](docs/appgallery-release.md)
-- 隐私政策：[简体中文](PRIVACY.md) · [English](PRIVACY.en.md) · [网页版](docs/privacy/index.html)（`docs/privacy/` 是自足的双语小站，可整目录托管；AGC 里填的链接必须是公网可达的 HTTPS 页面）
+- 隐私政策：[在线版](https://liang-xiaohui.github.io/freecad-on-harmonyos/privacy/)（GitHub Pages，AGC 里填的就是它）· [简体中文](PRIVACY.md) · [English](PRIVACY.en.md) · [网页版源目录](docs/privacy/)（自足双语小站，可整目录搬到任何静态托管）
 
 ## 可复跑入口
 
@@ -57,7 +57,6 @@
 ./scripts/build-occt-smoke-ohos.sh
 ./scripts/build-headless-hap-native-ohos.sh
 ./scripts/stage-headless-hap.sh
-./scripts/stage-fleximind-runtime.sh  # refresh headless FlexiMind jobs without the SDK
 ./scripts/run-staged-python-runtime-probe.sh
 # PACKAGE_FLEXIMIND 默认 OFF：这个 HAP 是对外分发的产物，默认不带 FlexiMind/ 载荷、
 # 不带验收脚本 rawfile/freecad_headless_acceptance.py，并且 entry/hvigorfile.ts 会在构建期
@@ -65,7 +64,8 @@
 #   PACKAGE_FLEXIMIND=ON ./scripts/stage-gui-hap.sh       # 载荷 + 验收脚本
 #   PACKAGE_FLEXIMIND=ON ./scripts/build-gui-hap-ohos.sh  # 保留 EntryAbility 声明
 #   PACKAGE_FLEXIMIND=ON ./scripts/verify-gui-hap.sh      # 按内部包断言
-# 或者先跑默认 stage，再跑上面的 stage-fleximind-runtime.sh（它只管载荷）。
+# ON 时的私有输入清单与打包/断言逻辑由外部钩子提供：scripts/private/fleximind-stage.sh
+# （在 .gitignore 里，不进公开仓库），加载器是 scripts/fleximind-hook.sh；缺钩子会明确报错退出。
 ./scripts/stage-gui-hap.sh
 ./scripts/sign-staged-native-ohos.sh  # 仅供本地 target-runtime 探针
 ./scripts/run-staged-freecad-acceptance.sh
@@ -119,3 +119,16 @@ GUI 完成标准包括主窗口与工作台、3D 场景渲染、相机交互、�
 - Python：3.11.4 OHOS runtime
 - 未签名 ELF 不能直接在设备 shell 中执行，端侧验收必须进入签名 HAP
 - HAP 沙箱中的 `Mod/`、用户文件授权、loopback 接口和应用生命周期仍需随 GUI 集成验证
+
+## 许可
+
+本仓库是对 [FreeCAD](https://www.freecad.org/) 1.1.2 的移植工程，包含对其源码的补丁、移植脚本
+与配套文档。这些衍生部分按上游同样的 **GNU 宽通用公共许可证第 2.1 版（LGPL-2.1）** 分发，
+许可全文见 [`LICENSE`](LICENSE)；分发修改过的 LGPL 组件时，**对应源码由此仓库公开提供**，
+以此履行 LGPL-2.1 的源码提供义务。
+
+随包分发的其他开源组件（Qt 6、Open CASCADE Technology、Coin3D、Python、OpenSSL、NumPy、
+PyYAML 等）各自遵循其原始许可，相应许可文本随应用提供。
+
+本工程是**非官方社区移植版本**，与 FreeCAD 官方项目及其名称持有人不存在隶属、赞助或授权关系；
+应用隐私政策见 [`PRIVACY.md`](PRIVACY.md)。

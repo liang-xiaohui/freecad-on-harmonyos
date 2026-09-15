@@ -2,7 +2,10 @@
 set -eu
 
 PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-FLEXIMIND_ROOT="${FLEXIMIND_ROOT:-/path/to/FlexiMind}"
+# 这个脚本校验的是内部包（无头验收 + FlexiMind 作业）：私有输入清单与条目断言
+# 全部来自外部钩子 —— 本仓库是公开的，不含这些信息。见 scripts/fleximind-hook.sh。
+. "$PROJECT_DIR/scripts/fleximind-hook.sh"
+fleximind_load_hook
 PY_YAML_ROOT="$PROJECT_DIR/runtime/pyyaml"
 PACKAGING_ROOT="$PROJECT_DIR/runtime/packaging"
 ABI="${ABI:-arm64-v8a}"
@@ -95,12 +98,7 @@ for source in \
     "$PROJECT_DIR/entry/src/main/ets/entryability/EntryAbility.ets" \
     "$PROJECT_DIR/entry/src/main/module.json5" \
     "$PROJECT_DIR/probes/freecad-headless/acceptance.py" \
-    "$PROJECT_DIR/runtime/fleximind_job_runner.py" \
-    "$FLEXIMIND_ROOT/workers/worker-a.py" \
-    "$FLEXIMIND_ROOT/workers/worker-b.py" \
-    "$FLEXIMIND_ROOT/workers/worker-c.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/registered_base.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/reference_geometry.py" \
+    $(fleximind_input_files) \
     "$PY_YAML_ROOT/LICENSE" \
     "$PY_YAML_ROOT/yaml/__init__.py" \
     "$PACKAGING_ROOT/LICENSE" \
@@ -132,23 +130,17 @@ if [ -n "$newer_numpy" ]; then
     failed=1
 fi
 
-for entry in \
-    FlexiMind/fleximind_job_runner.py \
-    FlexiMind/workers/worker-a.py \
-    FlexiMind/workers/worker-b.py \
-    FlexiMind/workers/worker-c.py \
-    FlexiMind/tools/freecad/FlexiMindGripDesign/__init__.py \
-    FlexiMind/tools/freecad/FlexiMindGripDesign/registered_base.py \
-    FlexiMind/tools/freecad/FlexiMindGripDesign/reference_geometry.py; do
-    if ! unzip -p "$HAP" resources/rawfile/freecad-runtime.zip > "$RUNTIME_ZIP" || \
-       ! unzip -Z1 "$RUNTIME_ZIP" | grep -q "^${entry}$"; then
+if ! unzip -p "$HAP" resources/rawfile/freecad-runtime.zip > "$RUNTIME_ZIP"; then
+    echo "MISSING resources/rawfile/freecad-runtime.zip"
+    failed=1
+fi
+for entry in $(fleximind_payload_entries); do
+    if ! unzip -Z1 "$RUNTIME_ZIP" | grep -Fqx "$entry"; then
         echo "MISSING resources/rawfile/freecad-runtime.zip:$entry"
         failed=1
     fi
 done
-if unzip -p "$HAP" resources/rawfile/freecad-runtime.zip > "$RUNTIME_ZIP" && \
-   unzip -Z1 "$RUNTIME_ZIP" |
-   grep -Eq '^(Mod/FlexiMindGripDesign/|FlexiMind/tools/freecad/FlexiMindGripDesign/(Init.py|InitGui.py|commands.py|scene_state.py|Resources/))'; then
+if unzip -Z1 "$RUNTIME_ZIP" | grep -Eq "$(fleximind_forbidden_pattern)"; then
     echo "UNEXPECTED resources/rawfile/freecad-runtime.zip:FlexiMindGripDesign GUI Workbench"
     failed=1
 fi

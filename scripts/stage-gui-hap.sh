@@ -39,11 +39,10 @@ RAWFILE_PARENT="$PROJECT_DIR/entry/src/main/resources"
 RAWFILE_DIR="$RAWFILE_PARENT/rawfile"
 SPLASH_MEDIA_DIR="$RAWFILE_PARENT/base/media"
 FREECAD_SPLASH_SOURCE="$CPP_LIB_ROOT/sources/freecad/$FREECAD_VERSION/src/Gui/Icons"
-FLEXIMIND_ROOT="${FLEXIMIND_ROOT:-/path/to/FlexiMind}"
 # FlexiMind 无头作业载荷（顶层 FlexiMind/）是否随包分发。
-# 默认 OFF：这个 HAP 是对外分发/上架的产物，不应把 FlexiMind 的私有脚本打进公开包。
-# FlexiMind 侧需要的包显式 PACKAGE_FLEXIMIND=ON 重新 stage，或在本脚本跑完后
-# 执行 scripts/stage-fleximind-runtime.sh 单独把载荷刷进 freecad-runtime.zip。
+# 默认 OFF：这个 HAP 是对外分发/上架的产物，不应把私有工作台的脚本打进公开包。
+# ON 时的输入清单与打包逻辑由外部私有钩子提供 —— 本仓库是公开的，不含这些信息。
+# 见 scripts/fleximind-hook.sh；钩子默认放在 scripts/private/（.gitignore，不进仓库）。
 PACKAGE_FLEXIMIND="${PACKAGE_FLEXIMIND:-OFF}"
 case "$PACKAGE_FLEXIMIND" in
     ON | on | 1 | true | yes) PACKAGE_FLEXIMIND=ON ;;
@@ -175,17 +174,9 @@ if [ "$BUILD_REVERSEENGINEERING" = ON ]; then
 fi
 
 if [ "$PACKAGE_FLEXIMIND" = ON ]; then
-    for required in \
-        "$FLEXIMIND_ROOT/workers/worker-a.py" \
-        "$FLEXIMIND_ROOT/workers/worker-b.py" \
-        "$FLEXIMIND_ROOT/workers/worker-c.py" \
-        "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/registered_base.py" \
-        "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/reference_geometry.py"; do
-        [ -f "$required" ] || {
-            echo "错误：缺少 FlexiMind FreeCAD runtime 输入：$required" >&2
-            exit 1
-        }
-    done
+    . "$PROJECT_DIR/scripts/fleximind-hook.sh"
+    fleximind_load_hook
+    fleximind_check_inputs
 fi
 
 [ -f "$PY_YAML_ROOT/yaml/__init__.py" ] || {
@@ -533,40 +524,19 @@ if unzip -Z1 "$RAW_STAGE/freecad-runtime.zip" |
 fi
 rm -rf "$BINDINGS_STAGE"
 if [ "$PACKAGE_FLEXIMIND" = ON ]; then
-    echo "==> Package FlexiMind headless jobs (GUI Workbench excluded)"
-    FLEXIMIND_STAGE="$RAW_STAGE/fleximind"
-    FLEXIMIND_HELPERS="$FLEXIMIND_STAGE/FlexiMind/tools/freecad/FlexiMindGripDesign"
-    mkdir -p "$FLEXIMIND_STAGE/FlexiMind/workers" "$FLEXIMIND_HELPERS"
-    cp "$PROJECT_DIR/runtime/fleximind_job_runner.py" "$FLEXIMIND_STAGE/FlexiMind/"
-    printf '%s\n' '"""FlexiMind runtime package."""' > "$FLEXIMIND_STAGE/FlexiMind/__init__.py"
-    printf '%s\n' '"""Headless modeling helpers shared with FlexiMind."""' > "$FLEXIMIND_HELPERS/__init__.py"
-    for worker in \
-        worker-a.py \
-        worker-b.py \
-        worker-c.py; do
-        cp "$FLEXIMIND_ROOT/workers/$worker" "$FLEXIMIND_STAGE/FlexiMind/workers/$worker"
-    done
-    for helper in registered_base.py reference_geometry.py; do
-        cp "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/$helper" "$FLEXIMIND_HELPERS/$helper"
-    done
-    (cd "$FLEXIMIND_STAGE" && \
-        zip -q -r "$RAW_STAGE/freecad-runtime.zip" FlexiMind \
-            -x '*/__pycache__/*' '*.pyc' '*.so' '*.so.*')
-    rm -rf "$FLEXIMIND_STAGE"
-    if unzip -Z1 "$RAW_STAGE/freecad-runtime.zip" |
-       grep -Eq '^(Mod/FlexiMindGripDesign/|FlexiMind/tools/freecad/FlexiMindGripDesign/(Init.py|InitGui.py|commands.py|scene_state.py|Resources/))'; then
-        echo "错误：FlexiMindGripDesign GUI 工作台当前禁用，不得进入 runtime" >&2
-        exit 1
-    fi
+    # GUI 侧要求载荷里不含 native ELF（否则会丢 HAP 代码签名）
+    FLEXIMIND_EXCLUDE_ELF=1 fleximind_stage_payload "$RAW_STAGE"
 else
     echo "==> FlexiMind headless jobs excluded (PACKAGE_FLEXIMIND=OFF)"
     # 兜底：zip 是被反复复用的产物，上一次 ON 的残留必须在这里被清掉，
     # 否则"关掉开关"这件事只对全新构建生效，对增量构建静默失效。
-    if unzip -Z1 "$RAW_STAGE/freecad-runtime.zip" | grep -q '^FlexiMind/'; then
-        zip -q -d "$RAW_STAGE/freecad-runtime.zip" 'FlexiMind/*'
+    FLEXIMIND_PAYLOAD_DIR="${FLEXIMIND_PAYLOAD_DIR:-FlexiMind}"
+    RUNTIME_ZIP="$RAW_STAGE/freecad-runtime.zip"
+    if unzip -Z1 "$RUNTIME_ZIP" | grep -q "^$FLEXIMIND_PAYLOAD_DIR/"; then
+        zip -q -d "$RUNTIME_ZIP" "$FLEXIMIND_PAYLOAD_DIR/*"
         echo "==> 已从 freecad-runtime.zip 移除历史 FlexiMind 载荷"
     fi
-    if unzip -Z1 "$RAW_STAGE/freecad-runtime.zip" | grep -q '^FlexiMind/'; then
+    if unzip -Z1 "$RUNTIME_ZIP" | grep -q "^$FLEXIMIND_PAYLOAD_DIR/"; then
         echo "错误：FlexiMind 载荷仍在 runtime 中，PACKAGE_FLEXIMIND=OFF 未生效" >&2
         exit 1
     fi
