@@ -635,15 +635,52 @@ README「可复跑入口」与 `docs/device-run-guide.md` 的设备侧验收一�
 | 项 | 状态 |
 | --- | --- |
 | FlexiMind 的 **worker 实现**（夹指参数化 / 人工设计的几何脚本本体） | **从未进入 git 历史** ✓（`git log --all --format="" --name-only --diff-filter=A \| sort -u` 全量枚举确认） |
-| 作业运行器、打包脚本、作业契约文档 | **已从当前树撤出并重写历史**：`runtime/fleximind_job_runner.py`、`scripts/stage-fleximind-runtime.sh`、`docs/fleximind-runtime.md` 三份都由 `git filter-branch` 从所有提交移除 |
+| 作业运行器、打包脚本、作业契约文档 | **已从当前树撤出，并从全部 47 个提交里移除**：`runtime/fleximind_job_runner.py`、`scripts/stage-fleximind-runtime.sh`、`docs/fleximind-runtime.md`（`git filter-branch --index-filter`） |
+| 证书序列号 / 本机 UDID / 私有源码根路径 / worker 文件名 | **已从全部 47 个提交里洗掉**（`--tree-filter` 走字节级替换，脚本见下文）。注意：这几串在转公开后**一度是活的** —— 远端 tip `52bac32` 里就带着它们，所以这一轮不是"防患于未然"，是真的在补救 |
 | worker / helper 文件名、私有源码根路径、GUI 工作台源码结构 | **已从脚本里撤出**：原先散在 `stage-gui-hap.sh` / `stage-headless-hap.sh` / `verify-gui-hap.sh` / `verify-headless-hap.sh` 四处的清单与断言，改为由外部钩子提供数据（见上一小节） |
 | `entry/src/main/cpp/acceptance.cpp` | **仍可见**：无头桥按 `<filesDir>/FlexiMind/fleximind_job_runner.py` 定位运行器。只暴露载荷目录名与运行器文件名，不含 worker 名与作业契约；改动要重编 `libfreecadacceptance.so` 并重新验证 GUI，收益小风险大，故保留 |
 | `.workbuddy/`（内部工作记录） | **未跟踪** ✓（`git ls-files` 命中 0） |
 | 密钥类文件 / 大对象 | 无（`*.p12`/`*.p7b`/`*.key` 均未跟踪；最大历史对象 1.4MB splash PNG；仓库总量 13.3MB） |
 
+**重写分两遍做的，顺序不能反**：
+
+1. `--index-filter` + `git rm --cached` 抽掉三份文件（改的是"某个提交有没有这个路径"）；
+2. `--tree-filter` + 一个字节级替换脚本洗掉**材料事实**串（改的是"某个提交的文件内容"）。
+
+只做第 1 遍是**不够的**：那三份文件的路径没了，但证书序列号、UDID、私有源码根路径、
+worker 文件名散在其他文件的内容里，照样随历史公开。反之如果只做第 2 遍，被删文件的
+**内容**仍在历史对象里。两遍都做才算洗全。
+
+清洗器脚本**刻意不入库**（它自己就写着那些待洗的串，提交等于又把它们放回来），
+放在工作区外的 `codex-freecad-artifacts/scrub-private.py`。它的替换表只有"材料事实"级：
+证书序列号、本机 UDID、私有源码根绝对路径、私有 worker/工具文件名。
+
+**刻意不动的**（避免过度改写、把文档改废）：
+
+- `FlexiMind` 这个名字与 `PACKAGE_FLEXIMIND` 开关本身 —— 公开侧要靠它决定打哪个包，是有意公开的；
+  只洗掉名字、留着开关，等于自欺欺人；
+- `acceptance.cpp` 里的无头桥（见上表）；
+- `/storage/Users/currentUser/CPPLib` 这类**本机构建布局路径**（57 个文件在用）—— 文档里的
+  构建步骤靠它才有用，且不构成机密。
+
+**验证口径**（重写后逐提交全量扫，不能只看 HEAD）：
+
+```sh
+# 每条都应为 0
+for t in 63E4DC7938676B117F08DEBFBEDA BE84778D github/FlexiMind \
+         generate_procedural_finger_step render_parametric_finger_design \
+         manual_gripping_design_freecad local_design_bridge; do
+    n=$(git rev-list HEAD | while read c; do git grep -l -F "$t" $c 2>/dev/null; done | wc -l)
+    echo "$t : $n"
+done
+# 树哈希必须与重写前一致 —— 证明清洗只动历史、没动当前内容
+git rev-parse HEAD^{tree}   # = 155d7b9034563cccf429475c57914110291173ad
+```
+
 **重写历史的边界（必须说清楚）**：force push 之后，GitHub 上原来的提交对象**不会立刻消失** ——
 只要知道旧提交 hash，一段时间内仍可直接访问，直到 GitHub 侧回收，或联系 Support 主动清除；
-公开期间被爬虫/镜像/fork 抓走的内容更是收不回。所以这类判断本该在转公开**之前**做。
+公开期间被爬虫/镜像/fork 抓走的内容更是收不回。这次尤其要记住：**那些串在公开仓库里
+真的活过一段时间**（远端 tip `52bac32` 就带着它们），所以哪怕现在洗掉了，也不能假设没人抓过。
 本地保留了三份副本在 `scripts/private/`（未跟踪），功能随时可恢复。
 
 ## 8. 待办顺序
@@ -676,7 +713,10 @@ README「可复跑入口」与 `docs/device-run-guide.md` 的设备侧验收一�
    只保留"用的是哪一套、怎么查、怎么换"这类可操作信息；
    ② ~~加许可声明~~ **已完成**：仓库根新增 `LICENSE`（LGPL-2.1 全文，取自上游），
    README 增加「许可」一节说明衍生部分的许可与源码提供方式；
-   ③ **FlexiMind 实现细节撤出 + 重写历史**，见第 7 节末「保密复核与撤出」小节。
+   ③ ~~FlexiMind 实现细节撤出 + 重写历史~~ **已完成**：实现细节已移到仓库外的外部钩子，
+   三份材料由 `git filter-branch` 从全部 47 个提交移除，证书序列号 / UDID / 私有路径 / worker
+   文件名一并洗掉，已 force push（整条历史换哈希，重写那一刻的 tip 是 `ca14605`）。
+   做法、验证口径与边界见第 7 节末「保密复核与撤出」小节。
 7. **补应用内隐私政策入口**：政策要在应用内也能打开。实现方式未定（建议挂在 Help 菜单或
    Start 工作台的一个链接上，指向公网 URL 或包内随附的副本）。
 8. AGC 建发布证书与发布 Profile → 加 release 签名配置 → 出正式包 → 提审时补
