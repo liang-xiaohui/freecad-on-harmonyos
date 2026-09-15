@@ -9,7 +9,14 @@
     "vendor": "freecad-on-harmonyos",
     "versionCode": 1,
     "versionName": "0.1.0",
-    "icon": "$media:app_icon",
+    // Layered icon. Huawei's "通用应用 UX 体验标准" 2.1.4.3.1 (standard level:
+    // 必须) requires the app icon to ship as separate foreground and background
+    // layers, both 1024x1024, with no self-applied rounded corners, no inner
+    // padding, and no transparent pixels in the background layer - the system
+    // composes and masks them itself. It applies to 电脑 (PC/2in1) too, not
+    // only to phones. app_icon.png stays in this directory as the flat source
+    // artwork; startWindowIcon still points at the single-layer $media:icon.
+    "icon": "$media:layered_image",
     "label": "$string:app_name"
   }
 }

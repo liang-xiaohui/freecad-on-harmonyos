@@ -70,7 +70,10 @@
         "srcEntry": "./ets/qability/QAbility.ets",
         "launchType": "specified",
         "description": "$string:QAbility_desc",
-        "icon": "$media:icon",
+        // Layered icon (foreground + background), as required by Huawei's
+        // "通用应用 UX 体验标准" 2.1.4.3.1 for PC/2in1 as well. The system
+        // masks the corners; startWindowIcon keeps the flat $media:icon.
+        "icon": "$media:layered_image",
         "label": "$string:app_name",
         "startWindow": "$profile:start_window",
         "startWindowIcon": "$media:transparent_start_window",
