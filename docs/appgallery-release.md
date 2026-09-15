@@ -100,6 +100,57 @@ keyword: 'enum', params: { allowedValues: ['default','tablet','tv','wearable','c
 
 PC-only 时 `tablet` 可以不留；只有在"想保开发机兼容"或"AGC 还勾着平板"时才需要它。
 
+### 平板：首版不上的决策记录（2026-09-15）
+
+结论：**首版只发 PC/2in1，不声明 `tablet`**。依据分三层，从规则到实现都有硬证据。
+
+**第一层，华为自己的口径就推荐这么做。** 官方《鸿蒙应用审核 FAQ》第九条原文：
+
+> 系统提示"检测到您的应用已适配平板设备，请在'应用信息页面-支持设备'中勾选平板设备"。
+> 然而勾选后再次提交审核，却因存在平板端适配问题被驳回。该如何修改？
+> **答**：……如暂无多端部署计划，建议您排查包体中的 devicetype 字段是否存在 tablet 类型，
+> **可将 devicetype 中的 tablet 类型删除后再尝试提交上架**。
+
+也就是说，"没做平板适配就别声明 tablet"是官方给的解法，不是我们在绕开要求。
+
+**第二层，PC 和平板是两套互不相通的要求，本工程只满足其中一套。**
+
+| PC / 2in1 审核要点 | 本工程 | 平板《多设备体验设计标准》 | 本工程 |
+| --- | --- | --- | --- |
+| 可交互元素需有鼠标悬停 + 点击反馈 | 满足（预选高亮是 FreeCAD 固有行为） | 点击热区 ≥ 48vp 推荐 / **≥ 40vp 必须** | **不满足** |
+| 标准窗口控制（最小化/最大化/还原/关闭） | 满足（Qt 窗口栈天然具备） | 底部导航条避让 | 未做 |
+| 合理场景提供右键菜单 | 满足（大量上下文菜单） | 竖向悬浮窗 / 左右分屏 / 上下分屏且能跑完全流程 | 未做 |
+| 常用操作快捷键 | 满足（Ctrl+C/V/S…） | 离手减速动效一致性（可滑动页面） | 不适用 |
+| 键鼠交互热区 ≥ 5mm | 满足 | 横竖屏与全屏切换 | 未做 |
+
+热区这条有具体数字可对：`src/Gui/ToolBarManager.cpp:474` 的 `ToolbarIconSize` **默认 24**
+（可选档 16/24/32），即 24vp 左右，**低于平板 40vp 的下限**，离 48vp 推荐值差一倍。
+分屏这条更硬：dock 面板最小宽度约 **634 逻辑像素**（来自 freecad-ai `ui/chat_widget.py`
+顶栏），平板左右分屏后单侧只有 400~500vp，**物理上放不下**。
+
+**第三层，触摸链路上有真实的 QPA 缺口 —— 不是"体验差"，是"做不到"。**
+查 Qt 6.8.3 OHOS QPA（`qtbase/src/plugins/platforms/ohos/qohosinputmethodeventhandler.cpp`）：
+
+- **滚轮事件只认鼠标和触控板**：`UI_INPUT_EVENT_TOOL_TYPE_MOUSE` 与 `TOUCHPAD` 各有一条
+  分支，**`TOUCH` 落到 `else` 直接 `return`**（打 `Received unsupported input event tool
+  type … skipping`）。⇒ 平板上**手指无法滚动列表、无法缩放视图**。对 FreeCAD 意味着
+  参数面板、模型树、3D 视口缩放一并失效。
+- **触摸不合成鼠标**：走 `onTouchEventFromXComponent()` → `QWindowSystemInterface::
+  handleTouchEvent()`，交给 Qt 的是原生 `QTouchEvent`。Qt 层会把单指触摸合成为鼠标左键，
+  于是：**没有 hover**（FreeCAD 的预选高亮永远不亮）、**没有中键/右键拖动**（3D 视图
+  旋转/平移的默认操作没了）、手指精度选不中顶点和边。
+
+这三条叠起来，平板版不是"再调调布局"就能交付的，而是要给 Qt 加补丁（触摸滚轮/手势）+
+重做交互热区 + 改 freecad-ai 的最小宽度 + 导航条与分屏适配，属于一轮独立的工作量。
+
+**什么时候值得做**：若确实要覆盖平板，优先级是 ① Qt 侧补触摸滚轮分支（否则连列表都滑
+不动）② 热区达标 ③ 导航条避让与分屏。① 是"能不能用"的门槛，③ 是"会不会被拒"的门槛。
+更稳的节奏是**等 PC 版第一次审核通过、商店页面立住之后再单独立项**。
+
+**一个连带风险**：华为的分发规则里，AGC 勾了"手机"时，**即便包内没声明 tablet，也会以
+兼容模式默认分发到平板**。所以将来若把 `phone` 加回来，平板会被顺带覆盖（兼容模式下布局
+拉伸，反而是审核风险）——平板这件事必须主动决策，不能当赠品捎带。
+
 ## 3. 权限与 ACL
 
 权限等级决定要不要 ACL：`availableLevel ≤ 应用 APL` 的权限普通声明即可；**高于 APL 的
@@ -219,28 +270,63 @@ the generated SigningConfigs
 2. 用发布证书 + 新包名创建发布 Profile，ACL 获批后在这里勾选 `READ_PASTEBOARD`；
 3. 在 `build-profile.json5` 增加 release 签名配置，`BUILD_MODE=release` 出包。
 
-## 5. 图标：分层图标是"手机"的硬要求
+## 5. 图标：PC/2in1 同样必须分层（已完成）
 
-华为官方口径：**手机应用上架审核必须配置分层图标**（前景 + 背景两层）。当前工程是单层
-图标 —— `AppScope/resources/base/media/app_icon.png`（1024×1024），
-`app.json5` 与 ability 的 `icon` 都指向 `$media:app_icon` / `$media:icon`，仓库里
-**没有** `layered_image.json`。
+**权威依据**是华为《通用应用 UX 体验标准》2.1.4.3.1，标准等级 **必须**：
 
-只发 PC/2in1 时**没有同等的明文强制**（强制口径是"手机应用"），所以它在 PC-only 路线下
-从"硬阻塞"降级为"建议做"——但系统桌面本来就是按分层图标渲染的，而且**只要以后想加手机
-就必须补**，所以别把它当可省项。
+> 应用图标资源必须分为前景图和背景图两层，尺寸要求必须为 1024 px * 1024 px，资源不允许
+> 自行裁切圆角，不允许在资源内添加内间距，应用图标的背景图不允许含有透明像素。
 
-需要补：
+**适用设备类型明确包含"电脑"**（手机、折叠屏、平板、**电脑**、智慧屏）。所以这不是只针对
+手机的软要求 —— 本文档上一版把它判定为"PC 路线下的建议项"是错的，已更正。
 
+四条硬约束，照做即可，别自作聪明：
+
+| 约束 | 含义 |
+| --- | --- |
+| 前景 + 背景两层，各 1024×1024 | 不是一张合成图 |
+| **不自行裁圆角** | 遮罩由系统加；自己裁了会被二次裁切，出白边/黑边 |
+| **不加内间距** | 图形撑满画布，不要人为留边 |
+| 背景层**不允许含透明像素** | 背景必须是实心不透明图（或 `$color:`） |
+
+AGC 上传图按《素材规范》PC/2in1 档：1 张，**216×216 或 1024×1024**，PNG ≤ 3MB，
+**必须正方形**。上传的那张是"合成图"（前景叠在背景上），且要与包内显示的图标一致。
+
+### 已落地的资源
+
+| 文件 | 位置 | 说明 |
+| --- | --- | --- |
+| `foreground.png` | `AppScope/resources/base/media/` 与 `entry/src/main/resources/base/media/` | 透明底官方 logo，1024×1024，图形撑满（无内间距） |
+| `background.png` | 同上 | 纯色 `#1F2430`，1024×1024，**完全不透明** |
+| `layered_image.json` | 同上 | `{"layered-image":{"background":"$media:background","foreground":"$media:foreground"}}` |
+
+**两处都要放**：`app.json5` 的 `app.icon` 在 AppScope 作用域解析，`module.json5` 里 ability
+的 `icon` 在 entry 模块作用域解析，各自都要能找到 `layered_image`。`startWindowIcon` 仍指向
+单层 `$media:icon`（启动页图标不要求分层）。
+
+```json5
+// AppScope/app.json5
+"icon": "$media:layered_image",
+// entry/src/main/module.json5（QAbility 的 icon）
+"icon": "$media:layered_image",
 ```
-AppScope/resources/base/media/foreground.png        # 1024x1024，前景层
-AppScope/resources/base/media/background.png        # 1024x1024，背景层
-AppScope/resources/base/media/layered_image.json    # {"layered-image":{"background":"$media:background","foreground":"$media:foreground"}}
-```
 
-然后把 `AppScope/app.json5` 的 `app.icon`、`module.json5` 里 ability 的 `icon` 都改成
-`$media:layered_image`（`startWindowIcon` 仍用 `$media:icon` / `transparent_start_window`）。
-DevEco 的 `Image Asset` 生成器可以一键产出这套资源。
+### AGC 上传用的图（`store-assets/icon/`）
+
+| 文件 | 用途 |
+| --- | --- |
+| `freecad-appgallery-1024.png` | **上传这一张**：1024×1024、15.5 KB、PNG、正方形 |
+| `freecad-appgallery-216.png` | 同一张图的 216×216 版本，备用 |
+| `foreground-1024.png` / `background-1024.png` | 分层素材原样留档，方便以后用 DevEco 的 Image Asset 重新生成 |
+
+**背景色为什么是 `#1F2430`**：官方 logo 由 FreeCAD 红 `#CB333B`、蓝 `#418FDE`、白 `#FEFEFE`
+三色构成，白色 "F" 是主体之一。纯白/浅灰底会让白 F 与背景融为一体（红块视觉上被切成两片），
+红底/蓝底会让同色元素消失，只有深色底能把三个元素全保住；而华为又要求背景**不透明**，
+所以深色实心底是最优解。
+
+> 想换背景色：把 `store-assets/icon/background-1024.png` 与两处 `background.png` 换成同色
+> 重新生成，保持包内包外一致即可。生成脚本 `tools/icon/pngtool.py`——本机没有 Pillow，
+> 也没有任何 SVG 渲染器，PNG 的读/写/缩放是纯 Python 手写的（`zlib` + `struct`）。
 
 ## 6. 版本号
 
@@ -263,8 +349,30 @@ DevEco 的 `Image Asset` 生成器可以一键产出这套资源。
   自由窗口的拉伸/最大化/最小化、不同分辨率与缩放下不出现固定尺寸或留白。本移植是
   Qt 桌面栈，菜单/快捷键/窗口缩放天然具备（QPA 已处理窗口装饰高度与像素密度），
   提审时可以在备注里点明这些桌面特性。
-- **素材按勾选设备准备**：只勾 PC/2in1 就只需要 PC 分辨率的截图（AGC 对数量/尺寸有明文
-  规定，上传前对照核对），不需要手机竖屏截图。
+- **素材按勾选设备准备**：只勾 PC/2in1 就只需要 PC 分辨率的截图（3-5 张 16:9
+  1920×1080，PNG/JPG ≤5MB，需真实界面截图、不能用模拟器截图），不需要手机竖屏截图。
+
+### 应用分类与标签（AGC 填写项）
+
+权威来源是华为分类表《鸿蒙应用分类及其应用标签》
+（`developer.huawei.com/consumer/cn/doc/app/classify-1`）：一级分类 → 二级分类 → 应用标签。
+AGC 的「管理标签」对话框按一级分类分组，**最多 5 个，可以跨分类选**（"相关分类"下拉默认
+"全部"，切到具体分类可只列该分类下的标签）。
+
+FreeCAD 的标签建议（已选 3 个，留 2 个余量）：
+
+| 标签 | 所属分类 | 理由 | 状态 |
+| --- | --- | --- | --- |
+| `工具` | 工具 | 主定位，桌面工程工具 | 已选 |
+| `设计` | 艺术与设计 | 参数化建模、工程图、装配 | 已选 |
+| `AI` | 工具 | 内置 FreeCAD AI 工作台（LLM 对话） | 已选 |
+| `效率` | 商务 | 生产力/效率工具定位 | 建议补 |
+| `学习` 或 `设计学习` | 教育 / 艺术与设计 | 面向学生与自学用户，CAD 是典型学习型软件 | 建议补 |
+
+不建议凑满：标签与实际功能不符会被判定"功能描述与实际不符"，宁缺毋滥。**尤其注意 `AI`
+标签**——它会把应用暴露给关注 AI 能力的用户，若应用内提供 LLM 对话，审核可能追问生成式
+AI 相关资质或说明。我们的实际情况是"用户自带 API Key 调用第三方端点、不自建生成式服务"，
+提审说明里要写清这一点（与第 7 节 INTERNET 权限的说明合并即可）。
 
 ## 8. 待办顺序
 
@@ -272,14 +380,14 @@ DevEco 的 `Image Asset` 生成器可以一键产出这套资源。
    Profile（勾设备 + 勾 `READ_PASTEBOARD`）→ 下载 p7b → 改 `build-profile.json5`。
    `./scripts/check-signing-profile.py` 退出码 0，`build-gui-hap-ohos.sh` 恢复绿，
    `bm install` 成功。
-2. **真机复验粘贴**（唯一还没走完的一步）：
-   - 已确认：hilog `QAbility: READ_PASTEBOARD requested -> authResults=[0]`（PC 不弹框）。
-   - 待做：在 FreeCAD AI Settings 的 API Key 输入框（或任意 Qt 文本控件）按 Ctrl+V，
-     看内容是否真的进来（以前是静默清空）。
-   - 若仍失败：查沙箱控制台日志里 QPA 的那句
-     `... ohos.permission.READ_PASTEBOARD hasn't been granted by user. Cannot read
-     pasteboard data.`（说明权限没生效）；若没有这句但粘贴仍空，问题在别处（例如
-     粘贴板 UDMF 格式），要换个方向查。
-3. AGC 建发布证书与发布 Profile → 加 release 签名配置 → 出正式包。
-4. 定设备类型（PC-only 已收敛为 `["2in1"]`，确认 AGC 只勾 PC/2in1）、分层图标、版本号、
-   隐私政策；提审时补 `READ_PASTEBOARD` 的权限说明 + 场景视频 → 上传审核。
+2. ~~真机复验粘贴~~ **已完成（2026-09-15）**：hilog
+   `QAbility: READ_PASTEBOARD requested -> authResults=[0]`（PC/2in1 首次不弹框、系统直接
+   授予），用户在 FreeCAD AI Settings 的 API Key 输入框按 Ctrl+V **成功粘入**。
+3. ~~分层图标~~ **已完成（2026-09-15）**：见第 5 节。包内两处作用域都改成
+   `$media:layered_image`，AGC 上传图在 `store-assets/icon/freecad-appgallery-1024.png`。
+4. **AGC 填写项**：应用分类与标签（第 7 节末）、版本号（第 6 节，当前 `0.1.0`，首版建议
+   对齐上游 `1.1.2`）、应用简介与详细描述、隐私政策链接。
+5. **截图素材**：PC/2in1 档 3-5 张 16:9 1920×1080（PNG/JPG ≤5MB），真实界面截图。
+6. AGC 建发布证书与发布 Profile → 加 release 签名配置 → 出正式包 → 提审时补
+   `READ_PASTEBOARD` 的权限说明 + 场景视频 + 内嵌 CPython 的说明。
+
