@@ -122,16 +122,22 @@ const loadWorkKey = (materialDir) => {
     return new Int8Array(gcmDecrypt(rootKey, readOne(path.resolve(m, DIRS[2]))));
 };
 
+const readBuildProfile = () => {
+    const p = path.resolve(PROJECT_DIR, 'build-profile.json5');
+    if (!fs.existsSync(p)) {
+        die(2, `找不到 ${p}；在工程外使用时请用 --store-file 或 --material-dir 指定位置`);
+    }
+    return fs.readFileSync(p, 'utf8');
+};
+
 const configuredStoreFile = () => {
-    const text = fs.readFileSync(path.resolve(PROJECT_DIR, 'build-profile.json5'), 'utf8');
-    const m = text.match(/"storeFile"\s*:\s*"([^"]+)"/);
+    const m = readBuildProfile().match(/"storeFile"\s*:\s*"([^"]+)"/);
     if (!m) die(2, 'build-profile.json5 里找不到 signingConfigs[].material.storeFile');
     return m[1];
 };
 
 const configuredPassword = () => {
-    const text = fs.readFileSync(path.resolve(PROJECT_DIR, 'build-profile.json5'), 'utf8');
-    const m = text.match(/"storePassword"\s*:\s*"([0-9A-Fa-f]+)"/);
+    const m = readBuildProfile().match(/"storePassword"\s*:\s*"([0-9A-Fa-f]+)"/);
     if (!m) die(2, 'build-profile.json5 里找不到密文形式的 storePassword');
     return m[1];
 };
