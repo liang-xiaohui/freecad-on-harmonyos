@@ -368,7 +368,7 @@ AGC 上传图按《素材规范》PC/2in1 档：1 张，**216×216 或 1024×102
   `rawfile/freecad_headless_acceptance.py`）。建议随提审附一句说明。
 - **INTERNET 权限用途**：freecad-ai 工作台访问用户自选的 LLM 端点。
 - **隐私政策**：有网络访问 + 用户输入（含 API Key），需要提供隐私政策链接，并在其中说明
-  Key 的存放位置（沙箱 `freecad-home/` 配置文件）。
+  Key 的存放位置（沙箱 `freecad-home/` 配置文件）。**正文已完成**，见下文「隐私政策」小节。
 - 包内 185 个 `.so` 全部走 HAP `libs/`（保持签名），rawfile 里不放 native ELF。
 - **PC-only 时还要过桌面交互这一关**（审核会在 PC 上实测）：鼠标悬停态、键盘快捷键、
   自由窗口的拉伸/最大化/最小化、不同分辨率与缩放下不出现固定尺寸或留白。本移植是
@@ -495,6 +495,41 @@ AI 相关资质或说明。我们的实际情况是"用户自带 API Key 调用�
    攀附"的可能。低成本的做法是在介绍首句与开头元数据里把"非官方社区移植、与官方无隶属关系"
    放在最显眼处（当前文案已在首段与开源声明各写了一次）。
 
+### 隐私政策（已完成 2026-09-15）
+
+一份内容出三个文件，口径完全一致：
+
+| 文件 | 用途 |
+| --- | --- |
+| `PRIVACY.md` | 简体中文主版本，AGC 提审口径以此为准 |
+| `PRIVACY.en.md` | 英文版，供英文审核或海外渠道对照 |
+| `docs/privacy/index.html` | 单文件网页版（内联 CSS、零外部依赖、可打印），用于 AGC 里填写的链接 |
+
+声明内容同样是**逐条从包里核对过的**，不是套模板：
+
+| 声明 | 依据 |
+| --- | --- |
+| 不收集个人信息、无账号、无广告、无统计埋点 | `module.json5` 只声明 2 个权限；包内不含任何统计/广告 SDK；`freecad-ai` 源码里 `telemetry`/`analytics`/`sentry`/`posthog` grep 结果为 0 |
+| 共 2 项权限、各自用途与触发时机 | `ohos.permission.INTERNET`（`system_grant`，不弹窗）+ `ohos.permission.READ_PASTEBOARD`（`system_basic`+`user_grant`，已在 AGC 申请并写入 Profile），见第 3 节 |
+| **API Key 以明文存放**在沙箱 `config.json` | `freecad-ai/config.py:305` 是 `CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")`，写入用 `json.dump`（`:809`），全文件没有 `encrypt`/`keyring`/混淆逻辑 —— 所以政策里如实写"明文"，并提示不要存他人的 Key |
+| 联网场景只有三处 | ① AddonManager 的 GitHub / `wiki.freecad.org` 端点（`AddonCatalogCacheCreator.py:48`、`MacroCacheCreator.py:38`）；② `freecad-ai/llm/providers.py` 列出的 LLM 服务商端点（OpenAI/Anthropic/DeepSeek/Moonshot/通义/Gemini/xAI/Groq/OpenRouter 等，也可自填本地端点）；③ 用户自己点击的外部链接 |
+| 数据全在本机、卸载即删 | 沙箱路径 `/data/storage/el2/base/haps/entry/files/freecad-home/`，开发者无副本 |
+| 与上游无隶属关系 | 与第 7 节末"应用名沿用 `FreeCAD`"的拍板点同口径，政策第 12 节再声明一次 |
+
+**两个仍卡在外部的点（不在这份文件里能解决的）**：
+
+1. **链接必须公网可达**。AGC 的隐私政策 URL 是给审核员点的，而当前仓库**是私有的**：
+   同一时刻 `api.github.com/repos/liang-xiaohui/freecad-on-harmonyos` 返回 **404**、
+   `api.github.com/repos/FreeCAD/FreeCAD` 返回 **200**。所以 `github.com/.../blob/main/PRIVACY.md`
+   这类链接审核员打开是 404。两条出路：
+   - **把仓库转公开**：一次同时解决这里的链接问题与第 7 节拍板点 1 的 LGPL 源码提供义务，
+     是最省事的做法；转公开后链接为 `https://github.com/liang-xiaohui/freecad-on-harmonyos/blob/main/PRIVACY.md`，
+     开启 Pages（或用 `docs/privacy/`）还能得到纯网页版链接。
+   - **单独托管**：把 `docs/privacy/` 发布到一个公开托管上，仓库继续私有。
+   注意：政策第 1 节的联系方式当前写的是仓库 Issues 页，**若仓库保持私有，这条联系方式也要一并换成邮箱**。
+2. **应用内入口**。隐私政策除提审填链接外，通常还要求在应用内可打开。当前应用内没有任何入口，
+   属于待补项，实现方式未定（见第 8 节）。
+
 ### FlexiMind 面的清除（已完成 2026-09-15）
 
 FlexiMind 在这个包里其实有**两层**面，两层现在都从对外包里清掉了。全程只用**一个开关**：
@@ -580,10 +615,16 @@ README「可复跑入口」、`docs/fleximind-runtime.md` 顶部、`docs/device-
    `$media:layered_image`，AGC 上传图在 `store-assets/icon/freecad-appgallery-1024.png`。
 4. **AGC 填写项**：应用分类与标签（第 7 节末）、版本号（第 6 节，当前 `0.1.0`，首版建议
    对齐上游 `1.1.2`）、应用简介与详细描述（文案已成稿：`store-assets/appgallery-text-zh-CN.txt`）、
-   隐私政策链接。
+   ~~隐私政策链接~~（**正文已完成**：`PRIVACY.md` / `PRIVACY.en.md` / `docs/privacy/index.html`，
+   仍缺一个**公网可达的 URL**，见下一条）。
 5. ~~截图素材~~ **已完成（2026-09-15）**：5 张 1920×1080 介绍套图，见第 6 节末
    「应用截图：16:9 介绍套图」，产物在 `store-assets/screenshots-16x9/`，可用
    `node tools/promo/make_promo.js` 重出。
-6. AGC 建发布证书与发布 Profile → 加 release 签名配置 → 出正式包 → 提审时补
+6. **定仓库公开性**（一个决定同时影响三件事，见第 7 节「隐私政策」小节）：
+   ① 隐私政策链接能不能给审核员点；② 政策第 1 节的联系方式（Issues 链接是否可达，
+   否则换成邮箱）；③ 第 7 节 LGPL-2.1 的源码提供义务。转公开最省事，不转就要另找公开托管。
+7. **补应用内隐私政策入口**：政策要在应用内也能打开。实现方式未定（建议挂在 Help 菜单或
+   Start 工作台的一个链接上，指向公网 URL 或包内随附的副本）。
+8. AGC 建发布证书与发布 Profile → 加 release 签名配置 → 出正式包 → 提审时补
    `READ_PASTEBOARD` 的权限说明 + 场景视频 + 内嵌 CPython 的说明。
 

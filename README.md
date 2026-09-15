@@ -40,6 +40,8 @@
 - [移植执行计划](docs/porting-plan.md)
 - [依赖与技术闸门矩阵](docs/dependency-matrix.md)
 - [Headless HAP 验收](docs/headless-hap-acceptance.md)
+- [上架发布清单（AppGallery）](docs/appgallery-release.md)
+- 隐私政策：[简体中文](PRIVACY.md) · [English](PRIVACY.en.md) · [网页版](docs/privacy/index.html)（提审时填写的链接必须是公网可达的 HTTPS 页面）
 
 ## 可复跑入口
 
