@@ -17,10 +17,22 @@
       {
         "name": "default",
         "material": {
+          // The passwords are DevEco-encrypted blobs; copy them verbatim from a
+          // config that already signs (they are portable across projects on the
+          // same machine).
           "storePassword": "REPLACE_LOCALLY",
+          // certpath/storeFile must be the material of the certificate the
+          // profile is bound to - compare against bundle-info's
+          // development-certificate inside the .p7b, not just any debug
+          // certificate of the account. hvigor compares the certificate with
+          // the private key and fails in SignHap if they do not match.
           "certpath": "/absolute/path/to/debug.cer",
           "keyAlias": "debugKey",
           "keyPassword": "REPLACE_LOCALLY",
+          // After filling this in, run scripts/check-signing-profile.py: it
+          // checks the bundle name against AppScope/app.json5 and verifies that
+          // every restricted permission declared in module.json5 is covered by
+          // the profile's acls.allowed-acls (otherwise installs fail 9568289).
           "profile": "/absolute/path/to/debug.p7b",
           "signAlg": "SHA256withECDSA",
           "storeFile": "/absolute/path/to/debug.p12"
