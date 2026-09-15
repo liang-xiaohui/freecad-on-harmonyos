@@ -529,7 +529,18 @@ AI 相关资质或说明。我们的实际情况是"用户自带 API Key 调用�
    - **把仓库转公开**：一次同时解决这里的链接问题与第 7 节拍板点 1 的 LGPL 源码提供义务，
      是最省事的做法；转公开后链接为 `https://github.com/liang-xiaohui/freecad-on-harmonyos/blob/main/PRIVACY.md`，
      开启 Pages（或用 `docs/privacy/`）还能得到纯网页版链接。
-   - **单独托管**：把 `docs/privacy/` 发布到一个公开托管上，仓库继续私有。
+   - **单独托管**：把 `docs/privacy/` 发布到一个公开托管上，仓库继续私有。**当前走的就是这条**：
+
+     已在 WorkBuddy 站点上原样托管 `docs/privacy/` 整目录（无构建步骤，纯静态），
+     首页与 `en.html` 均实测返回 200：
+
+     ```
+     https://2c2701d6a0784c1eb0de0535c7c365f2.app.workbuddy.host          ← 填进 AGC
+     https://2c2701d6a0784c1eb0de0535c7c365f2.app.workbuddy.host/en.html
+     ```
+
+     管理入口在「设置 — 数据管理 — 我发布的应用」。**注意这是过渡方案**：域名不在自己名下，
+     长期稳定性不如自有域名或 GitHub Pages；提审前若能把仓库转公开，建议换成 GitHub 链接。
    注意：政策第 1 节的联系方式当前写的是仓库 Issues 页，**若仓库保持私有，这条联系方式也要一并换成邮箱**。
 2. **应用内入口**。隐私政策除提审填链接外，通常还要求在应用内可打开。当前应用内没有任何入口，
    属于待补项，实现方式未定（见第 8 节）。
@@ -619,8 +630,9 @@ README「可复跑入口」、`docs/fleximind-runtime.md` 顶部、`docs/device-
    `$media:layered_image`，AGC 上传图在 `store-assets/icon/freecad-appgallery-1024.png`。
 4. **AGC 填写项**：应用分类与标签（第 7 节末）、版本号（第 6 节，当前 `0.1.0`，首版建议
    对齐上游 `1.1.2`）、应用简介与详细描述（文案已成稿：`store-assets/appgallery-text-zh-CN.txt`）、
-   ~~隐私政策链接~~（**正文已完成**：`PRIVACY.md` / `PRIVACY.en.md` / `docs/privacy/index.html`，
-   仍缺一个**公网可达的 URL**，见下一条）。
+   ~~隐私政策链接~~ **已完成（2026-09-15）**：正文三份（`PRIVACY.md` / `PRIVACY.en.md`）
+   + 双语网页版（`docs/privacy/`），公网 URL 已发布并可访问，AGC 直接填那个链接 —— 见
+   第 7 节「隐私政策」小节。仓库若日后转公开，建议换成 GitHub 链接（域名更稳）。
 5. ~~截图素材~~ **已完成（2026-09-15）**：5 张 1920×1080 介绍套图，见第 6 节末
    「应用截图：16:9 介绍套图」，产物在 `store-assets/screenshots-16x9/`，可用
    `node tools/promo/make_promo.js` 重出。
