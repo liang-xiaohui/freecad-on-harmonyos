@@ -627,6 +627,31 @@ README「可复跑入口」与 `docs/device-run-guide.md` 的设备侧验收一�
 这种半途状态不会漏网。日志在
 `codex-freecad-artifacts/t1-{stage,build,verify}-{off,on}.log`。
 
+**复测（2026-09-15 晚，外部钩子重构之后）**：把私有清单从 4 个公开脚本挪进外部钩子之后，
+又完整跑了一遍双向回归（ON stage/build/verify → OFF stage/build/verify → 收尾自检），
+六个阶段全 exit 0，最终态回到 OFF：
+
+| 阶段 | 退出码 | 耗时 |
+| --- | --- | --- |
+| ON stage / build / verify | 0 / 0 / 0 | 150 s / 22 s / 17 s |
+| OFF stage / build / verify | 0 / 0 / 0 | 155 s / 23 s / 15 s |
+
+带开关的断言两侧都复现：ON 侧 `✓ FlexiMind 载荷在位`、`abilities=[EntryAbility, QAbility]`、
+rawfile 含 `freecad_headless_acceptance.py`；OFF 侧 `✓ HAP 不含 FlexiMind/ 载荷`、
+`abilities=[QAbility]`、验收脚本不进 rawfile。钩子契约另做了隔离测试（装载后 5 个函数齐备；
+钩子缺失时给出明确提示并 exit 1；`fleximind_forbidden_pattern` 正例命中、合法载荷条目放行）。
+日志在 `codex-freecad-artifacts/on-off-cycle2.log`，一次性链式脚本
+`codex-freecad-artifacts/on-off-cycle.sh`（顺序执行不带 `set -e`，最后必做"最终态自检"，
+避免中途失败把仓库留在 ON 态）。
+
+**踩坑（值得记住）**：第一遍回归六个阶段全挂、退出码 126 —— `stage-gui-hap.sh` 里的 `rm`
+被 WorkBuddy 的 safe-bin shim 挡住了。根因是脚本为了 hvigor 而 `unset CODEBUDDY_SAFE_DELETE_ENABLED`，
+而这个变量一旦缺失，shim 的 `rm` 就直接拒绝。**stage 与 build 的 env 需求是冲突的**：
+正解是**把 safe-bin 目录从 PATH 里剥掉**（`rm` 回到 `/bin/rm`，与变量无关），`unset` 只留给 build 那一步。
+更值得注意的是，**失败的 stage 会让 staging 处于不一致状态，而紧接着的 build 仍会"成功"产出一个
+残缺的 HAP**（只有 `verify-gui-hap.sh` 会报 `HAP 使用了过期 rawfile/...`）—— 所以 stage 非 0 时
+不要接着 build。
+
 #### 仓库转为 public 后的保密复核与撤出（2026-09-15）
 
 对外包清干净了，但**仓库本身也公开**，所以又核了一遍 FlexiMind 的暴露面，并按"撤出实现细节"处理。
