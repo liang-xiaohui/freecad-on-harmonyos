@@ -1,0 +1,60 @@
+{
+  "brand": {
+    "name": "FreeCAD",
+    "tag": "for HarmonyOS PC",
+    "total": 5
+  },
+  "card": { "radius": 16, "border": 2 },
+  "images": [
+    {
+      "id": "01",
+      "kicker": "PARAMETRIC MODELING",
+      "title": "参数化建模 · 改尺寸就改模型",
+      "sub": "草图驱动特征树，Pad、Pocket、圆角与基准随时回溯修改",
+      "accent": "#4A9EFF",
+      "accentB": "#1B6FE0",
+      "shot": "screenshot_20260915_184421_com.liangxiaohui.freecad.jpg",
+      "out": "freecad-agc-01-parametric-1920x1080.png"
+    },
+    {
+      "id": "02",
+      "kicker": "SKETCH & CONSTRAINTS",
+      "title": "草图约束 · 拖一下就变形",
+      "sub": "尺寸、角度、几何约束实时求解，全约束状态一屏看清",
+      "accent": "#2FD4A8",
+      "accentB": "#0E9E88",
+      "shot": "screenshot_20260915_184445_com.liangxiaohui.freecad.jpg",
+      "out": "freecad-agc-02-sketcher-1920x1080.png"
+    },
+    {
+      "id": "03",
+      "kicker": "FINITE ELEMENT ANALYSIS",
+      "title": "仿真分析 · 算完直接看云图",
+      "sub": "材料、约束、载荷、网格到求解一条流水线，应力与变形直接读",
+      "accent": "#FFB020",
+      "accentB": "#F0620A",
+      "shot": "screenshot_20260915_184209_com.liangxiaohui.freecad.jpg",
+      "out": "freecad-agc-03-fem-1920x1080.png"
+    },
+    {
+      "id": "04",
+      "kicker": "BUILDING INFORMATION MODELING",
+      "title": "建筑设计 · 体块与图纸同源",
+      "sub": "BIM 工作台按建筑构件组织模型，元素层级、平面视图与图纸同源",
+      "accent": "#A78BFA",
+      "accentB": "#6D4AE0",
+      "shot": "screenshot_20260915_184356_com.liangxiaohui.freecad.jpg",
+      "out": "freecad-agc-04-bim-1920x1080.png"
+    },
+    {
+      "id": "05",
+      "kicker": "TECHNICAL DRAWING",
+      "title": "工程图 · 三维自动出二维",
+      "sub": "视图、剖视、局部放大到尺寸标注，A3 图纸与标题栏直接成图",
+      "accent": "#5AD1F0",
+      "accentB": "#0E8FBF",
+      "shot": "screenshot_20260915_184505_com.liangxiaohui.freecad.jpg",
+      "out": "freecad-agc-05-techdraw-1920x1080.png"
+    }
+  ]
+}
