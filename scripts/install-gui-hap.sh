@@ -5,7 +5,7 @@ set -eu
 
 PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 HAP=${HAP:-$PROJECT_DIR/entry/build/default/outputs/default/entry-default-signed.hap}
-BUNDLE=${BUNDLE:-com.freecad.headless.acceptance}
+BUNDLE=${BUNDLE:-com.liangxiaohui.freecad}
 ABILITY=${ABILITY:-QAbility}
 HDC_BIN=${HDC_BIN:-hdc}
 HDC_SERVER=${HDC_SERVER:-127.0.0.1:8711}

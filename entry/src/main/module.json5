@@ -5,8 +5,13 @@
     "srcEntry": "./ets/qabilitystage/QAbilityStage.ets",
     "description": "$string:module_desc",
     "mainElement": "QAbility",
+    // AppGallery refuses a package whose declared device range is narrower
+    // than the range ticked in AGC ("上传的软件包与声明支持设备不一致"), while
+    // declaring a wider range is allowed. This port ships to HarmonyOS PC
+    // only, and Huawei's 2in1 token is what a MateBook reports, so a single
+    // entry is enough. Do NOT write "pc": the schema only accepts
+    // default/tablet/tv/wearable/car/2in1 and rejects it with 00303038.
     "deviceTypes": [
-      "tablet",
       "2in1"
     ],
     "deliveryWithInstall": true,

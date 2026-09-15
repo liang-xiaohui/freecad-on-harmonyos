@@ -1,6 +1,11 @@
 {
   "app": {
-    "bundleName": "com.freecad.headless.acceptance",
+    // Must equal the package name of the AppGallery Connect record
+    // (APP ID 6917614499915791877). The signing profile carries this same
+    // string, so changing it invalidates the local debug profile: a new
+    // profile bound to this package name has to be generated in AGC/DevEco
+    // before the HAP can be signed again.
+    "bundleName": "com.liangxiaohui.freecad",
     "vendor": "freecad-on-harmonyos",
     "versionCode": 1,
     "versionName": "0.1.0",

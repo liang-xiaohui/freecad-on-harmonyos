@@ -103,11 +103,11 @@ GL4ES 增量构建后还必须对对应 build tree 执行 `cmake --install`，�
 
 ## 步骤 B：FreeCAD GUI（QAbility）真机运行与调试
 
-1. 同一工程 Sync → Build Hap → Run config 选 **QAbility**。命令行从 DevEco 主机先执行 `hdc list targets -v`，只选择状态为 `Connected` 的完整 key，再执行 `hdc -t <connect-key> shell aa start -b com.freecad.headless.acceptance -a QAbility`。只有 `bm`/`aa` 实际具有执行权限的特权 HiShell 才直接调用设备命令；`uname` 显示 HarmonyOS/Toybox 不能单独作为判断依据。
+1. 同一工程 Sync → Build Hap → Run config 选 **QAbility**。命令行从 DevEco 主机先执行 `hdc list targets -v`，只选择状态为 `Connected` 的完整 key，再执行 `hdc -t <connect-key> shell aa start -b com.liangxiaohui.freecad -a QAbility`。只有 `bm`/`aa` 实际具有执行权限的特权 HiShell 才直接调用设备命令；`uname` 显示 HarmonyOS/Toybox 不能单独作为判断依据。
 2. 启动链：QAbility.onCreate → 并行准备 runtime 与同一 Ability 内的无框 ArkUI splash 子窗 → `setupQtApplication('libfreecadqtapp.so')` → QPA 复用主窗宿主页并启动 XComponent → `.gui-ready` 后抬起主窗、销毁 splash。
 3. hilog 标签：`FreeCADGui`（ArkTS）、`QtForOhos`（QPA）、`FreeCADProbe`（验收）。
 4. 当前回归重点：启动 QAbility → 新建文档/打开复杂文件 → 长时间旋转/缩放/选择 → 反复打开 Preferences/文件对话框 → 前后台切换。
-5. 若仍崩溃，请保留 `QtForOhos`、`gl4es` 日志，并运行 `hidumper -e --print com.freecad.headless.acceptance -n 3` 保存 cppcrash 完整栈。
+5. 若仍崩溃，请保留 `QtForOhos`、`gl4es` 日志，并运行 `hidumper -e --print com.liangxiaohui.freecad -n 3` 保存 cppcrash 完整栈。
 
 ## PySide6 / Shiboken6 集成状态（2026-09-05 修正）
 

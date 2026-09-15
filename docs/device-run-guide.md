@@ -34,7 +34,7 @@ DevEco 的本地运行目标、系统的 `bm`/`aa` 工具，或 HDC 完成安装
 - **同机本地运行**：如果系统 shell 提供 `bm` 和 `aa`，可以直接安装并启动：
   ```sh
   bm install -p /storage/Users/currentUser/github/freecad-on-harmonyos/entry/build/default/outputs/default/entry-default-signed.hap
-  aa start -b com.freecad.headless.acceptance -a QAbility
+  aa start -b com.liangxiaohui.freecad -a QAbility
   ```
   如果 `bm`/`aa` 不在 PATH、没有执行权限，或 `bm install` 只打印
   `error: failed to execute your command`，说明当前终端不是特权应用管理
@@ -46,7 +46,7 @@ DevEco 的本地运行目标、系统的 `bm`/`aa` 工具，或 HDC 完成安装
   hdc list targets
   # 用上一步实际输出的 key 替换 CONNECT_KEY；不要输入尖括号。
   hdc -t CONNECT_KEY install -r /绝对路径/entry-default-signed.hap
-  hdc -t CONNECT_KEY shell aa start -b com.freecad.headless.acceptance -a QAbility
+  hdc -t CONNECT_KEY shell aa start -b com.liangxiaohui.freecad -a QAbility
   ```
   使用 `hdc list targets -v`；输出中可能同时保留 `Offline` 与 `Connected`
   项，安装时必须显式选择 `Connected` 的完整 key，不能取第一行。如果
@@ -54,7 +54,7 @@ DevEco 的本地运行目标、系统的 `bm`/`aa` 工具，或 HDC 完成安装
 - **真正的特权设备 shell**：只有 `bm` 和 `aa` 实际可执行时才直接运行：
   ```sh
   bm install -p /storage/Users/currentUser/github/freecad-on-harmonyos/entry/build/default/outputs/default/entry-default-signed.hap
-  aa start -b com.freecad.headless.acceptance -a QAbility
+  aa start -b com.liangxiaohui.freecad -a QAbility
   ```
   `uname` 显示 HarmonyOS/HongMeng/Toybox 并不足以证明当前是特权 HiShell；
   这台 HarmonyOS PC 的普通 DevEco host 终端也有相同内核标识，但仍需通过
@@ -175,7 +175,7 @@ TARGET=192.168.3.16:39405
 "$HDC_BIN" -s "$HDC_SERVER" -t "$TARGET" install -r \
   entry/build/default/outputs/default/entry-default-signed.hap
 "$HDC_BIN" -s "$HDC_SERVER" -t "$TARGET" shell aa start \
-  -b com.freecad.headless.acceptance -a QAbility
+  -b com.liangxiaohui.freecad -a QAbility
 ```
 
 安装过程若被中断，不能假设“已安装”或“未安装”；重新确认 target 为
@@ -185,7 +185,7 @@ TARGET=192.168.3.16:39405
 
 - 验收入口改为**显式命令行触发**（应用安装后）：
   ```
-  aa start -b com.freecad.headless.acceptance -a EntryAbility
+  aa start -b com.liangxiaohui.freecad -a EntryAbility
   ```
 - 或临时把 `module.json5` 的 `mainElement` 改回 `EntryAbility` 后 Run。
 - 启动 EntryAbility → 自动执行 6 项验收（OCCT / 版本断言 / 模块导入 / 布尔 / FCStd / STEP / STL）。
@@ -361,4 +361,4 @@ HAP 打包，`libFreeCADGui.so` 却没有链接两个 C++ 运行库，converter 
   `renderType` 或 gl4es 深度状态，都必须复验 hover/单击单个面的高亮。
 - 长时间覆盖旋转、缩放、平移、拾取、选择高亮、输入映射和弹窗 remap。
 - 反复打开 Preferences、文件选择器并切换前后台，确认窗口和输入法生命周期稳定。
-- 若崩溃或白屏，保留 `QtForOhos`、`gl4es` 日志，并用 `hidumper -e --print com.freecad.headless.acceptance -n 3` 读取持久化 cppcrash。
+- 若崩溃或白屏，保留 `QtForOhos`、`gl4es` 日志，并用 `hidumper -e --print com.liangxiaohui.freecad -n 3` 读取持久化 cppcrash。
