@@ -89,6 +89,24 @@ DevEco/Hvigor 完成签名构建后，核对最终包：
 `build-profile.json5`，再由 DevEco/本机签名流程填入证书、profile、keystore 和口令；
 真实 `build-profile.json5` 已被忽略，禁止提交签名材料。
 
+hvigor 只接受 **DevEco 加密后的口令密文**（明文会被直接拒绝），且解密材料必须位于 `.p12`
+同目录的 `material/` 下。为免在 GUI 里做这些事，本仓库提供两个工具：
+
+```sh
+./scripts/init-release-signing.sh              # 生成发布 .p12 + .csr + 加密口令（上架用）
+./scripts/sign-staged-native-ohos.sh           # 仅本地 target-runtime 探针自签名
+```
+
+- [`scripts/signing-password.js`](scripts/signing-password.js)：读写那种口令密文，
+  `decrypt` 找回明文、`encrypt` 为任意口令生成可粘贴的密文。
+- [`scripts/init-release-signing.sh`](scripts/init-release-signing.sh)：一键生成发布密钥库与
+  CSR，并把 `build-profile.json5` 需要的片段直接打印出来。
+- [`scripts/check-signing-profile.py`](scripts/check-signing-profile.py)：**装包前必跑**，
+  核对 Profile 的 bundleName 与受限权限 ACL（不匹配会 9568289）。
+
+发布签名与上架的完整步骤（AGC 申请发布证书/发布 Profile、受限权限申请、两个 product
+如何绑签名、APP 备案口径）见 [上架与发布](docs/appgallery-release.md) 第 4 节与第 7.5 节。
+
 ## 最终 GUI 路线
 
 当前 Qt 5.12.12 + OpenCASCADE 7.8.1 组合服务于 headless 兼容验证；Qt6 仍是完整 GUI 的目标依赖线。FreeCAD v1.1.2 完整 GUI 采用以下目标依赖线：

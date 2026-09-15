@@ -2,11 +2,22 @@
   "app": {
     "products": [
       {
+        // 开发用：装到自己的设备上调试。产物 entry/build/default/outputs/default/
         "name": "default",
         "compatibleSdkVersion": "26.0.0(26)",
         "targetSdkVersion": "26.0.0(26)",
         "runtimeOS": "HarmonyOS",
         "signingConfig": "default"
+      },
+      {
+        // 上架用：AGC 签发的发布证书 + 发布 Profile。产物 entry/build/release/outputs/default/
+        // 注意 hvigor 的 signingConfig 是**按 product 绑定**的，不随 -p buildMode 自动切换
+        // （buildModeSet 的 schema 里根本没有 signingConfig 字段），所以必须是两个 product。
+        "name": "release",
+        "compatibleSdkVersion": "26.0.0(26)",
+        "targetSdkVersion": "26.0.0(26)",
+        "runtimeOS": "HarmonyOS",
+        "signingConfig": "release"
       }
     ],
     "buildModeSet": [
@@ -17,25 +28,39 @@
       {
         "name": "default",
         "material": {
-          // The passwords are DevEco-encrypted blobs; copy them verbatim from a
-          // config that already signs (they are portable across projects on the
-          // same machine).
+          // 口令**必须是 DevEco 加密后的十六进制串**，明文会被 hvigor 直接拒绝
+          // （DecipherUtil 先校验长度 >=32 且为偶数，再按 AES-128-GCM 解密）。
+          // 这台机器的加密串可跨工程复用；要自己生成见 scripts/signing-password.js。
           "storePassword": "REPLACE_LOCALLY",
-          // certpath/storeFile must be the material of the certificate the
-          // profile is bound to - compare against bundle-info's
-          // development-certificate inside the .p7b, not just any debug
-          // certificate of the account. hvigor compares the certificate with
-          // the private key and fails in SignHap if they do not match.
+          // certpath/storeFile 必须与 Profile 绑定的那张证书一致：拿 .p7b 里
+          // bundle-info.development-certificate 去比对，不能随便找账号下另一张调试证书。
+          // hvigor 会校验"证书公钥 == .p12 私钥"，配错在 SignHap 阶段失败。
           "certpath": "/absolute/path/to/debug.cer",
           "keyAlias": "debugKey",
           "keyPassword": "REPLACE_LOCALLY",
-          // After filling this in, run scripts/check-signing-profile.py: it
-          // checks the bundle name against AppScope/app.json5 and verifies that
-          // every restricted permission declared in module.json5 is covered by
-          // the profile's acls.allowed-acls (otherwise installs fail 9568289).
+          // 改完跑 scripts/check-signing-profile.py：核对 bundleName 与
+          // module.json5 里声明的受限权限是否都在 profile 的 acls.allowed-acls 内
+          // （不在就是全设备装不上，报 9568289）。
           "profile": "/absolute/path/to/debug.p7b",
           "signAlg": "SHA256withECDSA",
+          // 关键约束：hvigor 去 **storeFile 所在目录** 找 material/{fd,ac,ce} 来解密口令。
+          // 所以 .p12 换目录时 material/ 必须一起搬，否则报
+          // SIGNING_FAILED_CAN_NOT_FIND_SIGNING_MATERIAL。
           "storeFile": "/absolute/path/to/debug.p12"
+        },
+        "type": "HarmonyOS"
+      },
+      {
+        "name": "release",
+        "material": {
+          // 由 scripts/init-release-signing.sh 生成：跑一遍它会把下面这些值直接打出来。
+          "storePassword": "REPLACE_LOCALLY",
+          "certpath": "REPLACE_LOCALLY",   // AGC 下载的发布证书 .cer
+          "keyAlias": "releaseKey",
+          "keyPassword": "REPLACE_LOCALLY",
+          "profile": "REPLACE_LOCALLY",    // AGC 下载的发布 Profile .p7b
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "REPLACE_LOCALLY"   // init-release-signing.sh 生成的 ohos-release.p12
         },
         "type": "HarmonyOS"
       }
@@ -48,7 +73,8 @@
       "targets": [
         {
           "name": "default",
-          "applyToProducts": ["default"]
+          // 两个 product 都要挂上，否则 -p product=release 会找不到这个 target。
+          "applyToProducts": ["default", "release"]
         }
       ]
     }

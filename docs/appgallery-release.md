@@ -263,11 +263,99 @@ the generated SigningConfigs
 （退出码 0 才继续）→ 重建 HAP → 重装。**换设备必须把新 UDID 勾进 Profile**
 （`debug-info.device-ids` 是设备白名单），否则装不上。
 
-上架要用的**发布**材料完全是另一套（AGC → 证书、App ID 和 Profile 管理）：
+### 发布材料：申请发布证书 + 发布 Profile（2026-09-15 补齐）
 
-1. 创建发布证书（.cer，配本机 .p12 私钥）；
-2. 用发布证书 + 新包名创建发布 Profile，ACL 获批后在这里勾选 `READ_PASTEBOARD`；
-3. 在 `build-profile.json5` 增加 release 签名配置，`BUILD_MODE=release` 出包。
+上架要用的**发布**材料和调试那套是两套东西，差别不只是"换张证书"：
+
+| | 调试 Profile | 发布 Profile |
+| --- | --- | --- |
+| 设备白名单 `debug-info.device-ids` | 有（只列进白名单的 UDID 能装） | **无**（谁都能装） |
+| 受限权限 ACL | 可以自己勾 | **必须在这里申请**，否则提审被驳回 |
+| 有效期 | 随调试证书 | 发布证书 **3 年**（实名认证开发者） |
+| 上限 | — | 证书 3 个/账号；Profile 100 个/应用 |
+
+AGC 的界面分工要先看清楚：**证书是账号级的，Profile 才是每个应用一份**。所以发布证书一张就能给名下所有鸿蒙应用共用（配额只有 3 个，别一个应用申一张），Profile 则每个应用各申请一份。
+
+#### Step 0 · 生成发布密钥库与 CSR（本机，已完成 2026-09-15）
+
+```sh
+sh scripts/init-release-signing.sh     # 已存在密钥库时会拒绝，除非显式 FORCE=1
+```
+
+产物在 `~/Documents/ohos/config/release-signing/`：
+
+| 文件 | 说明 |
+| --- | --- |
+| `ohos-release.p12` | 发布密钥库。别名 `releaseKey`，EC P-256，有效期 25 年 |
+| `ohos-release.csr` | 上传 AGC 申请发布证书用的证书请求（588 B，与 DevEco 生成的结构等价） |
+| `material/` | 口令加解密材料（从现有签名目录复制） |
+| `password.txt` | 本次随机生成的明文口令（0600）。抄进密码管理器后可删 |
+
+**为什么用脚本而不是 DevEco「Build > Generate Key and CSR」**：hvigor 只接受 **DevEco 加密后的口令密文**，明文会被 `DecipherUtil` 直接拒绝（它先校验长度 ≥32 且为偶数，再按 AES-128-GCM 解密）。脚本把密文一并算好，于是整条发布签名链路不需要打开 GUI：
+
+```sh
+node scripts/signing-password.js decrypt             # 找回已有密文对应的明文（默认不回显）
+node scripts/signing-password.js encrypt '<明文口令>'  # 给任意口令生成可粘贴的密文
+```
+
+两个连带结论，都是踩出来的：
+
+- **hvigor 去「`.p12` 所在目录」找 `material/{fd,ac,ce}`**。`.p12` 换目录必须把 `material/` 一起搬，否则 `SignHap` 阶段报 `SIGNING_FAILED_CAN_NOT_FIND_SIGNING_MATERIAL`。
+- 这套加密是**防肩窥，不是真机密**：材料就在同一个目录里，能读到 `material/` 就能还原口令。别把它和 `.p12` 一起提交进任何仓库。
+
+⚠️ **`.p12` 是长期资产**：AGC 明确"更新版本时需使用同一个 CSR 文件生成的证书"。丢了私钥，这个应用的后续版本只能换证书重来，并重走 Profile。生成后立刻备份 `ohos-release.p12` **和** `material/`（两者要在一起）。
+
+#### Step 1 · AGC 申请发布证书（.cer）
+
+前提：账号已**实名认证**；账号角色有「访问发布类证书」权限（团队账号需单独授权）。
+
+AGC → **证书、APP ID和Profile → 证书 → 新增证书**：名称自取、**类型选「发布证书」**、上传 `ohos-release.csr` → 提交 → 下载 `.cer`。
+
+- 配额 **3 个/账号**，有效期 **3 年**。到期不影响在架应用，但更新版本时用过期证书签的包会被拒 ⇒ 提前换。
+- 证书行上的「备案信息」按钮可取证书公钥与指纹，备案时要填这两样。
+- 申请发布 Profile 时 AGC 会**自动**把发布证书指纹更新到应用上（覆盖之前配的调试证书指纹），不用手工改。
+
+#### Step 2 · AGC 申请发布 Profile（.p7b）
+
+AGC → **证书、APP ID和Profile → Profile → 添加**：
+
+| 字段 | 填法 |
+| --- | --- |
+| 应用名称 / 包名 | 选本应用 ⇒ 包名自动填 `com.liangxiaohui.freecad` |
+| Profile 名称 | 自取 |
+| **类型** | **发布**（不是"指定设备"） |
+| 选择证书 | 上一步那张发布证书 |
+| **申请权限** | **勾 `ohos.permission.READ_PASTEBOARD`** |
+
+「申请权限」栏是发布 Profile 与调试 Profile 最实质的差别：受限权限必须**在这里**申请（要填使用场景说明；AGC 可能要求为每个受限权限上传说明视频）。**漏勾 ⇒ 提审驳回**；即便侥幸过审，装包也会 9568289。
+
+好消息：`READ_PASTEBOARD` 的可申请场景里写明了"**PC/2in1 设备上的应用均可申请**"，本工程 PC-only，属于明确符合的场景，不需要编理由。
+
+下载的 `.p7b` 放到 `release-signing/` 下（和 `.p12` 同目录）。
+
+#### Step 3 · 写进 build-profile.json5 并出包
+
+**关键机制**：hvigor 的 `signingConfig` 是**按 product 绑定**的，`buildModeSet` 的 schema 里根本没有 `signingConfig` 字段 ⇒ 别指望 `-p buildMode=release` 自动切签名。正解是两个 product 各绑一套签名（完整示例见 `build-profile.example.json5`）：
+
+```json5
+"signingConfigs": [ { "name": "default", ...调试材料... },
+                    { "name": "release", ...发布材料... } ],
+"products":       [ { "name": "default", "signingConfig": "default", ... },
+                    { "name": "release", "signingConfig": "release", ... } ],
+"modules":        [ { "name": "entry", "srcPath": "./entry",
+                      "targets": [ { "name": "default",
+                                     "applyToProducts": ["default", "release"] } ] } ]
+```
+
+`applyToProducts` 两个都要挂，否则 `-p product=release` 找不到 target。
+
+```sh
+PRODUCT=release BUILD_MODE=release sh scripts/build-gui-hap-ohos.sh
+# 产物：entry/build/release/outputs/default/entry-default-signed.hap（注意是 release 那层）
+sh scripts/check-signing-profile.py <下载的发布 p7b>     # 退出码 0 才继续
+```
+
+出包前至少核一遍：`.p7b` 的 `type` 是 `release`、`bundle-name` 与 `AppScope/app.json5` 一致、`acls.allowed-acls` 含 `READ_PASTEBOARD` —— `check-signing-profile.py` 这三项都查。
 
 ## 5. 图标：PC/2in1 同样必须分层（已完成）
 
@@ -716,6 +804,37 @@ git rev-parse HEAD^{tree}   # = 155d7b9034563cccf429475c57914110291173ad
 真的活过一段时间**（远端 tip `52bac32` 就带着它们），所以哪怕现在洗掉了，也不能假设没人抓过。
 本地保留了三份副本在 `scripts/private/`（未跟踪），功能随时可恢复。
 
+## 7.5 APP 备案（工信部）：本应用属于"单机应用"，但要在 AGC 正确勾选
+
+这条此前一直没写进文档，是提审时容易被卡住的一项：按工信部《关于开展移动互联网应用程序
+备案工作的通知》，**APP 上架应用市场前必须先完成备案**，AGC 的「备案信息」栏是必填项。
+
+但备案义务有明确的豁免口径（官方 FAQ「HarmonyOS应用备案指导和常见问题」）：
+
+| AGC 里怎么勾 | 适用条件 |
+| --- | --- |
+| 您的 APP 服务器在中国大陆 | 有境内服务端 ⇒ **必须备案**，需走接入商（华为云/阿里云/腾讯云…）代备案 |
+| 您的 APP 服务器不在中国大陆 | 境外主体 + 服务器仅在境外 |
+| **您的 APP 为单机 APP** | **未通过连接公共互联网提供互联网信息服务** |
+
+FreeCAD on HarmonyOS 是本地 CAD 工具：没有任何自建服务端，联网只有三处（AddonManager 拉
+插件、用户自己配的 LLM 端点、用户点击的外链），不对外提供互联网信息服务 ⇒ 归入**单机应用**，
+AGC 勾「您的 APP 为单机 APP」。
+
+另外华为官方 FAQ 里有一问直指这个场景：
+
+> **Q：鸿蒙 PC 应用上架为什么一定要提供 ICP 备案，其他 PC 客户端没有这样的要求？**
+> A：应用资质审核要求中未强制要求提交 ICP 备案。
+
+即 **ICP 备案（网站/域名备案）不是鸿蒙 PC 应用的强制项**；要填的是上面那个 APP 备案信息栏。
+两条口径不同，别混：前者是网站备案，后者是应用备案。
+
+**要留的后手**：如果审核员就"是否真属单机"提出疑问（毕竟它有网络能力），备好一句话说明——
+"本应用不提供任何互联网信息服务，无自建服务端；网络访问仅用于用户主动发起的插件下载与
+用户自行配置的模型接口"，并指向隐私政策第 4/5 节（联网场景表）。真被判需要备案时，成本是
+借一个**备案授权码**（别人的 ECS 可生成 5 个）在接入商处新备案鸿蒙包名，周期约 5~25 个工作日
+——所以这一步的判断越早做越好。
+
 ## 8. 待办顺序
 
 1. ~~重签调试 Profile（新包名 + ACL）~~ **已完成（2026-09-15）**：AGC 手动新建调试
@@ -752,6 +871,17 @@ git rev-parse HEAD^{tree}   # = 155d7b9034563cccf429475c57914110291173ad
    做法、验证口径与边界见第 7 节末「保密复核与撤出」小节。
 7. **补应用内隐私政策入口**：政策要在应用内也能打开。实现方式未定（建议挂在 Help 菜单或
    Start 工作台的一个链接上，指向公网 URL 或包内随附的副本）。
-8. AGC 建发布证书与发布 Profile → 加 release 签名配置 → 出正式包 → 提审时补
-   `READ_PASTEBOARD` 的权限说明 + 场景视频 + 内嵌 CPython 的说明。
+8. **发布签名与正式包**：
+   ① ~~生成发布密钥与 CSR~~ **已完成（2026-09-15）**：`sh scripts/init-release-signing.sh`
+   → `~/Documents/ohos/config/release-signing/{ohos-release.p12,ohos-release.csr,material/,password.txt}`。
+   EC P-256 / SHA256withECDSA / 有效期至 2051。**先备份 `.p12` + `material/`**。
+   ② **待办**：AGC 申请发布证书（上传 `ohos-release.csr`，类型选「发布证书」，3 个/账号、3 年）
+   → 申请发布 Profile（类型「发布」，选该证书，**勾 `READ_PASTEBOARD`**）→ 下载 `.cer`/`.p7b`
+   放进 `release-signing/`。步骤与坑见第 4 节「发布材料」。
+   ③ **待办**：`build-profile.json5` 加 release signingConfig + release product +
+   `applyToProducts: ["default","release"]`（模板见 `build-profile.example.json5`），
+   然后 `PRODUCT=release BUILD_MODE=release sh scripts/build-gui-hap-ohos.sh`，
+   `check-signing-profile.py` 退出码 0 再把包传 AGC。
+   ④ 提审时补 `READ_PASTEBOARD` 的权限说明 + 场景视频 + 内嵌 CPython 的说明；
+   AGC「备案信息」栏勾「您的 APP 为单机 APP」（依据见第 7.5 节）。
 
