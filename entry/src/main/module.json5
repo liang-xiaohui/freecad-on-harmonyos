@@ -34,6 +34,24 @@
           ],
           "when": "inuse"
         }
+      },
+      // Qt draws its own text widgets, so FreeCAD reads the pasteboard through
+      // the native pasteboard API instead of the system paste widget. That is
+      // exactly the "app built on an open source framework that cannot use the
+      // paste widget" case for which Huawei allows this permission on PC/2in1.
+      // It is system_basic + user_grant: the signing Profile must carry it in
+      // acls.allowed-acls (requested in AGC), otherwise installing this HAP
+      // fails with 9568289 ("grant request permissions failed"); QAbility also
+      // asks the user at startup. Only declare it once the Profile has it.
+      {
+        "name": "ohos.permission.READ_PASTEBOARD",
+        "reason": "$string:reason_read_pasteboard",
+        "usedScene": {
+          "abilities": [
+            "QAbility"
+          ],
+          "when": "inuse"
+        }
       }
     ],
 

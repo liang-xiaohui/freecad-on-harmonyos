@@ -1,4 +1,5 @@
 import AbilityConstant from '@ohos.app.ability.AbilityConstant';
+import abilityAccessCtrl, { Permissions } from '@ohos.abilityAccessCtrl';
 import QAbilityStage from '../qabilitystage/QAbilityStage';
 import UIAbility from '@ohos.app.ability.UIAbility';
 import Want from '@ohos.app.ability.Want';
@@ -15,6 +16,11 @@ interface StartupSplashSpec {
   widthVp: number;
   heightVp: number;
 }
+
+// Qt cannot host the system paste widget, so FreeCAD reaches the pasteboard
+// through the native pasteboard API. That API is gated behind this restricted
+// permission; see requestPasteboardPermission().
+const READ_PASTEBOARD_PERMISSION: Permissions = 'ohos.permission.READ_PASTEBOARD';
 
 // JSON.stringify() renders a BusinessError as "{}", because its name/message are
 // non-enumerable. Native setup failures are reported through napi_throw_error,
@@ -87,6 +93,39 @@ export default class QAbility extends UIAbility {
     } catch (e) {
       hilog.warn(LOG_DOMAIN, LOG_TAG,
         'QAbility: cannot configure startup window background: ' + JSON.stringify(e));
+    }
+  }
+
+  // ohos.permission.READ_PASTEBOARD is a restricted permission (system_basic,
+  // user_grant) that is granted through the signing Profile ACL. FreeCAD needs
+  // it because its own widgets do the editing: the OHOS QPA talks to the
+  // native pasteboard API (OH_Pasteboard_HasData / OH_Pasteboard_GetData) and
+  // there is no system paste widget to fall back on.
+  //
+  // Without the grant OH_Pasteboard_HasData() returns false, the QPA then
+  // reports an empty clipboard, and Ctrl+V replaces the selection with
+  // nothing -- silently, with no error anywhere. So ask for it once at startup
+  // instead of leaving the user to discover that paste appears to be broken.
+  //
+  // On PC/2in1 the system grants the first request without showing a dialog
+  // (the user can still revoke it in Settings > Privacy); on phone/tablet this
+  // would raise the normal permission dialog, which is why the call is written
+  // as a real request rather than a silent assumption.
+  private async requestPasteboardPermission(): Promise<void> {
+    try {
+      const atManager = abilityAccessCtrl.createAtManager();
+      const tokenId = (this.context as common.UIAbilityContext).applicationInfo.accessTokenId;
+      const state = atManager.checkAccessTokenSync(tokenId, READ_PASTEBOARD_PERMISSION);
+      if (state === abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED) {
+        hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility: READ_PASTEBOARD already granted');
+        return;
+      }
+      const result = await atManager.requestPermissionsFromUser(this.context, [READ_PASTEBOARD_PERMISSION]);
+      hilog.info(LOG_DOMAIN, LOG_TAG,
+        'QAbility: READ_PASTEBOARD requested -> authResults=' + JSON.stringify(result.authResults));
+    } catch (e) {
+      hilog.error(LOG_DOMAIN, LOG_TAG,
+        'QAbility: READ_PASTEBOARD request FAILED: ' + describeError(e));
     }
   }
 
@@ -454,6 +493,10 @@ export default class QAbility extends UIAbility {
     this.pendingWindowStage = windowStage;
     this.pendingWindowStageRestore = false;
     void this.loadStartupSplash(windowStage);
+    // Fire and forget: Qt must not wait for a permission answer, and on PC the
+    // grant is silent anyway. Doing it here (rather than on first paste) keeps
+    // the clipboard usable from the very first Ctrl+V.
+    void this.requestPasteboardPermission();
   }
 
   onWindowStageRestore(windowStage: Window.WindowStage): void {

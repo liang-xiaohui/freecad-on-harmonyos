@@ -15,6 +15,10 @@
     {
       "name": "reason_internet",
       "value": "Connect to the configured LLM provider from the FreeCAD AI workbench"
+    },
+    {
+      "name": "reason_read_pasteboard",
+      "value": "Paste text you copied elsewhere (for example an API key) into FreeCAD's own input fields"
     }
   ]
 }
