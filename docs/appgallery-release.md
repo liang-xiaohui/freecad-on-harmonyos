@@ -280,6 +280,31 @@ the generated SigningConfigs
 **适用设备类型明确包含"电脑"**（手机、折叠屏、平板、**电脑**、智慧屏）。所以这不是只针对
 手机的软要求 —— 本文档上一版把它判定为"PC 路线下的建议项"是错的，已更正。
 
+**"不允许含透明像素"管的是两张图，不只是背景层。** 华为《上架检测 FAQ · 应用图标》原文：
+
+> 应用图标的背景图不允许含有透明像素（包括圆角裁切或带有透明内边距的情况）。
+> **AppGallery Connect 提审页面上传的图标 / 包体内配置的图标，均不允许含透明像素。**
+
+三个角色、两种相反的透明要求，别混：
+
+| 角色 | 透明要求 | 本项目的实测值 |
+| --- | --- | --- |
+| 分层**前景** `foreground.png` | **必须**有透明区域 | alpha `0~255`，307749 个全透 + 1429 个抗锯齿半透 |
+| 分层**背景** `background.png` | **必须**全不透明 | alpha `255~255`，0 个透明像素 |
+| **AGC 上传图** `freecad-appgallery-1024.png` | **不允许**含透明像素 | alpha `255~255`，0 个透明像素 |
+
+判据是 **alpha 极值**，不是肉眼——"看着像实心"的图常年带着几千个半透明抗锯齿像素而被驳回。
+自查一行搞定：
+
+```sh
+python3 -c "import sys;sys.path.insert(0,'tools/icon');import pngtool as P;\
+w,h,p=P.read_png('store-assets/icon/freecad-appgallery-1024.png');\
+a=sorted(set(p[3::4]));print(f'{w}x{h} alpha {a[0]}~{a[-1]} 透明像素{p[3::4].count(0)}个')"
+```
+
+例外：**手表**那一档（《Asset Specifications》Watches）要求"上传背景透明的正方形图标"，
+与上述结论相反；本项目只发 PC/2in1，不适用。
+
 四条硬约束，照做即可，别自作聪明：
 
 | 约束 | 含义 |
@@ -373,6 +398,110 @@ FreeCAD 的标签建议（已选 3 个，留 2 个余量）：
 标签**——它会把应用暴露给关注 AI 能力的用户，若应用内提供 LLM 对话，审核可能追问生成式
 AI 相关资质或说明。我们的实际情况是"用户自带 API Key 调用第三方端点、不自建生成式服务"，
 提审说明里要写清这一点（与第 7 节 INTERNET 权限的说明合并即可）。
+
+### 应用介绍与一句话简介（AGC 填写项，已完成 2026-09-15）
+
+提交文案在 **`store-assets/appgallery-text-zh-CN.txt`**，纯文本、可直接全选复制，分两段：
+一句话简介（≤17 字，推荐"开源三维CAD，参数化建模出图"共 15 字）与应用介绍（1848 字符，
+上限 8000，用量不足四分之一，不必凑字数）。
+
+文案的事实口径都是**从包里核对过的**，不是照着上游宣传页抄的：
+
+| 写法 | 依据 |
+| --- | --- |
+| 基于 FreeCAD 1.1.2 移植、Qt 6 + OpenGL ES | `share` 与 `Mod` 来自 v1.1.2 前缀；`QPA` 走原生 GLES |
+| 工作台清单（Part/PartDesign/Sketcher/Assembly/TechDraw/Surface/Draft/Mesh/Points/Inspection/BIM/Fem/CAM/Spreadsheet/Measure/Material/Robot/AddonManager/freecad-ai） | `freecad-runtime.zip` 里 `Mod/` 实际存在的目录 + `libs/` 里有对应的成对 `<Mod>.so` / `<Mod>Gui.so`（逐个对过），**空壳不算数**。**MeshPart、OpenSCAD、Web、Plot、Raytracing 不在包里，所以一个字都没提**。Assembly 的具体能力（关节、求解、运动仿真、BOM）是照 `Mod/Assembly/Command*.py` 的实际命令写的，没有照抄宣传页 |
+| **ReverseEngineering 被剔除出文案** | 它的 `InitGui.py` 只有 `class ...Workbench` + `import ReverseEngineeringGui`，目录下除 `Init.py`/`InitGui.py` 外**没有任何实现文件**，上游长期处于 legacy 状态；`.so` 虽在，但没有可验证的可用工具。宁可不写，也不给审核留下"功能描述与实际不符"的口子 |
+| 文件格式（FCStd/BREP/STEP/IGES/STL/OBJ/PLY/AMF/3MF/DXF/SVG） | 逐个核对**依赖**，不是只看代码里有没有字面量：`importDXF.py` 里 `ezdxf` 出现 **0 次**（FreeCAD 1.x 自带纯 Python 的 legacy DXF 读写器）⇒ 可用；`Mod/Mesh`、`Mod/Part` 的对应实现均为 C++ 或纯 Python ⇒ 可用 |
+| **DWG、IFC 被明确排除** | 两个都是"代码在、依赖不在"：`importDWG.py` 只是薄壳，要调 **ODA File Converter / LibreDWG** 外部可执行文件（找 `/usr/bin/ODAFileConverter`、`%ProgramFiles%\ODA\...`），包内没有；`importIFC.py` 自己的 docstring 写着 "Internally it uses **IfcOpenShell**, which must be installed before using"，而 `Ext/` 里只有 `PySide/PySide6/shiboken6/pivy/numpy/yaml/packaging/lazy_loader/freecad`，`python311.zip` 里也没有 ⇒ 设备上不可用。文案里整段删掉，并在"使用说明"里主动声明一次 |
+| 工作台清单（Part/PartDesign/Sketcher/Assembly/TechDraw/Surface/Draft/Mesh/Points/Inspection/ReverseEngineering/BIM/Fem/CAM/Spreadsheet/Measure/Material/Robot/AddonManager/freecad-ai） | `freecad-runtime.zip` 里 `Mod/` 实际存在的目录，逐个核对；**MeshPart、OpenSCAD、Web、Plot、Raytracing 不在包里，所以一个字都没提**。Assembly 的具体能力（关节、求解、运动仿真、BOM）也是照 `Mod/Assembly/Command*.py` 的实际命令写的，没有照抄宣传页 |
+| Python 3.11 控制台 | 包内 `rawfile/python311.zip` 与 OHOS CPython 3.11.4 |
+| **界面语言为英文** | 全包 117 个 `.qm` **全部来自 `Mod/AddonManager/`，核心 FreeCAD 的 `FreeCAD_zh-*.qm` 一个都没有** ⇒ Qt 的 `QTranslator` 无处可加载，界面保持源码英文。真机截图（`codex-freecad-artifacts/freecad-now.png`）也确认菜单是 File/Edit/View/Sketch… |
+| 触摸体验有限、建议鼠标 | QPA 滚轮不认 `TOUCH`、原生 QTouchEvent 不合成鼠标（见第 2 节平板决策） |
+| "应用自身不提供大模型服务" | 与 `AI` 标签的追问口径对齐，避免被认定为生成式 AI 服务提供者 |
+
+**两个必须自己拍板的点**（文案里已刻意回避，不替你做主张）：
+
+1. **LGPL-2.1 的源码提供义务**。分发修改过的 LGPL 库（FreeCAD 主体、Qt、Coin3D 等）时，
+   许可要求能拿到对应源码。当前文案只写了"各组件均按其原始许可分发，许可文本随应用提供"，
+   **没有写"源码以开源方式提供"**——因为仓库还没确认是否公开。要么把仓库公开（或另提供一个
+   源码获取渠道并在文案里写明），要么接受这一条被审核或权利人追问的风险。这不是文案问题，
+   是发布策略问题。
+2. **应用名沿用 `FreeCAD`**（AGC 已登记）。这是上游项目名，非官方移植沿用同名有被判"名称侵权/
+   攀附"的可能。低成本的做法是在介绍首句与开头元数据里把"非官方社区移植、与官方无隶属关系"
+   放在最显眼处（当前文案已在首段与开源声明各写了一次）。
+
+### FlexiMind 面的清除（已完成 2026-09-15）
+
+FlexiMind 在这个包里其实有**两层**面，两层现在都从对外包里清掉了。全程只用**一个开关**：
+
+| 变量 | 默认 | 行为 |
+| --- | --- | --- |
+| `PACKAGE_FLEXIMIND` | **`OFF`** | 对外包：`freecad-runtime.zip` 不含 `FlexiMind/`；rawfile 不含 `freecad_headless_acceptance.py`；构建期把 `EntryAbility` 从 `module.json5` 去掉 |
+| `PACKAGE_FLEXIMIND=ON` | — | 内部包：三者都在，设备侧验收与 FlexiMind 作业照旧 |
+
+**第一层：载荷（`freecad-runtime.zip` 里的 `FlexiMind/`）。**
+它**不是残留**，而是 `stage-gui-hap.sh` 有意打进去的（输入硬检查 +
+「Package FlexiMind headless jobs」整段打包），所以做法是**加开关而不是删代码**：
+`OFF` 时跳过这两段，并**兜底校验** zip 里不存在 `^FlexiMind/`（残留则 `zip -d` 清掉，
+仍残留就 `exit 1`）。
+
+**第二层：`EntryAbility` 这条导出的能力声明。** 它是无头桥：`want.parameters.freecadJobJson`
+存在就跑 FlexiMind 作业，否则跑无头验收，实现在 `entry/src/main/cpp/acceptance.cpp`。
+留在对外包里的问题不是"多余"，而是**它是 `exported: true`，任何应用都能拉起它并投喂参数**，
+而载荷又被拿掉了、作业分支只会报 `FlexiMind job runner is missing from the staged runtime`。
+所以 `OFF` 时在**构建期**把它从 `module.json5` 里裁掉：
+
+- 落点是 `entry/hvigorfile.ts`，用 hvigor 官方的 `OhosHapContext.getModuleJsonOpt()` /
+  `setModuleJsonOpt()`（`afterNodeEvaluate` 里执行）。`setModuleJsonOpt` 会走 schema 校验，
+  改错会在构建期直接报错，不会悄悄产出坏包。
+- **为什么不用 `build-profile.json5` 的多 target**：模块级 target 的 `source.abilities` 只支持
+  **FA 模型**工程定制 Ability 下的 page 页面，管不了 Stage 模型的能力清单（官方"模块级
+  build-profile.json5"表 6）；`source.sourceRoots` 只换源码目录，也不行。
+- 开关由 `build-gui-hap-ohos.sh` 归一化成 `ON`/`OFF` 后 `export`，`hvigorfile.ts` 读环境变量。
+  **读不到就按 `OFF` 处理** —— 在 DevEco 里直接 Sync/Build 也是对外包的形态，免得手滑把无头桥传上架。
+
+**`libfreecadacceptance.so` 必须留下，这一条与最初的设想相反。**
+`QAbilityStage.prepareOpenGL()`、`QAbility.setupFreecadEnv()` / `materializeFreecadRuntimeAsync()`
+都 `import acceptance from 'libfreecadacceptance.so'` —— 它是这台设备上 **GUI 自己的 NAPI 模块**，
+不是 FlexiMind 专属件，删了 GUI 起不来。ability 声明被裁掉之后，它导出的 `runJob`/`runAcceptance`
+就没有调用方了（死分支），但 `.so` 本身照进包。`verify-gui-hap.sh` 专门断言它必须在。
+
+**三种用法**：
+
+```sh
+./scripts/stage-gui-hap.sh                              # 对外包（默认，干净）
+./scripts/build-gui-hap-ohos.sh                         # 同上，剥掉 EntryAbility
+./scripts/verify-gui-hap.sh                             # 按对外包断言（无 EntryAbility / 无验收脚本）
+PACKAGE_FLEXIMIND=ON ./scripts/stage-gui-hap.sh         # 内部包，三个脚本要带同一个值
+PACKAGE_FLEXIMIND=ON ./scripts/build-gui-hap-ohos.sh
+PACKAGE_FLEXIMIND=ON ./scripts/verify-gui-hap.sh
+```
+
+或者跑完默认 stage 之后再用 `scripts/stage-fleximind-runtime.sh` 单独把载荷刷进 zip
+（那条路本来就是"不带 SDK 的增量刷新"，但它**不管** `EntryAbility` 声明与验收脚本）。
+
+默认值故意设成 `OFF`：这个 HAP 是对外分发/上架的产物，"默认干净"比"默认带私有脚本"安全，
+万一忘了加开关，代价是丢功能（自己会发现）而不是泄露（发出去收不回）。
+README「可复跑入口」、`docs/fleximind-runtime.md` 顶部、`docs/device-run-guide.md`
+的设备侧验收一节都已同步这个开关。
+
+**实测（2026-09-15，两个方向各跑一遍 stage → build → verify）**：
+
+| 阶段 | OFF（对外包，默认） | ON（内部包） |
+| --- | --- | --- |
+| 构建日志 | 打出 `[freecad] PACKAGE_FLEXIMIND is not ON: dropped the exported EntryAbility (headless bridge) from module.json5; abilities = [QAbility]` | 无剥离提示（开关生效） |
+| HAP 内 `module.json` | `abilities=[QAbility]` | `abilities=[EntryAbility, QAbility]` |
+| rawfile 验收脚本 | 无 | `✓ rawfile/freecad_headless_acceptance.py` |
+| `libfreecadacceptance.so` | 保留（两处都断言必须在） | 保留 |
+| hvigor | BUILD SUCCESSFUL 21.5 s | BUILD SUCCESSFUL 22.0 s |
+| `verify-gui-hap.sh` | exit 0 | exit 0 |
+| 落地 HAP | `507,550,495 B`（`runtime 5509 条 / FlexiMind 命中 []`） | — |
+
+`verify-gui-hap.sh` 现在会把**能力清单**也纳入断言（原来只查 native 文件与 rawfile）：
+多一个 `EntryAbility` 或少一个 `QAbility` 都会 fail，两个方向各断言一次，所以"开关没传下去"
+这种半途状态不会漏网。日志在
+`codex-freecad-artifacts/t1-{stage,build,verify}-{off,on}.log`。
 
 ## 8. 待办顺序
 

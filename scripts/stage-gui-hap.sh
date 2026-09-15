@@ -40,6 +40,15 @@ RAWFILE_DIR="$RAWFILE_PARENT/rawfile"
 SPLASH_MEDIA_DIR="$RAWFILE_PARENT/base/media"
 FREECAD_SPLASH_SOURCE="$CPP_LIB_ROOT/sources/freecad/$FREECAD_VERSION/src/Gui/Icons"
 FLEXIMIND_ROOT="${FLEXIMIND_ROOT:-/path/to/FlexiMind}"
+# FlexiMind 无头作业载荷（顶层 FlexiMind/）是否随包分发。
+# 默认 OFF：这个 HAP 是对外分发/上架的产物，不应把 FlexiMind 的私有脚本打进公开包。
+# FlexiMind 侧需要的包显式 PACKAGE_FLEXIMIND=ON 重新 stage，或在本脚本跑完后
+# 执行 scripts/stage-fleximind-runtime.sh 单独把载荷刷进 freecad-runtime.zip。
+PACKAGE_FLEXIMIND="${PACKAGE_FLEXIMIND:-OFF}"
+case "$PACKAGE_FLEXIMIND" in
+    ON | on | 1 | true | yes) PACKAGE_FLEXIMIND=ON ;;
+    *) PACKAGE_FLEXIMIND=OFF ;;
+esac
 PY_YAML_ROOT="$PROJECT_DIR/runtime/pyyaml"
 PACKAGING_ROOT="$PROJECT_DIR/runtime/packaging"
 NUMPY_SP="${NUMPY_SP:-$CPP_LIB_ROOT/install/numpy/2.2.6/ohos/$ABI/site-packages}"
@@ -165,17 +174,19 @@ if [ "$BUILD_REVERSEENGINEERING" = ON ]; then
     done
 fi
 
-for required in \
-    "$FLEXIMIND_ROOT/workers/worker-a.py" \
-    "$FLEXIMIND_ROOT/workers/worker-b.py" \
-    "$FLEXIMIND_ROOT/workers/worker-c.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/registered_base.py" \
-    "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/reference_geometry.py"; do
-    [ -f "$required" ] || {
-        echo "错误：缺少 FlexiMind FreeCAD runtime 输入：$required" >&2
-        exit 1
-    }
-done
+if [ "$PACKAGE_FLEXIMIND" = ON ]; then
+    for required in \
+        "$FLEXIMIND_ROOT/workers/worker-a.py" \
+        "$FLEXIMIND_ROOT/workers/worker-b.py" \
+        "$FLEXIMIND_ROOT/workers/worker-c.py" \
+        "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/registered_base.py" \
+        "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/reference_geometry.py"; do
+        [ -f "$required" ] || {
+            echo "错误：缺少 FlexiMind FreeCAD runtime 输入：$required" >&2
+            exit 1
+        }
+    done
+fi
 
 [ -f "$PY_YAML_ROOT/yaml/__init__.py" ] || {
     echo "错误：缺少 vendored PyYAML runtime：$PY_YAML_ROOT/yaml/__init__.py" >&2
@@ -521,33 +532,54 @@ if unzip -Z1 "$RAW_STAGE/freecad-runtime.zip" |
     exit 1
 fi
 rm -rf "$BINDINGS_STAGE"
-echo "==> Package FlexiMind headless jobs (GUI Workbench excluded)"
-FLEXIMIND_STAGE="$RAW_STAGE/fleximind"
-FLEXIMIND_HELPERS="$FLEXIMIND_STAGE/FlexiMind/tools/freecad/FlexiMindGripDesign"
-mkdir -p "$FLEXIMIND_STAGE/FlexiMind/workers" "$FLEXIMIND_HELPERS"
-cp "$PROJECT_DIR/runtime/fleximind_job_runner.py" "$FLEXIMIND_STAGE/FlexiMind/"
-printf '%s\n' '"""FlexiMind runtime package."""' > "$FLEXIMIND_STAGE/FlexiMind/__init__.py"
-printf '%s\n' '"""Headless modeling helpers shared with FlexiMind."""' > "$FLEXIMIND_HELPERS/__init__.py"
-for worker in \
-    worker-a.py \
-    worker-b.py \
-    worker-c.py; do
-    cp "$FLEXIMIND_ROOT/workers/$worker" "$FLEXIMIND_STAGE/FlexiMind/workers/$worker"
-done
-for helper in registered_base.py reference_geometry.py; do
-    cp "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/$helper" "$FLEXIMIND_HELPERS/$helper"
-done
-(cd "$FLEXIMIND_STAGE" && \
-    zip -q -r "$RAW_STAGE/freecad-runtime.zip" FlexiMind \
-        -x '*/__pycache__/*' '*.pyc' '*.so' '*.so.*')
-rm -rf "$FLEXIMIND_STAGE"
-if unzip -Z1 "$RAW_STAGE/freecad-runtime.zip" |
-   grep -Eq '^(Mod/FlexiMindGripDesign/|FlexiMind/tools/freecad/FlexiMindGripDesign/(Init.py|InitGui.py|commands.py|scene_state.py|Resources/))'; then
-    echo "错误：FlexiMindGripDesign GUI 工作台当前禁用，不得进入 runtime" >&2
-    exit 1
+if [ "$PACKAGE_FLEXIMIND" = ON ]; then
+    echo "==> Package FlexiMind headless jobs (GUI Workbench excluded)"
+    FLEXIMIND_STAGE="$RAW_STAGE/fleximind"
+    FLEXIMIND_HELPERS="$FLEXIMIND_STAGE/FlexiMind/tools/freecad/FlexiMindGripDesign"
+    mkdir -p "$FLEXIMIND_STAGE/FlexiMind/workers" "$FLEXIMIND_HELPERS"
+    cp "$PROJECT_DIR/runtime/fleximind_job_runner.py" "$FLEXIMIND_STAGE/FlexiMind/"
+    printf '%s\n' '"""FlexiMind runtime package."""' > "$FLEXIMIND_STAGE/FlexiMind/__init__.py"
+    printf '%s\n' '"""Headless modeling helpers shared with FlexiMind."""' > "$FLEXIMIND_HELPERS/__init__.py"
+    for worker in \
+        worker-a.py \
+        worker-b.py \
+        worker-c.py; do
+        cp "$FLEXIMIND_ROOT/workers/$worker" "$FLEXIMIND_STAGE/FlexiMind/workers/$worker"
+    done
+    for helper in registered_base.py reference_geometry.py; do
+        cp "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/$helper" "$FLEXIMIND_HELPERS/$helper"
+    done
+    (cd "$FLEXIMIND_STAGE" && \
+        zip -q -r "$RAW_STAGE/freecad-runtime.zip" FlexiMind \
+            -x '*/__pycache__/*' '*.pyc' '*.so' '*.so.*')
+    rm -rf "$FLEXIMIND_STAGE"
+    if unzip -Z1 "$RAW_STAGE/freecad-runtime.zip" |
+       grep -Eq '^(Mod/FlexiMindGripDesign/|FlexiMind/tools/freecad/FlexiMindGripDesign/(Init.py|InitGui.py|commands.py|scene_state.py|Resources/))'; then
+        echo "错误：FlexiMindGripDesign GUI 工作台当前禁用，不得进入 runtime" >&2
+        exit 1
+    fi
+else
+    echo "==> FlexiMind headless jobs excluded (PACKAGE_FLEXIMIND=OFF)"
+    # 兜底：zip 是被反复复用的产物，上一次 ON 的残留必须在这里被清掉，
+    # 否则"关掉开关"这件事只对全新构建生效，对增量构建静默失效。
+    if unzip -Z1 "$RAW_STAGE/freecad-runtime.zip" | grep -q '^FlexiMind/'; then
+        zip -q -d "$RAW_STAGE/freecad-runtime.zip" 'FlexiMind/*'
+        echo "==> 已从 freecad-runtime.zip 移除历史 FlexiMind 载荷"
+    fi
+    if unzip -Z1 "$RAW_STAGE/freecad-runtime.zip" | grep -q '^FlexiMind/'; then
+        echo "错误：FlexiMind 载荷仍在 runtime 中，PACKAGE_FLEXIMIND=OFF 未生效" >&2
+        exit 1
+    fi
 fi
-cp "$PROJECT_DIR/probes/freecad-headless/acceptance.py" \
-    "$RAW_STAGE/freecad_headless_acceptance.py"
+if [ "$PACKAGE_FLEXIMIND" = "ON" ]; then
+    cp "$PROJECT_DIR/probes/freecad-headless/acceptance.py" \
+        "$RAW_STAGE/freecad_headless_acceptance.py"
+else
+    # 这个验收脚本只有 EntryAbility 的 runAcceptance 分支会读，而对外包里 EntryAbility
+    # 已被 entry/hvigorfile.ts 在构建期从 module.json5 剥掉（同一个开关）。留下它等于
+    # 随包分发一段没有调用方的内部 QA 代码。
+    echo "==> 验收脚本不进入 rawfile（PACKAGE_FLEXIMIND=OFF）"
+fi
 unzip -tq "$RAW_STAGE/python311.zip" >/dev/null
 unzip -tq "$RAW_STAGE/freecad-runtime.zip" >/dev/null
 unzip -Z1 "$RAW_STAGE/freecad-runtime.zip" | grep -q '^share/cacert\.pem$' || {

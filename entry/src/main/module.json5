@@ -56,6 +56,14 @@
     ],
 
     "abilities": [
+      // Headless bridge: runs a FlexiMind geometry job when the Want carries
+      // freecadJobJson, and the six device-side acceptance checks otherwise. It is
+      // declared here because this file is the dev-complete manifest, but
+      // entry/hvigorfile.ts DROPS it during the build unless PACKAGE_FLEXIMIND=ON.
+      // Reason: it is exported, so any app could start it and feed it parameters, while
+      // neither the FlexiMind payload nor rawfile/freecad_headless_acceptance.py ships in
+      // the outward-facing package. Keep both sides in sync when editing this block --
+      // see docs/appgallery-release.md「FlexiMind 面的清除」.
       {
         "name": "EntryAbility",
         "srcEntry": "./ets/entryability/EntryAbility.ets",

@@ -1,15 +1,30 @@
 #!/bin/sh
-# 验证 FreeCAD v1.1.2 GUI HAP（Qt6）内容：native 文件、rawfile、新鲜度。
+# 验证 FreeCAD v1.1.2 GUI HAP（Qt6）内容：native 文件、rawfile、能力清单、新鲜度。
 # 用法：DevEco 构建完成后运行：
 #   ./scripts/verify-gui-hap.sh
 # 通过条件：
 #   - HAP 内含当前 staging 的全部 native 文件（Qt6/QPA/FreeCAD GUI/OCCT/Coin/gl4es/Python/绑定栈）
-#   - rawfile 含 python311.zip / freecad-runtime.zip / freecad_headless_acceptance.py
+#   - rawfile 含 python311.zip / freecad-runtime.zip（PACKAGE_FLEXIMIND=ON 时另含验收脚本）
+#   - module.json 的能力清单与 PACKAGE_FLEXIMIND 一致：OFF 时不得声明 EntryAbility（对外包），
+#     ON 时必须有（内部包）；两种情况都必须有 QAbility
 #   - HAP 时间不早于 staging 与验收源码
 set -eu
 
 PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 FLEXIMIND_ROOT="${FLEXIMIND_ROOT:-/path/to/FlexiMind}"
+# 与 stage-gui-hap.sh / build-gui-hap-ohos.sh / entry/hvigorfile.ts 同一个开关：
+# OFF（默认）＝对外包，要求包里**没有** FlexiMind/、没有验收脚本、不声明 EntryAbility；
+# ON ＝内部包，三者必须都在。构建时三处取值必须一致，本脚本负责把不一致拦下来。
+PACKAGE_FLEXIMIND="${PACKAGE_FLEXIMIND:-OFF}"
+case "$PACKAGE_FLEXIMIND" in
+    ON | on | 1 | true | yes) PACKAGE_FLEXIMIND=ON ;;
+    *) PACKAGE_FLEXIMIND=OFF ;;
+esac
+if [ "$PACKAGE_FLEXIMIND" = "ON" ]; then
+    RAWFILE_REQUIRED="python311.zip freecad-runtime.zip freecad_headless_acceptance.py"
+else
+    RAWFILE_REQUIRED="python311.zip freecad-runtime.zip"
+fi
 PY_YAML_ROOT="$PROJECT_DIR/runtime/pyyaml"
 PACKAGING_ROOT="$PROJECT_DIR/runtime/packaging"
 CPP_LIB_ROOT="${CPP_LIB_ROOT:-/storage/Users/currentUser/CPPLib}"
@@ -37,7 +52,7 @@ READELF=$(command -v readelf 2>/dev/null || command -v llvm-readelf 2>/dev/null 
 [ -n "$READELF" ] || { echo "错误：需要 readelf 或 llvm-readelf" >&2; exit 2; }
 
 echo "==> 检查 HAP 与 rawfile staging 内容一致"
-for rf in python311.zip freecad-runtime.zip freecad_headless_acceptance.py; do
+for rf in $RAWFILE_REQUIRED; do
     staged_hash=$(sha256sum "$RAWFILE_DIR/$rf" | awk '{print $1}')
     hap_hash=$(unzip -p "$HAP" "resources/rawfile/$rf" | sha256sum | awk '{print $1}')
     [ "$staged_hash" = "$hap_hash" ] || {
@@ -72,13 +87,15 @@ echo "    ✓ 13 张高清官方素材已生成异形玻璃外扩并进入 HAP"
 mkdir -p "$ARTIFACT_ROOT"
 RUNTIME_ZIP=$(mktemp "$ARTIFACT_ROOT/verify-gui-hap-runtime.XXXXXX")
 RUNTIME_DIR=$(mktemp -d "$ARTIFACT_ROOT/verify-gui-hap.XXXXXX")
-trap 'rm -f "$RUNTIME_ZIP"; rm -rf "$RUNTIME_DIR"' EXIT HUP INT TERM
+HAP_MANIFEST=$(mktemp "$ARTIFACT_ROOT/verify-gui-hap-module.XXXXXX")
+trap 'rm -f "$RUNTIME_ZIP" "$HAP_MANIFEST"; rm -rf "$RUNTIME_DIR"' EXIT HUP INT TERM
 
 echo "==> 检查 HAP 新鲜度"
 hap_mtime=$(stat -c '%Y' "$HAP")
 newest_input=0
 for f in "$STAGED_DIR"/plugins/platforms/libqohos.so "$STAGED_DIR"/libqohos.so "$STAGED_DIR"/libfreecadqtapp.so "$STAGED_DIR"/FreeCADGui.so \
-         "$RAWFILE_DIR/freecad-runtime.zip" "$RAWFILE_DIR/freecad_headless_acceptance.py" \
+         "$RAWFILE_DIR/freecad-runtime.zip" \
+         "$PROJECT_DIR/entry/hvigorfile.ts" \
          "$PROJECT_DIR/entry/src/main/cpp/acceptance.cpp" \
          "$PROJECT_DIR/entry/src/main/ets/qability/QAbility.ets" \
          "$PROJECT_DIR/entry/src/main/ets/pages/StartupSplash.ets" \
@@ -87,12 +104,6 @@ for f in "$STAGED_DIR"/plugins/platforms/libqohos.so "$STAGED_DIR"/libqohos.so "
          "$PROJECT_DIR/scripts/generate-startup-splashes.mjs" \
          "$PROJECT_DIR"/entry/src/main/resources/base/media/freecadsplash*.png \
          "$PROJECT_DIR/entry/src/main/resources/base/media/transparent_start_window.svg" \
-         "$PROJECT_DIR/runtime/fleximind_job_runner.py" \
-         "$FLEXIMIND_ROOT/workers/worker-a.py" \
-         "$FLEXIMIND_ROOT/workers/worker-b.py" \
-         "$FLEXIMIND_ROOT/workers/worker-c.py" \
-         "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/registered_base.py" \
-         "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/reference_geometry.py" \
          "$PY_YAML_ROOT/LICENSE" \
          "$PY_YAML_ROOT/yaml/__init__.py" \
          "$PACKAGING_ROOT/LICENSE" \
@@ -105,6 +116,20 @@ for f in "$STAGED_DIR"/plugins/platforms/libqohos.so "$STAGED_DIR"/libqohos.so "
     m=$(stat -c '%Y' "$f")
     [ "$m" -gt "$newest_input" ] && newest_input=$m
 done
+if [ "$PACKAGE_FLEXIMIND" = ON ]; then
+    for f in \
+        "$RAWFILE_DIR/freecad_headless_acceptance.py" \
+        "$PROJECT_DIR/runtime/fleximind_job_runner.py" \
+        "$FLEXIMIND_ROOT/workers/worker-a.py" \
+        "$FLEXIMIND_ROOT/workers/worker-b.py" \
+        "$FLEXIMIND_ROOT/workers/worker-c.py" \
+        "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/registered_base.py" \
+        "$FLEXIMIND_ROOT/tools/freecad/FlexiMindGripDesign/reference_geometry.py"; do
+        [ -f "$f" ] || { echo "错误：staging 输入缺失：$f" >&2; exit 1; }
+        m=$(stat -c '%Y' "$f")
+        [ "$m" -gt "$newest_input" ] && newest_input=$m
+    done
+fi
 newer_numpy=$(find "$NUMPY_SP/numpy" -type f -newer "$HAP" -print -quit)
 if [ -n "$newer_numpy" ]; then
     m=$(stat -c '%Y' "$newer_numpy")
@@ -121,20 +146,30 @@ if [ -n "$newer_packaging" ]; then
     [ "$m" -gt "$newest_input" ] && newest_input=$m
 fi
 
-for entry in \
-    FlexiMind/fleximind_job_runner.py \
-    FlexiMind/workers/worker-a.py \
-    FlexiMind/workers/worker-b.py \
-    FlexiMind/workers/worker-c.py \
-    FlexiMind/tools/freecad/FlexiMindGripDesign/__init__.py \
-    FlexiMind/tools/freecad/FlexiMindGripDesign/registered_base.py \
-    FlexiMind/tools/freecad/FlexiMindGripDesign/reference_geometry.py; do
-    if ! unzip -p "$HAP" resources/rawfile/freecad-runtime.zip > "$RUNTIME_ZIP" || \
-       ! unzip -Z1 "$RUNTIME_ZIP" | grep -q "^${entry}$"; then
-        echo "错误：freecad-runtime.zip 缺少 $entry" >&2
+if [ "$PACKAGE_FLEXIMIND" = ON ]; then
+    for entry in \
+        FlexiMind/fleximind_job_runner.py \
+        FlexiMind/workers/worker-a.py \
+        FlexiMind/workers/worker-b.py \
+        FlexiMind/workers/worker-c.py \
+        FlexiMind/tools/freecad/FlexiMindGripDesign/__init__.py \
+        FlexiMind/tools/freecad/FlexiMindGripDesign/registered_base.py \
+        FlexiMind/tools/freecad/FlexiMindGripDesign/reference_geometry.py; do
+        if ! unzip -p "$HAP" resources/rawfile/freecad-runtime.zip > "$RUNTIME_ZIP" || \
+           ! unzip -Z1 "$RUNTIME_ZIP" | grep -q "^${entry}$"; then
+            echo "错误：freecad-runtime.zip 缺少 $entry" >&2
+            exit 1
+        fi
+    done
+    echo "    FlexiMind 载荷在位（PACKAGE_FLEXIMIND=ON）✓"
+else
+    unzip -p "$HAP" resources/rawfile/freecad-runtime.zip > "$RUNTIME_ZIP"
+    if unzip -Z1 "$RUNTIME_ZIP" | grep -q '^FlexiMind/'; then
+        echo "错误：对外包不得包含 FlexiMind/ 载荷，请用（默认的）PACKAGE_FLEXIMIND=OFF 重新 stage 并重打包" >&2
         exit 1
     fi
-done
+    echo "    HAP 不含 FlexiMind/ 载荷（PACKAGE_FLEXIMIND=OFF）✓"
+fi
 if unzip -Z1 "$RUNTIME_ZIP" |
    grep -Eq '^(Mod/FlexiMindGripDesign/|FlexiMind/tools/freecad/FlexiMindGripDesign/(Init.py|InitGui.py|commands.py|scene_state.py|Resources/))'; then
     echo "错误：已禁用的 FlexiMindGripDesign GUI 工作台仍存在于 freecad-runtime.zip" >&2
@@ -345,7 +380,7 @@ done
 echo "    ✓ 绑定 ELF 位于 HAP native 区域且 RUNPATH 可移植"
 
 echo "==> 检查 rawfile"
-for rf in python311.zip freecad-runtime.zip freecad_headless_acceptance.py; do
+for rf in $RAWFILE_REQUIRED; do
     if unzip -l "$HAP" | grep -q "resources/rawfile/$rf"; then
         echo "    ✓ rawfile/$rf"
     else
@@ -353,6 +388,41 @@ for rf in python311.zip freecad-runtime.zip freecad_headless_acceptance.py; do
         exit 1
     fi
 done
+if [ "$PACKAGE_FLEXIMIND" != "ON" ] &&
+   unzip -l "$HAP" | grep -q "resources/rawfile/freecad_headless_acceptance.py"; then
+    echo "    对外包不应含 rawfile/freecad_headless_acceptance.py（只有 EntryAbility 会读它）" >&2
+    exit 1
+fi
+
+echo "==> 检查 module.json 的能力清单（PACKAGE_FLEXIMIND=$PACKAGE_FLEXIMIND）"
+unzip -p "$HAP" module.json > "$HAP_MANIFEST"
+HAP_MANIFEST="$HAP_MANIFEST" PACKAGE_FLEXIMIND="$PACKAGE_FLEXIMIND" node -e '
+const fs = require("fs");
+const manifest = JSON.parse(fs.readFileSync(process.env.HAP_MANIFEST, "utf8"));
+const names = (manifest.module.abilities || []).map((ability) => ability.name);
+const internal = process.env.PACKAGE_FLEXIMIND === "ON";
+if (!names.includes("QAbility")) {
+    console.error(`    错误：module.json 缺 QAbility（abilities=${names.join(", ")}）`);
+    process.exit(1);
+}
+if (internal && !names.includes("EntryAbility")) {
+    console.error("    错误：内部包（PACKAGE_FLEXIMIND=ON）里没有 EntryAbility，设备侧验收跑不起来");
+    process.exit(1);
+}
+if (!internal && names.includes("EntryAbility")) {
+    console.error(`    错误：对外包里仍声明了导出的无头桥 EntryAbility（abilities=${names.join(", ")}）`);
+    process.exit(1);
+}
+console.log(`    ✓ 能力清单与开关一致：abilities=[${names.join(", ")}]`);
+'
+# 无头桥一旦被剥掉，acceptance.cpp 导出的 runJob/runAcceptance 就没有调用方了；
+# 但 .so 本身必须还在 —— QAbilityStage.prepareOpenGL() 与 QAbility 的
+# setupFreecadEnv()/materializeFreecadRuntimeAsync() 都 import 它。
+unzip -l "$HAP" | grep -q "libs/arm64-v8a/libfreecadacceptance.so" || {
+    echo "    缺失：libs/arm64-v8a/libfreecadacceptance.so（GUI 依赖它的 NAPI 导出）" >&2
+    exit 1
+}
+echo "    ✓ libs/arm64-v8a/libfreecadacceptance.so 保留（GUI 的 NAPI 模块）"
 
 echo "==> 检查 Qt 插件"
 for plug in libs/arm64-v8a/libqohos.so libs/arm64-v8a/plugins/platforms/libqohos.so libs/arm64-v8a/plugins/imageformats/libqsvg.so libs/arm64-v8a/plugins/iconengines/libqsvgicon.so; do
@@ -361,4 +431,9 @@ done
 
 echo
 echo "GUI HAP 验证通过：$HAP"
-echo "运行：Run EntryAbility（验收）或 QAbility（GUI）；GUI 日志 scripts/watch-gui-hap-log.sh"
+if [ "$PACKAGE_FLEXIMIND" = "ON" ]; then
+    echo "运行：Run EntryAbility（验收）或 QAbility（GUI）；GUI 日志 scripts/watch-gui-hap-log.sh"
+else
+    echo "运行：Run QAbility（GUI）；GUI 日志 scripts/watch-gui-hap-log.sh"
+    echo "（对外包不含 EntryAbility；要做设备侧验收请用 PACKAGE_FLEXIMIND=ON 重新 stage + 构建）"
+fi

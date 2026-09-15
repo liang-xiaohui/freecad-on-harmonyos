@@ -93,6 +93,13 @@ GL4ES 增量构建后还必须对对应 build tree 执行 `cmake --install`，�
 
 ## 步骤 A：headless 验收真机复跑（关闭 headless 门禁）
 
+> ⚠️ 2026-09-15 起，对外包的默认形态里**没有 `EntryAbility`**（`PACKAGE_FLEXIMIND=OFF`，
+> `entry/hvigorfile.ts` 在构建期把它从 `module.json5` 裁掉，因为它是 `exported: true` 的
+> 无头桥）。本步骤要在**内部包**上做：从终端带着开关跑 `PACKAGE_FLEXIMIND=ON` 的
+> `stage-gui-hap.sh` → `build-gui-hap-ohos.sh` → `install-gui-hap.sh`；用 DevEco 的话也要
+> 从带开关的终端启动它，否则 Sync/Build 读不到开关会按 OFF 处理。见
+> `docs/appgallery-release.md` 的「FlexiMind 面的清除」。
+
 1. DevEco Studio 打开仓库根目录 → Sync → Build Hap（自动签名），再显式启动 EntryAbility；默认 Run 入口是 GUI `QAbility`。
 2. 页面显示验收 JSON（ok）；hilog 核对：
    ```sh

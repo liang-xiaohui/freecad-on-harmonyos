@@ -27,7 +27,7 @@ XComponent(libraryname='qohos')  ──OH_NativeXComponent──►  QPA qarkui/
 ## 本工程改动（entry/ 模块）
 
 - `entry/src/main/ets/`：新增 qability/、qabilitystage/、process/、common/、pages/MainWindowNativeNode 等（自 tqtc 模板拷贝）；`QtAppConstants.ets` 的 `APP_LIBRARY_NAME='libfreecadqtapp.so'`。
-- `module.json5`：AbilityStage=`QAbilityStage.ets`；abilities = EntryAbility（headless 验收）+ QAbility（GUI、当前 mainElement、file uri skills）。
+- `module.json5`：AbilityStage=`QAbilityStage.ets`；abilities = EntryAbility（headless 验收）+ QAbility（GUI、当前 mainElement、file uri skills）。**2026-09-15 起，EntryAbility 只在 `PACKAGE_FLEXIMIND=ON` 的内部包里存在**：对外包由 `entry/hvigorfile.ts` 在构建期把它从 `module.json5` 裁掉（`exported: true` 的无头桥不该随上架包分发）。见 `docs/appgallery-release.md` 的「FlexiMind 面的清除」。
 - `entry/src/main/qt/libqohos.d.ts` + `oh-package.json5`：libqohos.so 的 ArkTS 类型声明。
 - 资源：string.json 新增 QAbility_desc / 悬浮窗 / 后台权限；main_pages 含 Index、原生节点页和 `StartupSplash`；启动子窗包含 FreeCAD 1.1.2 的 13 张官方 `_2x` splash，应用图标仍使用方形 `icon.png`。
 
@@ -137,7 +137,7 @@ FreeCAD GUI 需要 `Mod/Ext/share` 与 Python stdlib；HAP rawfile 里的 `freec
 5. `./scripts/build-gui-hap-ohos.sh`（或 DevEco Studio：Sync → Build Hap）。
 6. `./scripts/verify-gui-hap.sh`。
 7. 运行：
-   - 验收（headless 门禁）：显式启动 EntryAbility，页面显示验收 JSON，hilog 见 `FreeCADProbe` 的 `Python acceptance result` 行
+   - 验收（headless 门禁）：显式启动 EntryAbility，页面显示验收 JSON，hilog 见 `FreeCADProbe` 的 `Python acceptance result` 行。**第 5/6 步与这里的 stage 必须带 `PACKAGE_FLEXIMIND=ON`**，否则包里没有 EntryAbility（对外包的默认形态）
    - GUI：启动 QAbility（DevEco run config 选 QAbility，或 `aa start -b <bundle> -a QAbility`），主窗口经 XComponent 呈现 FreeCAD GUI
 
 ## 真机结论与后续回归

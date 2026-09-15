@@ -183,11 +183,27 @@ TARGET=192.168.3.16:39405
 
 ## 1) headless 验收（EntryAbility，不再默认启动）
 
+> ⚠️ **2026-09-15 起，默认构建出来的 HAP 里没有 `EntryAbility`。** `PACKAGE_FLEXIMIND`
+> 默认 `OFF`，`entry/hvigorfile.ts` 会在构建期把这条导出的无头桥从 `module.json5` 里裁掉
+> （它是 `exported: true`，不该随上架包分发）。要做下面这套设备侧验收，**stage 与构建都要
+> 带同一个开关**：
+>
+> ```sh
+> PACKAGE_FLEXIMIND=ON ./scripts/stage-gui-hap.sh
+> PACKAGE_FLEXIMIND=ON ./scripts/build-gui-hap-ohos.sh
+> PACKAGE_FLEXIMIND=ON ./scripts/verify-gui-hap.sh
+> ```
+>
+> 验收完记得用默认值重新 stage + 构建，把对外包换回来。详见
+> `docs/appgallery-release.md` 的「FlexiMind 面的清除」。
+
 - 验收入口改为**显式命令行触发**（应用安装后）：
   ```
   aa start -b com.liangxiaohui.freecad -a EntryAbility
   ```
-- 或临时把 `module.json5` 的 `mainElement` 改回 `EntryAbility` 后 Run。
+- 或在 DevEco 里把 `module.json5` 的 `mainElement` 临时改回 `EntryAbility` 后 Run。注意
+  DevEco 的 Sync/Build 读不到 `PACKAGE_FLEXIMIND` 时按 `OFF` 处理，所以这条路要先从终端
+  带着开关把 DevEco 启动起来。
 - 启动 EntryAbility → 自动执行 6 项验收（OCCT / 版本断言 / 模块导入 / 布尔 / FCStd / STEP / STL）。
 - 结果：页面 JSON（ok 布尔）+ hilog：
   ```

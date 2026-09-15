@@ -10,6 +10,19 @@ READELF=$(command -v readelf 2>/dev/null || command -v llvm-readelf 2>/dev/null 
 
 STAGED_DIR="${STAGED_DIR:-$PROJECT_DIR/entry/libs/$ABI}"
 RAWFILE_DIR="${RAWFILE_DIR:-$PROJECT_DIR/entry/src/main/resources/rawfile}"
+# 验收脚本跟着 PACKAGE_FLEXIMIND 走：它只有 EntryAbility 的 runAcceptance 分支会读，
+# 而对外包里 EntryAbility 已被 entry/hvigorfile.ts 剥掉。调用方（两个 stage 脚本）
+# 会 export 这个开关；单独跑本脚本且不设开关时按 OFF（对外包）校验。
+PACKAGE_FLEXIMIND="${PACKAGE_FLEXIMIND:-OFF}"
+case "$PACKAGE_FLEXIMIND" in
+    ON | on | 1 | true | yes) PACKAGE_FLEXIMIND=ON ;;
+    *) PACKAGE_FLEXIMIND=OFF ;;
+esac
+if [ "$PACKAGE_FLEXIMIND" = "ON" ]; then
+    RAWFILE_REQUIRED="python311.zip freecad-runtime.zip freecad_headless_acceptance.py"
+else
+    RAWFILE_REQUIRED="python311.zip freecad-runtime.zip"
+fi
 SYSTEM_DIRS="
 $NATIVE_SDK/sysroot/usr/lib/aarch64-linux-ohos
 $NATIVE_SDK/sysroot/usr/lib
@@ -35,7 +48,7 @@ for required in \
     }
 done
 
-for required in python311.zip freecad-runtime.zip freecad_headless_acceptance.py; do
+for required in $RAWFILE_REQUIRED; do
     [ -f "$RAWFILE_DIR/$required" ] || {
         echo "MISSING rawfile/$required" >&2
         exit 1

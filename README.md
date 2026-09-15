@@ -53,6 +53,13 @@
 ./scripts/stage-headless-hap.sh
 ./scripts/stage-fleximind-runtime.sh  # refresh headless FlexiMind jobs without the SDK
 ./scripts/run-staged-python-runtime-probe.sh
+# PACKAGE_FLEXIMIND 默认 OFF：这个 HAP 是对外分发的产物，默认不带 FlexiMind/ 载荷、
+# 不带验收脚本 rawfile/freecad_headless_acceptance.py，并且 entry/hvigorfile.ts 会在构建期
+# 把导出的 EntryAbility（无头桥）从 module.json5 里剥掉。三个脚本要同一次构建里取值一致：
+#   PACKAGE_FLEXIMIND=ON ./scripts/stage-gui-hap.sh       # 载荷 + 验收脚本
+#   PACKAGE_FLEXIMIND=ON ./scripts/build-gui-hap-ohos.sh  # 保留 EntryAbility 声明
+#   PACKAGE_FLEXIMIND=ON ./scripts/verify-gui-hap.sh      # 按内部包断言
+# 或者先跑默认 stage，再跑上面的 stage-fleximind-runtime.sh（它只管载荷）。
 ./scripts/stage-gui-hap.sh
 ./scripts/sign-staged-native-ohos.sh  # 仅供本地 target-runtime 探针
 ./scripts/run-staged-freecad-acceptance.sh

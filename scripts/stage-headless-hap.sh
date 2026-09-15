@@ -17,6 +17,12 @@ LIBS_DIR="$LIBS_PARENT/$ABI"
 RAWFILE_PARENT="$PROJECT_DIR/entry/src/main/resources"
 RAWFILE_DIR="$RAWFILE_PARENT/rawfile"
 FLEXIMIND_ROOT="${FLEXIMIND_ROOT:-/path/to/FlexiMind}"
+# 这个脚本产出的是内部包（无头验收 + FlexiMind 作业），按定义就是 ON：FlexiMind 载荷与
+# 验收脚本都照进，audit-headless-hap.sh 也按 ON 校验 rawfile。对外包走 stage-gui-hap.sh
+# （默认 OFF，不声明 EntryAbility、不带载荷与验收脚本）。两边共用 entry/module.json5，
+# 能力清单的差异由 entry/hvigorfile.ts 在构建期按同一个开关裁掉。
+PACKAGE_FLEXIMIND=ON
+export PACKAGE_FLEXIMIND
 PY_YAML_ROOT="$PROJECT_DIR/runtime/pyyaml"
 PACKAGING_ROOT="$PROJECT_DIR/runtime/packaging"
 NUMPY_SP="${NUMPY_SP:-$CPP_LIB_ROOT/install/numpy/2.2.6/ohos/$ABI/site-packages}"

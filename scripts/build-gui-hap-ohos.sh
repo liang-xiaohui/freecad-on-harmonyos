@@ -10,6 +10,18 @@ BUILD_MODE="${BUILD_MODE:-debug}"
 PRODUCT="${PRODUCT:-default}"
 MODULE_TARGET="${MODULE_TARGET:-entry@default}"
 
+# 对外包 / 内部包的开关。归一化后 export 给 hvigor：entry/hvigorfile.ts 读它来决定
+# 要不要在构建期把 EntryAbility 从 module.json5 里剥掉（对外包默认剥掉），
+# scripts/stage-gui-hap.sh 读它来决定 runtime 与 rawfile 里放不放 FlexiMind 载荷与
+# 验收脚本。三处必须同一次构建里取值一致，否则 verify-gui-hap.sh 会拦下来。
+# 用 ON 构建的包只留在开发机和设备上调试，不要上架。
+PACKAGE_FLEXIMIND="${PACKAGE_FLEXIMIND:-OFF}"
+case "$PACKAGE_FLEXIMIND" in
+    ON | on | 1 | true | yes) PACKAGE_FLEXIMIND=ON ;;
+    *) PACKAGE_FLEXIMIND=OFF ;;
+esac
+export PACKAGE_FLEXIMIND
+
 if [ -z "${HVIGOR_JS:-}" ]; then
     HVIGOR_JS=$(find "$CACHE_ROOT" -maxdepth 8 \
         -path '*/node_modules/@ohos/hvigor/bin/hvigor.js' -type f -print 2>/dev/null |
