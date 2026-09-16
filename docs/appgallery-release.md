@@ -454,6 +454,28 @@ hilog 里对应 `VerifyProfileInfo: untrusted source app with release profile`�
 - **想在本机跑发布签名版本** → 只能先在 AGC 走内测/公开测试渠道分发，再从设备上的应用市场安装；
 - **验证发布签名本身是否配错** → 靠上面 Step 3 的三项核对与 Step 4 的三步校验做**离线验签**，不要拿"能不能装上"当判据。
 
+#### Step 5 · AGC 的「应用加密」勾不勾：**不勾**
+
+「选取待发布的软件包」页（API Level ≥ 11）有个加密开关，AGC 的说明是：加密 = 客户端装到的包是加密的、安全性较高；不加密 = 启动速率较快。官方[应用加密文档](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides-V14/code-protect-V14)还写了两条硬约束：**只加密 `.abc`（ArkTS 字节码），`.so` 默认不加密**（原文：*Currently, .so files are not encrypted by default*），且**性能影响与加密代码文件大小正相关**；该特性还按**白名单受限开放**，要单独申请。
+
+把这些约束套到本工程的包上（2026-09-16 实测，hap 共 502 MB）：
+
+| 类别 | 文件数 | 体积 | 占比 | 加密覆盖 |
+| --- | --- | --- | --- | --- |
+| native 库 `.so` | 248 | 424.9 MB | 84.6% | **否**（明文） |
+| rawfile 运行时 `.zip` | 2 | 64.8 MB | 12.9% | **否**（明文） |
+| 其他（模块清单、资源、绑定等） | 25 | 12.5 MB | 2.5% | 否 |
+| ArkTS 字节码 `.abc` | **1** | **55 KB** | **≈0.0%** | 是 |
+
+**开了加密，被保护的只有那一个 55 KB 的 `ets/modules.abc`（占整包 0.011%）**，而 97.5% 的体积照样明文。代价是冷启动延迟（FreeCAD 启动本来就重，官方也承认"`.abc` 越大冷启动越慢"）、包体略增、还要申请白名单。收益与代价完全不成比例 ⇒ **不勾**。
+
+**「是否需要额外的安全加固措施」：不需要。** 理由：
+
+1. 那 248 个 `.so` 里没有专有资产 —— FreeCAD / Qt6 / OCCT / Coin3D / CPython / OpenSSL / numpy 全是上游开源件；我们自己写的只有 `libfreecadqtapp.so`、QPA 插件、NAPI 桥这几层薄封装，源码就在本仓库（LGPL-2.1 提供义务已履行）。加密或混淆它们只会给使用者制造麻烦，不产生保护价值。
+2. **真正防篡改的是 HAP 签名，不是加密。** 签名覆盖包内每个文件（含 `.so`），改一个字节就验签失败 —— 那是完整性边界；加密解决的是"看得懂/看不懂"，两者别混。
+3. 将来若真有必须隐藏的东西（密钥、专有算法），正确做法是别放进客户端包，而不是指望加固。
+4. 顺带一个更该盯的点：**rawfile（`python311.zip`、`freecad-runtime.zip`）不参与任何加密**，是包里最大的明文暴露面 —— 这正是当初把 FlexiMind 私有载荷从 rawfile 里摘掉（`PACKAGE_FLEXIMIND=OFF`）的意义所在，别在打包时又放回去。
+
 ## 5. 图标：PC/2in1 同样必须分层（已完成）
 
 **权威依据**是华为《通用应用 UX 体验标准》2.1.4.3.1，标准等级 **必须**：
@@ -983,7 +1005,8 @@ AGC 勾「您的 APP 为单机 APP」。
    `verify-gui-hap.sh` 退出码 0（`abilities=[QAbility]`、无私有载荷）。
    ④ **待办**：出 `.app` 并传 AGC 提审 —— **AGC 要的是 `.app` 不是 `.hap`**，
    `sh scripts/build-release-app.sh` 产出 `build/outputs/release/freecad-on-harmonyos-release-signed.app`
-   （见 Step 4）。还要补 `READ_PASTEBOARD` 的权限说明 + 场景视频 + 内嵌 CPython 的说明；
+   （见 Step 4）。选取软件包时**不勾**「应用加密」（理由见 Step 5）。还要补
+   `READ_PASTEBOARD` 的权限说明 + 场景视频 + 内嵌 CPython 的说明；
    AGC「备案信息」栏勾「您的 APP 为单机 APP」（依据见第 7.5 节）。
    ⑤ ~~装到真机确认发布签名包能装上~~ **已否定（2026-09-16 实测）**：发布签名的包
    **装不上任何设备**。完全卸载调试包后重装，仍是
