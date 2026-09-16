@@ -287,9 +287,10 @@ sh scripts/init-release-signing.sh     # 已存在密钥库时会拒绝，除非
 | 文件 | 说明 |
 | --- | --- |
 | `ohos-release.p12` | 发布密钥库。别名 `releaseKey`，EC P-256，有效期 25 年 |
-| `ohos-release.csr` | 上传 AGC 申请发布证书用的证书请求（588 B，与 DevEco 生成的结构等价） |
+| `ohos-release.csr` | **上传 AGC 申请发布证书用的证书请求**（588 B，`SHA-256 = c71295d4…91d98`，与 DevEco 生成的结构等价） |
 | `material/` | 口令加解密材料（从现有签名目录复制） |
 | `password.txt` | 本次随机生成的明文口令（0600）。抄进密码管理器后可删 |
+| `ohos-release.cer` / `.p7b` | **AGC 签发后下载回来，放这里**（与 `.p12` 同目录），改名保持上面命名 |
 
 **为什么用脚本而不是 DevEco「Build > Generate Key and CSR」**：hvigor 只接受 **DevEco 加密后的口令密文**，明文会被 `DecipherUtil` 直接拒绝（它先校验长度 ≥32 且为偶数，再按 AES-128-GCM 解密）。脚本把密文一并算好，于是整条发布签名链路不需要打开 GUI：
 
@@ -309,7 +310,22 @@ node scripts/signing-password.js encrypt '<明文口令>'  # 给任意口令生�
 
 前提：账号已**实名认证**；账号角色有「访问发布类证书」权限（团队账号需单独授权）。
 
-AGC → **证书、APP ID和Profile → 证书 → 新增证书**：名称自取、**类型选「发布证书」**、上传 `ohos-release.csr` → 提交 → 下载 `.cer`。
+**要上传的文件（唯一一个，绝对路径）**：
+
+```
+/storage/Users/currentUser/Documents/ohos/config/release-signing/ohos-release.csr
+```
+
+核对特征：**588 字节**、`SHA-256 = c71295d477c8474732f335787baf4abb2061323d2a54691a254537fe5a991d98`、
+Subject 为 `CN=liangxiaohui, OU=Individual Developer, O=liangxiaohui, L=Shanghai, ST=Shanghai, C=CN`、
+公钥 `id-ecPublicKey` / `NIST CURVE: P-256`。上传前可用 `sha256sum` 对一遍。
+
+> ⚠️ **别传错**：同一台机器的 `../`（即 `~/Documents/ohos/config/`）下还有 13 张 CSR，其中
+> `default_freecad-on-harmonyosjQeoJc1u7….csr` **名字里带本工程名、看起来"才是对的"——它是调试 CSR（460 B）**。
+> 调试 CSR 签出来的证书不能用于发布。判别法：**只有 `release-signing/` 目录下那张是发布用的**
+> （588 B，目录外全部为 456/460 B）。
+
+AGC → **证书、APP ID和Profile → 证书 → 新增证书**：名称自取、**类型选「发布证书」**、上传上面那张 `ohos-release.csr` → 提交 → 下载 `.cer`。
 
 - 配额 **3 个/账号**，有效期 **3 年**。到期不影响在架应用，但更新版本时用过期证书签的包会被拒 ⇒ 提前换。
 - 证书行上的「备案信息」按钮可取证书公钥与指纹，备案时要填这两样。
