@@ -1158,12 +1158,18 @@ AGC 勾「您的 APP 为单机 APP」。
    产出 `entry/build/release/outputs/default/entry-default-signed.hap`（484 MB），
    验签通过、叶子证书为**发布**证书、内嵌 Profile 与 AGC 下载件逐字节相同、
    `verify-gui-hap.sh` 退出码 0（`abilities=[QAbility]`、无私有载荷）。
-   ④ **待办**：出 `.app` 并传 AGC 提审 —— **AGC 要的是 `.app` 不是 `.hap`**，
-   `sh scripts/build-release-app.sh` 产出 `build/outputs/release/freecad-on-harmonyos-release-signed.app`
-   （见 Step 4）。选取软件包时**不勾**「应用加密」（理由见 Step 5）。还要补
-   `READ_PASTEBOARD` 的权限说明 + 场景视频 + 内嵌 CPython 的说明；
-   AGC「备案信息」栏勾「您的 APP 为单机 APP」（依据见第 7.5 节）。
-   ⑤ ~~装到真机确认发布签名包能装上~~ **已否定（2026-09-16 实测）**：发布签名的包
+   ④ ~~出 `.app`~~ **已完成（2026-09-16）**：`sh scripts/build-release-app.sh` 产出
+   `build/outputs/release/freecad-on-harmonyos-release-signed.app`（502,358,775 B；
+   见 Step 4）。**AGC 要的是 `.app` 不是 `.hap`**，选取软件包时**不勾**「应用加密」
+   （理由见 Step 5）。三处 `pack.info` 均为 `releaseType: Release`，验签三件套通过
+   （叶子证书公钥 SHA-256 `8e3b8d79…`、内嵌 Profile 与 AGC 下载件逐字节相同）。
+   **待人工**：把这个 `.app` 传 AGC 提审。
+   ⑤ ~~补权限说明 / CPython 说明~~ **文案已成稿（2026-09-16）**：
+   `store-assets/appgallery-review-notes-zh-CN.txt` —— READ_PASTEBOARD 申请理由（256 字版
+   + 详细版）、场景视频分镜脚本、INTERNET 说明、内嵌 Python 运行时说明、插件管理器边界
+   说明、PC 桌面特性备注、备案栏。**待人工**：按分镜录 60 秒场景视频（真机、非模拟器，
+   演示里用假 Key）。AGC「备案信息」栏勾「您的 APP 为单机 APP」（依据见第 7.5 节）。
+   ⑥ ~~装到真机确认发布签名包能装上~~ **已否定（2026-09-16 实测）**：发布签名的包
    **装不上任何设备**。完全卸载调试包后重装，仍是
    `9568322 signature verification failed due to not trusted app source`
    （hilog：`untrusted source app with release profile`）。release profile 只能经
