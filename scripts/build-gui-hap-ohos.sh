@@ -9,6 +9,9 @@ DEVECO_SDK_HOME="${DEVECO_SDK_HOME:-$PROJECT_DIR/.ohos-sdk/26}"
 BUILD_MODE="${BUILD_MODE:-debug}"
 PRODUCT="${PRODUCT:-default}"
 MODULE_TARGET="${MODULE_TARGET:-entry@default}"
+# 打包任务：assembleHap 出模块包（.hap，设备安装/调试用）；
+# assembleApp 出应用包（.app，AGC 提审上传用）。两者共用同一套 stage 产物与签名配置。
+HVIGOR_TASK="${HVIGOR_TASK:-assembleHap}"
 
 # 对外包 / 内部包的开关。归一化后 export 给 hvigor：entry/hvigorfile.ts 读它来决定
 # 要不要在构建期把 EntryAbility 从 module.json5 里剥掉（对外包默认剥掉），
@@ -63,8 +66,17 @@ export DEVECO_SDK_HOME OHOS_PACKING_TOOL OHOS_HAP_SIGN_TOOL
 export NODE_PATH="$NODE_MODULES${NODE_PATH:+:$NODE_PATH}"
 
 cd "$PROJECT_DIR"
+
+# assembleApp 是工程级任务，不接受 -p module。
+if [ "$HVIGOR_TASK" = "assembleApp" ]; then
+    exec "$NODE_BIN" "$HVIGOR_JS" \
+        -p "product=$PRODUCT" \
+        -p "buildMode=$BUILD_MODE" \
+        assembleApp --no-daemon --no-parallel --info
+fi
+
 exec "$NODE_BIN" "$HVIGOR_JS" \
     -p "module=$MODULE_TARGET" \
     -p "product=$PRODUCT" \
     -p "buildMode=$BUILD_MODE" \
-    assembleHap --no-daemon --no-parallel --info
+    "$HVIGOR_TASK" --no-daemon --no-parallel --info

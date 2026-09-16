@@ -411,6 +411,49 @@ cmp /tmp/hap.p7b ~/Documents/ohos/config/release-signing/*.p7b
 
 出包前至少核一遍：`.p7b` 的 `type` 是 `release`、`bundle-name` 与 `AppScope/app.json5` 一致、`acls.allowed-acls` 含 `READ_PASTEBOARD` —— `check-signing-profile.py` 这三项都查。
 
+这个 `.hap` 的用处到此为止：**它装不到任何设备上**（见 Step 4 末尾），只为下面的 `.app` 提供模块产物。
+
+#### Step 4 · 出 AGC 提审用的应用包（.app）
+
+**AGC 上传的是 `.app`（App Pack），不是 `.hap`。** 两者不是同一层的东西：
+
+| | `.hap` | `.app` |
+| --- | --- | --- |
+| 是什么 | 模块包（单个 module） | 应用包（含各模块 hap + `pack.info`） |
+| 用途 | `hdc install` 装到设备（默认构建的调试包） | **AGC 提审上传** |
+| 签名位置 | hap 自身带 HAP Signing Block | 签名加在**整个 `.app`** 上，内嵌 hap 是未签名形态 |
+| 产物路径 | `entry/build/release/outputs/default/entry-default-signed.hap` | `build/outputs/release/freecad-on-harmonyos-release-signed.app` |
+
+```sh
+sh scripts/build-release-app.sh
+# 上传这个（已签名，502 MB 量级）：
+#   build/outputs/release/freecad-on-harmonyos-release-signed.app
+# 同目录另有 ...-unsigned.app，不要传
+```
+
+脚本 = stage → `assembleApp`（内部 `HVIGOR_TASK=assembleApp PRODUCT=release BUILD_MODE=release`）→ 三步校验（2026-09-16 实测通过，3m46s）：
+
+1. `hap-sign-tool verify-app -inFile <.app>` 对**应用包本体**验签，应打印 `hap verify successed!`；
+2. `cmp` 内嵌 Profile 与 AGC 下载的 `.p7b`，必须逐字节相同；
+3. 把内嵌的 `entry-default.hap` 解出来，用 `HAP=<解出的路径> ./scripts/verify-gui-hap.sh` 再走一遍完整内容校验。
+
+第 3 步之所以不能简单地对内嵌 hap 直接跑 `verify-app`：`.app` 里的 hap 没有 HAP Signing Block（签名在 `.app` 层），对 hap 验签会报 `No HAP Signing Block before ZIP Central Directory`（`VERIFY_ERROR, code: -106`）。这不是包坏了。
+
+**⚠️ 发布签名的包装不到本机设备上 —— 设计如此，不是配置问题。**
+
+2026-09-16 实测：**完全卸载**调试包之后再用 `hdc install` 装发布签名包，仍然失败：
+
+```text
+msg:error: failed to install bundle. code:9568322
+error: signature verification failed due to not trusted app source.
+```
+
+hilog 里对应 `VerifyProfileInfo: untrusted source app with release profile`。原因是 bundle manager 对 **release profile** 一律拒绝侧载 —— 发布 Profile 只能经应用市场（或 AGC 的测试渠道）分发到设备。于是三条路分清楚：
+
+- **本机自测 / 调 UI** → 永远用**调试签名**的 `.hap`：默认构建 + `scripts/install-gui-hap.sh`；
+- **想在本机跑发布签名版本** → 只能先在 AGC 走内测/公开测试渠道分发，再从设备上的应用市场安装；
+- **验证发布签名本身是否配错** → 靠上面 Step 3 的三项核对与 Step 4 的三步校验做**离线验签**，不要拿"能不能装上"当判据。
+
 ## 5. 图标：PC/2in1 同样必须分层（已完成）
 
 **权威依据**是华为《通用应用 UX 体验标准》2.1.4.3.1，标准等级 **必须**：
@@ -938,8 +981,16 @@ AGC 勾「您的 APP 为单机 APP」。
    产出 `entry/build/release/outputs/default/entry-default-signed.hap`（484 MB），
    验签通过、叶子证书为**发布**证书、内嵌 Profile 与 AGC 下载件逐字节相同、
    `verify-gui-hap.sh` 退出码 0（`abilities=[QAbility]`、无私有载荷）。
-   ④ **待办**：把包传 AGC 提审，补 `READ_PASTEBOARD` 的权限说明 + 场景视频 + 内嵌 CPython 的说明；
+   ④ **待办**：出 `.app` 并传 AGC 提审 —— **AGC 要的是 `.app` 不是 `.hap`**，
+   `sh scripts/build-release-app.sh` 产出 `build/outputs/release/freecad-on-harmonyos-release-signed.app`
+   （见 Step 4）。还要补 `READ_PASTEBOARD` 的权限说明 + 场景视频 + 内嵌 CPython 的说明；
    AGC「备案信息」栏勾「您的 APP 为单机 APP」（依据见第 7.5 节）。
-   ⑤ **可选**：装到真机确认发布签名包能装上（发布 Profile 无设备白名单，任何设备可装；
-   但同包名换签名需先卸掉调试包，会清掉沙箱数据 ⇒ 动手前先想清楚）。
+   ⑤ ~~装到真机确认发布签名包能装上~~ **已否定（2026-09-16 实测）**：发布签名的包
+   **装不上任何设备**。完全卸载调试包后重装，仍是
+   `9568322 signature verification failed due to not trusted app source`
+   （hilog：`untrusted source app with release profile`）。release profile 只能经
+   应用市场 / AGC 测试渠道分发，侧载一律拒绝 —— 原记录里"发布 Profile 无设备白名单、
+   任何设备可装"的说法是错的。上真机请用调试签名包，发布包只做离线验签 + 上架。
+   附注：同包名换签名确实需要先卸调试包（本次已卸），沙箱 `freecad-home` 一并清掉；
+   该目录权限 0700、`shell` 用户读不到，**事前无法备份**。
 

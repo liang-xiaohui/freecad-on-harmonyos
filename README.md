@@ -94,7 +94,8 @@ hvigor 只接受 **DevEco 加密后的口令密文**（明文会被直接拒绝�
 
 ```sh
 ./scripts/init-release-signing.sh              # 生成发布 .p12 + .csr + 加密口令（上架用）
-./scripts/build-release-hap.sh                 # 出发布包（stage → build → verify，强制 OFF）
+./scripts/build-release-app.sh                 # 出 .app（AGC 上传用；stage → assembleApp → verify）
+./scripts/build-release-hap.sh                 # 出 release 签名的 .hap（模块产物，供 .app 使用）
 ./scripts/sign-staged-native-ohos.sh           # 仅本地 target-runtime 探针自签名
 ```
 
@@ -102,11 +103,20 @@ hvigor 只接受 **DevEco 加密后的口令密文**（明文会被直接拒绝�
   `decrypt` 找回明文、`encrypt` 为任意口令生成可粘贴的密文。
 - [`scripts/init-release-signing.sh`](scripts/init-release-signing.sh)：一键生成发布密钥库与
   CSR，并把 `build-profile.json5` 需要的片段直接打印出来。
-- [`scripts/build-release-hap.sh`](scripts/build-release-hap.sh)：出正式上架包。签名按 **product**
-  绑定（不是 buildMode），所以这里把 `PRODUCT` 与 `BUILD_MODE` 一起切到 release；
-  产物在 `entry/build/release/outputs/default/`。**stage 非 0 就中止**，不接着 build。
+- [`scripts/build-release-app.sh`](scripts/build-release-app.sh)：**出 AGC 提审上传的应用包**
+  `build/outputs/release/freecad-on-harmonyos-release-signed.app`。AGC 只收 `.app`（App Pack），
+  不收 `.hap`。
+- [`scripts/build-release-hap.sh`](scripts/build-release-hap.sh)：出 release 签名的模块 `.hap`。
+  签名按 **product** 绑定（不是 buildMode），所以这里把 `PRODUCT` 与 `BUILD_MODE` 一起切到
+  release；产物在 `entry/build/release/outputs/default/`。**stage 非 0 就中止**，不接着 build。
 - [`scripts/check-signing-profile.py`](scripts/check-signing-profile.py)：**装包前必跑**，
   核对 Profile 的 bundleName 与受限权限 ACL（不匹配会 9568289）。
+
+> ⚠️ AGC 上传用 `.app`，设备安装用调试签名的 `.hap`。**发布签名的包装不到任何设备上**：
+> 设备侧对 release profile 一律返回 `9568322 signature verification failed due to not
+> trusted app source`，只能经应用市场 / AGC 测试渠道分发。所以本机自测一律用默认构建的
+> 调试包（[`scripts/install-gui-hap.sh`](scripts/install-gui-hap.sh)），发布包只做离线验签 + 上架。
+> 详见 [上架与发布](docs/appgallery-release.md) 第 4 节 Step 4。
 
 发布签名与上架的完整步骤（AGC 申请发布证书/发布 Profile、受限权限申请、两个 product
 如何绑签名、APP 备案口径）见 [上架与发布](docs/appgallery-release.md) 第 4 节与第 7.5 节。
