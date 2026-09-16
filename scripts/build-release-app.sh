@@ -44,7 +44,10 @@ export PATH
 export PACKAGE_FLEXIMIND=OFF
 
 RELEASE_APP="$PROJECT_DIR/build/outputs/release/freecad-on-harmonyos-release-signed.app"
-SIGN_TOOL="${SIGN_TOOL:-$PROJECT_DIR/.sdk-overlay/26/toolchains/lib/hap-sign-tool}"
+# 验签工具取**正在用的那套 SDK**：`.sdk-overlay/` 钉死在旧的 Beta SDK 上，换 SDK 之后
+# 再默认用它就成了"用 A 构建、用 B 验签"，出问题时极难判断。要指定别的就传 SIGN_TOOL。
+SDK_HOME="${DEVECO_SDK_HOME:-$PROJECT_DIR/.ohos-sdk/26}"
+SIGN_TOOL="${SIGN_TOOL:-$SDK_HOME/toolchains/lib/hap-sign-tool}"
 SIGNING_DIR="${SIGNING_DIR:-$HOME/Documents/ohos/config/release-signing}"
 ARTIFACT_ROOT="${FREECAD_ARTIFACT_ROOT:-/storage/Users/currentUser/codex-freecad-artifacts}"
 

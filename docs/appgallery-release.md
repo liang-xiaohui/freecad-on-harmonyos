@@ -476,6 +476,127 @@ hilog 里对应 `VerifyProfileInfo: untrusted source app with release profile`�
 3. 将来若真有必须隐藏的东西（密钥、专有算法），正确做法是别放进客户端包，而不是指望加固。
 4. 顺带一个更该盯的点：**rawfile（`python311.zip`、`freecad-runtime.zip`）不参与任何加密**，是包里最大的明文暴露面 —— 这正是当初把 FlexiMind 私有载荷从 rawfile 里摘掉（`PACKAGE_FLEXIMIND=OFF`）的意义所在，别在打包时又放回去。
 
+#### Step 6 · 修「使用了 HarmonyOS beta 版本的 API」驳回：换 Release 版 SDK
+
+2026-09-16 首次提审被驳，原文：
+
+> 经检测发现，您的应用使用了 HarmonyOS beta 版本的 API。修改建议：为提升消费者使用体验，
+> 请使用 HarmonyOS release 版本的 API 开发应用，申请上架。
+
+**根因不在工程，在 SDK。** AGC 判这一条，只看打包产物里 `pack.info` 的一个字段：
+
+```json
+"apiVersion": { "compatible": 26, "releaseType": "Beta", "target": 26 }
+                                ^^^^^^^^^^^^^^^^^^^^^^ 就是它
+```
+
+`releaseType` **只能来自 SDK 自身的元数据**，工程里没有任何配置项能覆盖它。证据在 hvigor 源码
+（`@ohos/hvigor-ohos-plugin/src/tasks/make-pack-info.js`）：
+
+```js
+apiVersion = { compatible: …, releaseType: this.sdkInfo.getReleaseType(), target: … }
+```
+
+再往下追，`getReleaseType()` 取的是 SDK 组件的 `oh-uni-package.json`：
+
+```sh
+cat "$DEVECO_SDK_HOME/toolchains/oh-uni-package.json"
+# {"apiVersion":"26","platformVersion":"26.0.0","releaseType":"Beta","version":"26.0.0.18"}
+```
+
+**为什么容易中招**：本机 brew 装的 `ohos-sdk` 稳定版就是 `26.0.0.18` —— 一个比 API 26 Beta1
+（`26.0.0.23`）还早的滚动快照，`releaseType` 长期是 `Beta`，而 `brew update` 也换不到别的。
+可 API 26.0.0 早在 2026-08-29 就已经 Release 了，官方 Release 包的构建号是 `.38`。
+（规律：**Release 构建号大、Beta 快照号小且长期不动**。）
+
+**判据命令**（改完这**两处**都要看。注意 `.app` 那份 `pack.info` 是**缩进过的 JSON**，
+所以要容忍冒号两侧的空格，别写成紧贴的 `"releaseType":"…"` —— 那样一个都匹配不到）：
+
+```sh
+grep -oE '"releaseType"[[:space:]]*:[[:space:]]*"[A-Za-z]*"' \
+    entry/build/release/outputs/default/pack.info build/outputs/release/pack.info
+```
+
+**Release SDK 从哪来**（brew 里没有 Release formula，只能去官方发布页）：
+
+| 项 | 值 |
+| --- | --- |
+| 发布线 | OpenHarmony 7.0 Release |
+| 包 | `ohos-sdk-windows_linux-public_20260829.tar.gz`（3.42 GiB） |
+| 内含 SDK | `Ohos_sdk_public 26.0.0.38`（API 26.0.0 **Release**） |
+| SHA-256 | `6bf6ae1efe8de0e8bd15ddbd7fac58bcb54d9620262a541b9b219439317a4c42` |
+| 下载 | `https://repo.huaweicloud.com/openharmony/os/7.0-Release/ohos-sdk-windows_linux-public_20260829.tar.gz` |
+| 出处 | OpenHarmony docs 仓库 `zh-cn/release-notes/OpenHarmony-v7.0-release.md` |
+
+两个坑：
+
+- `cidownload.openharmony.cn`（S3 兼容）**拒绝列目录**（`AccessDenied`），只能按完整路径取物；
+  想"看有哪些版本"用华为云镜像 `https://repo.huaweicloud.com/openharmony/os/`，它可以列目录。
+- **包名里的 `x64` 是命名习惯，内容全是 arm64**：`*-ohos-x64-26.0.0.38-Release.zip` 里的
+  `restool` / `ohos_packing_tool` / `hap-sign-tool` / `es2abc` / `hdc` 实测都是 `ld-musl-aarch64`，
+  在本机鸿蒙 PC 上能直接跑。
+
+**包内结构**：tar 里是 5 个 zip，每个 zip 的顶层就是组件目录名，解到同一个根下即可：
+
+```sh
+tar xf ohos-sdk-windows_linux-public_20260829.tar.gz        # → ohos-sdk/ohos/*.zip
+SDK=~/CPPLib/toolchains/harmonyos/26.0.0.38
+mkdir -p "$SDK"
+for z in ets js native previewer toolchains; do
+    unzip -q /path/to/ohos-sdk/ohos/"$z"-ohos-x64-26.0.0.38-Release.zip -d "$SDK"
+done
+```
+
+**切换用脚本，别手工搬**（`--check` 只看不写）：
+
+```sh
+sh scripts/switch-ohos-sdk.sh ~/CPPLib/toolchains/harmonyos/26.0.0.38
+```
+
+脚本做四件事，外加一道闸：
+
+| 步骤 | 说明 |
+| --- | --- |
+| ① 先查 `releaseType` | 五个组件都必须是 `Release`，否则**退出码 3** 并打印 AGC 那句驳回原文（`ALLOW_BETA=1` 可强行继续，仅供自测） |
+| ② 装桥接壳 | 编出 `app_packing_tool.jar` / `hap-sign-tool.jar` 放进 SDK 的 `toolchains/lib/` |
+| ③ 补 `libimage_transcoder_shared.so` | 官方 Public SDK **不发**这个文件；工程里一直用指向 `libc++_shared.so` 的替身（未开资源压缩时它不会被真正加载） |
+| ④ 切 `.ohos-sdk/26` | 旧的若是实体目录，按 `<名>.<releaseType 小写>-<版本>.bak` 留档，**绝不覆盖** |
+
+**② 是必须的，而且差点丢件**：hvigor 找打包/签名工具时写死的是 **jar 名**
+（`getPackageToolPath()` → `toolchains/lib/app_packing_tool.jar`、
+`getVerifySignConfigToolPath()` → `…/hap-sign-tool.jar`），而官方 Public SDK 的 `toolchains/lib/`
+里只有同名的**可执行文件** `ohos_packing_tool` / `hap-sign-tool`。两者之间靠两个 1~2 KB 的
+桥接壳转发：读环境变量 `OHOS_PACKING_TOOL` / `OHOS_HAP_SIGN_TOOL`，`inheritIO()` 后透传退出码；
+签名壳还多一段 —— `verify-profile -outFile` 时要把原生工具写的**裸 Profile JSON**包成
+`{"content": …}`（hvigor 是按 `content["bundle-info"]` 读的），幂等。
+
+这两个壳原先只以编译产物形式躺在本机 `.ohos-sdk/` 里、**仓库里一行记录都没有**，换 SDK 时差点
+当临时文件丢掉。现在源码入库 `scripts/toolchain-bridges/`（重建产物用 `javap -p -c` 与原件逐条
+比对过，**字节码完全一致**）。
+
+**重建与验收**（2026-09-16 实测）：
+
+```sh
+sh scripts/build-release-hap.sh    # 34 s
+sh scripts/build-release-app.sh    # 4 min 14 s → 502,358,776 B
+```
+
+出包后三处都要是 `Release`：
+
+| 检查点 | 期望 |
+| --- | --- |
+| `entry/build/release/outputs/default/pack.info` | `"releaseType":"Release"` |
+| `build/outputs/release/pack.info` | `"releaseType":"Release"` |
+| `.app` 内嵌 hap 的 `pack.info` | `"releaseType":"Release"` |
+
+**签名侧不用动**：换 SDK 只换构建工具，`build-profile.json5` 里的发布签名材料、`.p7b` 的 ACL、
+验签三件套（Step 3 / Step 4）全部照旧。本次换完复验：`hap verify successed!`、内嵌 Profile 与
+AGC 下载的 `.p7b` 逐字节相同、证书链叶子公钥指纹仍是 `8e3b8d79…`。
+
+**防复发**：`scripts/build-gui-hap-ohos.sh` 现在会读 SDK 元数据 —— 凡是 `BUILD_MODE=release`
+撞上非 Release 版 SDK，直接**退出码 3** 并说明原因（`ALLOW_BETA_SDK=1` 可放行）；其余构建打印
+一行 `SDK: <releaseType> <version>`，让日志里看得出这次是哪套 SDK 出的包。
+
 ## 5. 图标：PC/2in1 同样必须分层（已完成）
 
 **权威依据**是华为《通用应用 UX 体验标准》2.1.4.3.1，标准等级 **必须**：
@@ -1016,4 +1137,13 @@ AGC 勾「您的 APP 为单机 APP」。
    任何设备可装"的说法是错的。上真机请用调试签名包，发布包只做离线验签 + 上架。
    附注：同包名换签名确实需要先卸调试包（本次已卸），沙箱 `freecad-home` 一并清掉；
    该目录权限 0700、`shell` 用户读不到，**事前无法备份**。
+9. ~~修 AGC 的「使用了 HarmonyOS beta 版本的 API」驳回~~ **已完成（2026-09-16）**：
+   根因在 SDK —— 元数据 `releaseType: Beta`（那个快照是 `26.0.0.18`），它被原样写进
+   `pack.info`，工程侧**没有任何配置项能覆盖**。换成 OpenHarmony 7.0 Release 的
+   `Ohos_sdk_public 26.0.0.38` 后重建：`entry/…/pack.info`、`build/outputs/release/pack.info`
+   与 `.app` 内嵌 hap 三处都是 `Release`，验签三件套照旧通过。做法、下载源与桥接壳那个坑
+   见 **Step 6**。同时入库：`scripts/switch-ohos-sdk.sh`（带 `releaseType` 闸门，
+   非 Release 直接退 3）、`scripts/toolchain-bridges/`（两个桥接壳的源码，原先只在
+   本机 `.ohos-sdk/` 里、仓库无记录），以及 `build-gui-hap-ohos.sh` 里
+   「release 撞非 Release SDK 就退 3」的守卫。**剩下只是把新的 `.app` 重新上传提审**（即 ④）。
 

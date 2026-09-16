@@ -65,6 +65,29 @@ done
 export DEVECO_SDK_HOME OHOS_PACKING_TOOL OHOS_HAP_SIGN_TOOL
 export NODE_PATH="$NODE_MODULES${NODE_PATH:+:$NODE_PATH}"
 
+# SDK 的 releaseType 会被原样写进 pack.info 的 apiVersion.releaseType，而 AGC 就是拿这**一个**
+# 字段判「有没有用 beta 版 API」的 —— 工程配置里写什么都没用（取值来自 SDK 的
+# oh-uni-package.json）。官方 Public SDK 的 Beta 快照会长期停留在旧构建号，很容易一路用下去，
+# 所以 release 出包这条路直接拦下来。细节与换 SDK 的步骤见 docs/appgallery-release.md「Step 6」。
+SDK_META="$DEVECO_SDK_HOME/toolchains/oh-uni-package.json"
+if [ -f "$SDK_META" ]; then
+    SDK_RELEASE_TYPE=$(sed -n 's/.*"releaseType"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$SDK_META" | head -n 1)
+    SDK_VERSION=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$SDK_META" | head -n 1)
+    if [ "$BUILD_MODE" = "release" ] && [ -n "$SDK_RELEASE_TYPE" ] && [ "$SDK_RELEASE_TYPE" != "Release" ]; then
+        if [ "${ALLOW_BETA_SDK:-0}" != "1" ]; then
+            echo "错误：release 构建用的是 $SDK_RELEASE_TYPE 版 SDK（$SDK_VERSION）。" >&2
+            echo "      pack.info 的 apiVersion.releaseType 会写成 \"$SDK_RELEASE_TYPE\"，" >&2
+            echo "      AGC 提审会以「使用了 HarmonyOS beta 版本的 API」驳回。" >&2
+            echo "      换 Release 版 SDK：sh scripts/switch-ohos-sdk.sh <SDK 根目录>" >&2
+            echo "      （确要硬来：ALLOW_BETA_SDK=1，但出的包不要提审）" >&2
+            exit 3
+        fi
+        echo "警告：ALLOW_BETA_SDK=1，用 $SDK_RELEASE_TYPE 版 SDK（$SDK_VERSION）出 release 包。" >&2
+    elif [ -n "$SDK_RELEASE_TYPE" ]; then
+        echo "SDK: $SDK_RELEASE_TYPE $SDK_VERSION（$DEVECO_SDK_HOME）"
+    fi
+fi
+
 cd "$PROJECT_DIR"
 
 # assembleApp 是工程级任务，不接受 -p module。

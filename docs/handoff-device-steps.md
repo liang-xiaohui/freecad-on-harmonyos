@@ -194,6 +194,12 @@ hvigorw assembleHap --mode module -p product=default -p buildMode=debug --no-dae
   ./scripts/sign-qt6-host-tools-ohos.sh
   ```
   若 `command -v` 和 `find` 都没有结果，说明该 DevEco SDK 未安装签名工具，不能用 `/data/service/hnp/bin/binary-sign-tool` 这个猜测路径代替。
+- **HAP 构建用的 SDK 必须是 Release 版**（当前 `Ohos_sdk_public 26.0.0.38`）。hvigor 找打包/签名
+  工具时写死的是 **jar 名**，而 OpenHarmony 官方 Public SDK 里只有同名可执行文件 —— 中间靠
+  `scripts/toolchain-bridges/` 里两个 1~2 KB 的桥接壳转发，所以**换 SDK 要连壳一起装**，
+  别手工搬目录：用 `sh scripts/switch-ohos-sdk.sh <SDK 根目录>`（它会装壳、补
+  `libimage_transcoder_shared.so`、切 `.ohos-sdk/26`，并在 SDK 非 Release 时直接拒绝）。
+  缘由与排查见 `docs/appgallery-release.md` 的「Step 6」。
 - `probes/freecad-headless/acceptance.py` 是验收脚本唯一真源（staging 覆盖 rawfile 副本），改 env/布局必须改这里。
 - GUI 会话的 FreeCAD 运行布局：FREECAD_APP_HOME=filesDir/freecad-home（含 Mod/ python 目录）、FREECAD_APP_LIBRARY_DIR=HAP libs 根、FREECAD_USER_*=filesDir 子目录。
 - 构建/验证入口脚本：`scripts/build-qt6-gui-ohos.sh`、`build-qt6-modules-ohos.sh`、`configure-freecad-gui-qt6-ohos.sh`、`build-freecad-gui-qt6-ohos.sh`、`stage-gui-hap.sh`；绑定栈：`CPPLib/scripts/build-swig-ohos.sh`、`build-pivy-ohos.sh`、`build-shiboken6-ohos.sh`、`build-pyside6-ohos.sh`。

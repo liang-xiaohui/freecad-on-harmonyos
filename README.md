@@ -147,7 +147,11 @@ GUI 完成标准包括主窗口与工作台、3D 场景渲染、相机交互、�
 ## 环境约束
 
 - 目标系统：HarmonyOS PC，`arm64-v8a`
-- OHOS SDK：26.0.0.18
+- OHOS SDK：**Release 版** `Ohos_sdk_public 26.0.0.38`（OpenHarmony 7.0 Release）。
+  不能用 Beta 快照（如 `26.0.0.18`）：SDK 的 `releaseType` 会被原样写进产物的 `pack.info`，
+  应用市场上架会以「使用了 HarmonyOS beta 版本的 API」驳回。换 SDK 用
+  `sh scripts/switch-ohos-sdk.sh <SDK 根目录>`（带闸门，非 Release 直接拒绝），
+  详见 [`docs/appgallery-release.md`](docs/appgallery-release.md) 的「Step 6」。
 - Python：3.11.4 OHOS runtime
 - 未签名 ELF 不能直接在设备 shell 中执行，端侧验收必须进入签名 HAP
 - HAP 沙箱中的 `Mod/`、用户文件授权、loopback 接口和应用生命周期仍需随 GUI 集成验证
