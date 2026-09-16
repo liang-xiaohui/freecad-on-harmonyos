@@ -286,11 +286,25 @@ sh scripts/init-release-signing.sh     # 已存在密钥库时会拒绝，除非
 
 | 文件 | 说明 |
 | --- | --- |
-| `ohos-release.p12` | 发布密钥库。别名 `releaseKey`，EC P-256，有效期 25 年 |
+| `ohos-release.p12` | 发布密钥库。别名 `releaseKey`（PKCS12 存储时被规范成小写 `releasekey`，但查找大小写不敏感，实测两种写法都能取到同一条），EC P-256，有效期至 **2051-09-09** |
 | `ohos-release.csr` | **上传 AGC 申请发布证书用的证书请求**（588 B，`SHA-256 = c71295d4…91d98`，与 DevEco 生成的结构等价） |
 | `material/` | 口令加解密材料（从现有签名目录复制） |
 | `password.txt` | 本次随机生成的明文口令（0600）。抄进密码管理器后可删 |
-| `ohos-release.cer` / `.p7b` | **AGC 签发后下载回来，放这里**（与 `.p12` 同目录），改名保持上面命名 |
+| `FreeCAD_Release_2026.cer` | **AGC 签发后下载回来**（2026-09-16）。PEM **证书链 3 张**：叶子 → Developer Relations CA G2 → Root CA G2；叶子 `CN=梁晓辉(1578456863605849601),Release`，有效期至 **2029-09-16** |
+| `FreeCAD_Release_2026Release.p7b` | **AGC 生成的发布 Profile**（2026-09-16）。`type=release`、`bundle-name=com.liangxiaohui.freecad`、`apl=normal`、`acls=['ohos.permission.READ_PASTEBOARD']`、`device-ids` 空 |
+
+> 文件名沿用 AGC 下载时的原名（`证书名称.cer` / `Profile名称.p7b`），没有改名——`build-profile.json5` 里写的就是这两个名字。
+
+**下载回来必须验一遍**，不验等于赌：
+
+```sh
+# ① 证书是不是我们那把私钥签出来的（.cer 是证书链，要逐张比对，x509 默认只读第一张）
+#    叶子证书公钥的 SHA-256 应等于 CSR 的公钥 8e3b8d79…47287
+# ② Profile 的包名 / 类型 / ACL 是否正确
+python3 scripts/check-signing-profile.py ~/Documents/ohos/config/release-signing/FreeCAD_Release_2026Release.p7b
+```
+
+第 ② 步会逐项打印并给出结论——**重点看 `acls` 里有没有 `ohos.permission.READ_PASTEBOARD`**。这个列表是烤进 `.p7b` 文件的，AGC 审批通过只改账号侧状态，手上的 `.p7b` 不会自己变：漏勾就是构建全绿、装包 9568289。
 
 **为什么用脚本而不是 DevEco「Build > Generate Key and CSR」**：hvigor 只接受 **DevEco 加密后的口令密文**，明文会被 `DecipherUtil` 直接拒绝（它先校验长度 ≥32 且为偶数，再按 AES-128-GCM 解密）。脚本把密文一并算好，于是整条发布签名链路不需要打开 GUI：
 
@@ -365,11 +379,35 @@ AGC → **证书、APP ID和Profile → Profile → 添加**：
 
 `applyToProducts` 两个都要挂，否则 `-p product=release` 找不到 target。
 
+**出包用封装好的脚本**（顺序 stage → build → verify，且 stage 非 0 就不继续 build）：
+
 ```sh
-PRODUCT=release BUILD_MODE=release sh scripts/build-gui-hap-ohos.sh
-# 产物：entry/build/release/outputs/default/entry-default-signed.hap（注意是 release 那层）
-sh scripts/check-signing-profile.py <下载的发布 p7b>     # 退出码 0 才继续
+sh scripts/build-release-hap.sh
+# 产物：entry/build/release/outputs/default/entry-default-signed.hap
 ```
+
+脚本做了三件容易被漏的事：强制 `PACKAGE_FLEXIMIND=OFF`（内部包绝不上架）、`PRODUCT` 与 `BUILD_MODE` 都切 release、verify 时把 `HAP` 指向 release 那层目录（`verify-gui-hap.sh` 默认只看 `build/default/`，不指就验错包）。
+
+**出包后的三项核对**（2026-09-16 实测通过）：
+
+```sh
+# ① 验签 + 把 HAP 里的证书链与 Profile 导出来
+.sdk-overlay/26/toolchains/lib/hap-sign-tool verify-app \
+    -inFile entry/build/release/outputs/default/entry-default-signed.hap \
+    -outCertChain /tmp/chain.cer -outProfile /tmp/hap.p7b      # 应打印 hap verify successed!
+# ② HAP 内嵌的 Profile 必须与 AGC 下载的那份逐字节相同
+cmp /tmp/hap.p7b ~/Documents/ohos/config/release-signing/*.p7b
+# ③ 证书链叶子必须是**发布**证书，不是调试那张
+```
+
+第 ③ 步的判别靠公钥指纹（`.cer` 是链，`openssl x509` 默认只读第一张=根 CA，要拆开逐张看）：
+
+| | 叶子证书公钥 SHA-256（前 16 位） |
+| --- | --- |
+| 发布证书（本工程） | `8e3b8d794f1a2354` |
+| 调试证书（本机共用） | `c10b5b2372e06496` |
+
+若是后者 ⇒ 签名配置没生效，包不能用。本次实测：叶子为 `8e3b8d79…`、内嵌 Profile 与下载的 `.p7b` 逐字节相同、`verify-gui-hap.sh` 退出码 0、`abilities=[QAbility]`。
 
 出包前至少核一遍：`.p7b` 的 `type` 是 `release`、`bundle-name` 与 `AppScope/app.json5` 一致、`acls.allowed-acls` 含 `READ_PASTEBOARD` —— `check-signing-profile.py` 这三项都查。
 
@@ -891,13 +929,17 @@ AGC 勾「您的 APP 为单机 APP」。
    ① ~~生成发布密钥与 CSR~~ **已完成（2026-09-15）**：`sh scripts/init-release-signing.sh`
    → `~/Documents/ohos/config/release-signing/{ohos-release.p12,ohos-release.csr,material/,password.txt}`。
    EC P-256 / SHA256withECDSA / 有效期至 2051。**先备份 `.p12` + `material/`**。
-   ② **待办**：AGC 申请发布证书（上传 `ohos-release.csr`，类型选「发布证书」，3 个/账号、3 年）
-   → 申请发布 Profile（类型「发布」，选该证书，**勾 `READ_PASTEBOARD`**）→ 下载 `.cer`/`.p7b`
-   放进 `release-signing/`。步骤与坑见第 4 节「发布材料」。
-   ③ **待办**：`build-profile.json5` 加 release signingConfig + release product +
-   `applyToProducts: ["default","release"]`（模板见 `build-profile.example.json5`），
-   然后 `PRODUCT=release BUILD_MODE=release sh scripts/build-gui-hap-ohos.sh`，
-   `check-signing-profile.py` 退出码 0 再把包传 AGC。
-   ④ 提审时补 `READ_PASTEBOARD` 的权限说明 + 场景视频 + 内嵌 CPython 的说明；
+   ② ~~AGC 申请发布证书与发布 Profile~~ **已完成（2026-09-16）**：下载回
+   `release-signing/{FreeCAD_Release_2026.cer, FreeCAD_Release_2026Release.p7b}`。
+   证书叶子 `CN=梁晓辉(1578456863605849601),Release`，有效期至 2029-09-16；
+   Profile `type=release`、`acls=['ohos.permission.READ_PASTEBOARD']`（`check-signing-profile.py` 退出码 0）。
+   ③ ~~配 release 签名并出正式包~~ **已完成（2026-09-16）**：`build-profile.json5` 已加
+   release signingConfig + release product + `applyToProducts`；`sh scripts/build-release-hap.sh`
+   产出 `entry/build/release/outputs/default/entry-default-signed.hap`（484 MB），
+   验签通过、叶子证书为**发布**证书、内嵌 Profile 与 AGC 下载件逐字节相同、
+   `verify-gui-hap.sh` 退出码 0（`abilities=[QAbility]`、无私有载荷）。
+   ④ **待办**：把包传 AGC 提审，补 `READ_PASTEBOARD` 的权限说明 + 场景视频 + 内嵌 CPython 的说明；
    AGC「备案信息」栏勾「您的 APP 为单机 APP」（依据见第 7.5 节）。
+   ⑤ **可选**：装到真机确认发布签名包能装上（发布 Profile 无设备白名单，任何设备可装；
+   但同包名换签名需先卸掉调试包，会清掉沙箱数据 ⇒ 动手前先想清楚）。
 

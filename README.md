@@ -94,6 +94,7 @@ hvigor 只接受 **DevEco 加密后的口令密文**（明文会被直接拒绝�
 
 ```sh
 ./scripts/init-release-signing.sh              # 生成发布 .p12 + .csr + 加密口令（上架用）
+./scripts/build-release-hap.sh                 # 出发布包（stage → build → verify，强制 OFF）
 ./scripts/sign-staged-native-ohos.sh           # 仅本地 target-runtime 探针自签名
 ```
 
@@ -101,6 +102,9 @@ hvigor 只接受 **DevEco 加密后的口令密文**（明文会被直接拒绝�
   `decrypt` 找回明文、`encrypt` 为任意口令生成可粘贴的密文。
 - [`scripts/init-release-signing.sh`](scripts/init-release-signing.sh)：一键生成发布密钥库与
   CSR，并把 `build-profile.json5` 需要的片段直接打印出来。
+- [`scripts/build-release-hap.sh`](scripts/build-release-hap.sh)：出正式上架包。签名按 **product**
+  绑定（不是 buildMode），所以这里把 `PRODUCT` 与 `BUILD_MODE` 一起切到 release；
+  产物在 `entry/build/release/outputs/default/`。**stage 非 0 就中止**，不接着 build。
 - [`scripts/check-signing-profile.py`](scripts/check-signing-profile.py)：**装包前必跑**，
   核对 Profile 的 bundleName 与受限权限 ACL（不匹配会 9568289）。
 

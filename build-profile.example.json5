@@ -56,11 +56,15 @@
           // 由 scripts/init-release-signing.sh 生成：跑一遍它会把下面这些值直接打出来。
           "storePassword": "REPLACE_LOCALLY",
           "certpath": "REPLACE_LOCALLY",   // AGC 下载的发布证书 .cer
+          // PKCS12 存储别名时会被规范成小写（生成的是 releaseKey、库里存 releasekey），
+          // 但查找大小写不敏感，两种写法都能取到同一条 —— 实测过，不用为此改名。
           "keyAlias": "releaseKey",
           "keyPassword": "REPLACE_LOCALLY",
           "profile": "REPLACE_LOCALLY",    // AGC 下载的发布 Profile .p7b
-          "signAlg": "SHA256withECDSA",
+          "signAlg": "SHA256withECDSA",    // schema 里的 enum 只有这一个值
           "storeFile": "REPLACE_LOCALLY"   // init-release-signing.sh 生成的 ohos-release.p12
+          // 出包：sh scripts/build-release-hap.sh
+          // 产物：entry/build/release/outputs/default/entry-default-signed.hap
         },
         "type": "HarmonyOS"
       }
