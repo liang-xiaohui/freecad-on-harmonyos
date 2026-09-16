@@ -216,8 +216,10 @@ Profile**才会带上。DevEco 的自动签名若沿用申请前已存在的 Pro
 
 期望：`bundle-name: com.liangxiaohui.freecad`、`acls: ['ohos.permission.READ_PASTEBOARD']`，
 末行 `✓ Profile 与工程一致，受限权限齐备。`。
-（`hap-sign-tool verify-profile` 也能看，但本机所有 `hap-sign-tool.jar` 都是 1~2 KB 的
-bridge 壳，跑不起来，所以用上面的脚本。）
+（`hap-sign-tool verify-profile` 也能看，但要在 jar 壳前面挂上环境变量才跑得起来 ——
+`OHOS_HAP_SIGN_TOOL=$PWD/.ohos-sdk/26/toolchains/lib/hap-sign-tool java -jar
+.ohos-sdk/26/toolchains/lib/hap-sign-tool.jar verify-profile …`。壳的行为见
+`scripts/toolchain-bridges/README.md`。上面的 Python 脚本不依赖 java，更省事。）
 
 若自动签名没带上：AGC →「证书、App ID 和 Profile」→ Profile 管理 → 新增（类型=调试）→
 选证书、勾设备、勾「申请受限权限」里的 `READ_PASTEBOARD` → 下载 `.p7b` →
@@ -689,11 +691,43 @@ AGC 上传图按《素材规范》PC/2in1 档：1 张，**216×216 或 1024×102
 ## 7. 审核可能问询的点（提前准备说明）
 
 - **包内有大量 Python 脚本 + 内嵌 CPython 解释器**：`rawfile/python311.zip`、
-  `rawfile/freecad-runtime.zip` 里是随包固定的 FreeCAD Python 模块，**不下载、不热更新、
-  不执行外部代码**。hvigor 打包时已经给出警告
-  `Unexpected source code files packaged in 'entry'`（指向
-  `rawfile/freecad_headless_acceptance.py`）。建议随提审附一句说明。
-- **INTERNET 权限用途**：freecad-ai 工作台访问用户自选的 LLM 端点。
+  `rawfile/freecad-runtime.zip` 里是随包固定的 Python 3.11 解释器与 FreeCAD 自带模块。
+  hvigor 打包时会警告 `Unexpected source code files packaged in 'entry'`。随提审附说明，
+  成稿见 `store-assets/appgallery-review-notes-zh-CN.txt` 第五、六部分。
+
+  > **2026-09-16 更正**：本节曾写作"不下载、不热更新、不执行外部代码"，**这是错的**，
+  > 已按实测代码改写。三条通道确实存在，写在下面，别再用"零外部代码"的口径去答审核 ——
+  > 一旦审核自己去包内翻到，比主动申报难解释得多。
+  >
+  > | 通道 | 代码位置 | 默认状态 | 性质 |
+  > | --- | --- | --- | --- |
+  > | 插件管理器下载并安装社区插件 | `Mod/AddonManager/addonmanager_utilities.py:444`（`urllib.request.urlopen` 兜底）、`AddonCatalogCacheCreator.py:349`（`requests.get(zip_url)`） | 需用户打开「工具 → 插件管理器」并点安装；**启动时零网络**（`FirstRunDialog` 与 `startup()` 都在对话框内） | 用户主动下载第三方 Python 代码并运行 |
+  > | AI 工作台执行模型生成的建模脚本 | `freecad_ai/core/executor.py:709` `exec(code, namespace)` | `auto_execute = False`，须用户在界面点击执行 | 用户确认后执行远端生成的代码 |
+  > | 本地 MCP 服务监听 | `freecad_ai/mcp/transport.py`（`bind()`/`serve()`） | `127.0.0.1:3000` 回环、带 bearer token、由设置页显式启动 | 仅供本机外部工具接入，不对外监听 |
+  >
+  > 可守住的口径（这几条都是真的、可当场验证）：**不下载可执行文件、不做应用自更新/热更新、
+  > 不替换包内代码、不绕过应用市场动态加载功能、无远程控制通道、无内置服务商密钥、
+  > 不上传用户模型与剪贴板内容**。AddonManager 的 `git fetch` 路径在本机无效（沙箱内无
+  > `git` 二进制），但它有 HTTP 下载 zip 的兜底，所以"没有 git 所以装不了插件"**不能**当作
+  > 免责理由。
+  >
+  > **若审核以插件管理器为由驳回**：它进包走的是 `stage-gui-hap.sh:322` 那条整体打包
+  > `zip -q -r … Mod Ext share`，所以有两条路 —— ① 省事：在该行的 `-x` 排除列表里加
+  > `'Mod/AddonManager/*'`（并把 `FREECAD_BUILD_ADDONMGR` 设 OFF，否则
+  > `stage-gui-hap.sh:393` 会断言"打包后的 runtime 缺少 Addon Manager 注册脚本"而报错，
+  > `verify-gui-hap.sh:275` 同理）；
+  > ② 彻底：用 `FREECAD_BUILD_ADDONMGR=OFF` 重配重编（`configure-freecad-gui-qt6-ohos.sh:43`
+  > 转成 `-DBUILD_ADDONMGR=OFF`），install 前缀里就不再有它。
+  > 无论走哪条，**同时删掉应用介绍第六节末"应用内提供插件管理器（Addon Manager）入口"
+  > 这句** —— 介绍文案与包内容必须一致。
+- **INTERNET 权限用途**：两处，且都需用户主动触发 —— ① freecad-ai 工作台访问用户自选的
+  LLM 端点；② 插件管理器拉取插件目录与插件包。成稿见
+  `store-assets/appgallery-review-notes-zh-CN.txt` 第四部分。
+  （注意：对外口径必须与 `store-assets/appgallery-text-zh-CN.txt` 第 62 行的应用介绍一致
+  —— 那里已经写了"网络权限用于插件管理，以及 FreeCAD AI 工作台"，别再只提 AI。）
+- **READ_PASTEBOARD 权限说明 + 场景视频**：AGC 的受限权限复核项。理由天然成立（Qt 自绘
+  界面用不了系统粘贴控件），成稿与 60 秒分镜脚本见 `store-assets/appgallery-review-notes-zh-CN.txt`
+  第一、二、三部分。**视频须真机录制、不可用模拟器**，演示时用假 Key。
 - **隐私政策**：有网络访问 + 用户输入（含 API Key），需要提供隐私政策链接，并在其中说明
   Key 的存放位置（沙箱 `freecad-home/` 配置文件）。**正文已完成**，见下文「隐私政策」小节。
 - 包内 185 个 `.so` 全部走 HAP `libs/`（保持签名），rawfile 里不放 native ELF。
