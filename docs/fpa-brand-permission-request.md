@@ -10,8 +10,9 @@
 | 收件人 | `fpa@freecad.org`（FPA 理事会，见 `fpa.freecad.org` 的 Contact 一节） |
 | 备选渠道 | FreeCAD 论坛给理事会成员发私信（`forum.freecad.org`，成员名单在 `fpa.freecad.org/handbook/people/roster.html`） |
 | 期望周期 | **按周算，别按天算**。理事会志愿者开会投票，没有 SLA。发出后同步走 A 路（改名+换图标），不要等 |
-| 期望结果 | 两种都能接受：① 出具一纸"允许使用名称与 logo"的说明（给商店看的，不必是正式商标许可）；② 明确说不便授权 —— 那就按 A 路改名，本信也完成了"主动告知、避免被当成仿冒者"的作用 |
-| 为什么要发 | FreeCAD wiki 明确说社区会主动发现并举报 "rebranded versions"。我们改成一个不含 FreeCAD 的名字继续分发，**更容易被误判成仿冒**。主动写信留痕，是保护自己 |
+| 期望结果 | **别指望拿到能给 AGC 用的权利文件** —— 成功率约 15~20%，依据见 `appgallery-release.md` 7.6。一封信的真实价值是拿到回信：① 确认"改名 + 保留'基于 FreeCAD'的署名"就是我们该走的路；② 确认这类衍生版是否需要在某处登记，以免被社区当成仿冒 |
+| 为什么要发 | wiki 明确说社区会主动发现并举报 "rebranded versions"。我们把名字改成不含 FreeCAD 的样子继续分发，**更容易被误判成仿冒**。主动写信留痕是保护自己；同时这是唯一能探明"FPA 是否愿意把鸿蒙移植接纳为官方项目"的方式 |
+| 时机 | 与 A 路**并行**，不阻塞：发完就按 A 动工，别等回信（理事会按周计） |
 
 正文在下面代码块里，**整块复制**即可。
 
@@ -50,26 +51,36 @@ The store asks me to either remove the similar content, or provide a written
 authorization or proof that I hold the rights. I understand from your brand
 guidelines that the FreeCAD name and logo are owned by the FPA and that third
 parties may use the logo only to credit FreeCAD or link to freecad.org, not as
-their own product identity — which is exactly why I am asking instead of
-assuming. Two questions:
+their own product identity.
 
-1. Would the FPA be willing to let this port keep the "FreeCAD" name and use the
-   official symbol as its store icon? If the answer is yes, would you be able to
-   issue a short written statement to that effect (a store-facing letter is
-   enough — I am not asking for a trademark license agreement), or tell me which
-   wording you would accept? I will follow the brand guidelines exactly:
-   unmodified logo, official colours, no added effects, attribution and a link to
-   freecad.org in the app.
+I have also read two documents that seem to already answer most of this, and I
+would rather follow them than argue with the store. Your wiki "Branding" page says
+third parties may build their own applications on top of FreeCAD - including a
+completely redesigned one - and its warning is aimed specifically at renaming
+FreeCAD into a closed-source product. The "License" page says derivatives that are
+not open-source are prohibited by the LGPL, which implies an open-source renamed
+port is acceptable. This port is open-source, and it already tells users that it
+is based on FreeCAD.
 
-2. If you would rather not authorize that, I will rename the application and
-   replace the icon with an original design. Is there a form of words the FPA
-   prefers for a port like this — for example "<Name>, based on FreeCAD
-   <version>"? I want the result to be something the community recognises as a
+So, two questions:
+
+1. If the FPA is willing, would it be possible for this port to keep the "FreeCAD"
+   name and use the official symbol as its store icon? A short store-facing
+   statement would be enough - I am not asking for a trademark license agreement -
+   or please tell me the wording you would accept. I will follow the brand
+   guidelines exactly: unmodified logo, official colours, no added effects,
+   attribution and a link to freecad.org in the app.
+
+2. If not - which I fully understand, and will comply with immediately - I will
+   rename the application and replace the icon with an original design. Could you
+   confirm the form of words you prefer for a port like this (for example
+   "<Name>, based on FreeCAD <version>"), and whether ports like this should be
+   registered or listed somewhere? My goal is that the result is recognisable as a
    legitimate port rather than a rebranded derivative.
 
-For transparency I would also welcome knowing whether there is a place where
-ports like this should be registered or listed, so that neither users nor the
-community mistake it for an unendorsed commercial product.
+Either way, an explicit "please follow the Branding path" from the FPA would be
+very helpful to me: it settles the question, and I will proceed that way the same
+day.
 
 I am happy to provide anything that helps you decide: the complete patch list
 against 1.1.2, build instructions, screenshots, a walkthrough of the app, or the
