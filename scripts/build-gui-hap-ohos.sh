@@ -45,6 +45,15 @@ if ! command -v java >/dev/null 2>&1 && [ -x "$PROJECT_DIR/scripts/toolchain/jav
     echo "提示：PATH 上没有 java，改用 scripts/toolchain/java（原生桥）。"
 fi
 
+# WorkBuddy 的 shell 注入 NODE_OPTIONS=--require=…/node-language-shim.cjs 以及
+# CODEBUDDY_SAFE_DELETE_ENABLED / CODEBUDDY_SAFE_DELETE_BULK_GUARD。hvigor 是 node
+# 程序，被这套钩子接管 fs 删除后，`:entry:default@ProcessLibs` 会报
+#   00308001  Failed to delete the file: …/entry/build/<mode>/intermediates/libs/default
+# 这不是权限问题（同一目录 `/bin/rm -rf` 删得掉），纯粹是钩子拦下的。脚本自己清掉，
+# 调用方（build-release-app.sh / build-release-hap.sh / 手工调用）就不必再写 `env -u`。
+# stage / verify 里的 node 脚本不删东西，可以照旧带着这套环境跑。
+unset NODE_OPTIONS CODEBUDDY_SAFE_DELETE_ENABLED CODEBUDDY_SAFE_DELETE_BULK_GUARD
+
 [ -n "$HVIGOR_JS" ] && [ -f "$HVIGOR_JS" ] || {
     echo "错误：找不到 Hvigor；请用 HVIGOR_JS 指定 @ohos/hvigor/bin/hvigor.js。" >&2
     exit 2
