@@ -2,23 +2,23 @@
   "string": [
     {
       "name": "app_name",
-      "value": "FreeCAD"
+      "value": "元构CAD"
     },
     {
       "name": "module_desc",
-      "value": "FreeCAD v1.1.2 GUI on HarmonyOS (Qt6)"
+      "value": "元构CAD — FreeCAD 1.1.2 GUI port on HarmonyOS (Qt6)"
     },
     {
       "name": "QAbility_desc",
-      "value": "FreeCAD GUI Qt application"
+      "value": "元构CAD main window (Qt)"
     },
     {
       "name": "reason_internet",
-      "value": "Connect to the configured LLM provider from the FreeCAD AI workbench"
+      "value": "Connect to the configured LLM provider from the 元构CAD AI workbench"
     },
     {
       "name": "reason_read_pasteboard",
-      "value": "Paste text you copied elsewhere (for example an API key) into FreeCAD's own input fields"
+      "value": "Paste text you copied elsewhere (for example an API key) into 元构CAD's own input fields"
     }
   ]
 }

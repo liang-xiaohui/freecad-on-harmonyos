@@ -1,6 +1,8 @@
-# FreeCAD v1.1.2 on HarmonyOS PC
+# 元构CAD — FreeCAD v1.1.2 on HarmonyOS PC
 
 将 **FreeCAD v1.1.2** 原生移植到 HarmonyOS PC（`arm64-v8a`）的工程记录。
+上架发行的应用名为「**元构CAD**」，名称与图标均为本项目自有（见
+[AppGallery 发布 · 7.6 节](docs/appgallery-release.md)）。
 
 > 唯一上游基线是 FreeCAD v1.1.2。旧的 0.21.2 构建只属于历史验证，不再作为移植产物或回退路线。
 

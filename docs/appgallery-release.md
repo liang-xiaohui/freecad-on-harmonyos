@@ -618,16 +618,16 @@ AGC 下载的 `.p7b` 逐字节相同、证书链叶子公钥指纹仍是 `8e3b8d
 
 | 角色 | 透明要求 | 本项目的实测值 |
 | --- | --- | --- |
-| 分层**前景** `foreground.png` | **必须**有透明区域 | alpha `0~255`，307749 个全透 + 1429 个抗锯齿半透 |
+| 分层**前景** `foreground.png` | **必须**有透明区域 | alpha `0~255`，702058 个全透（环外与环内留白） |
 | 分层**背景** `background.png` | **必须**全不透明 | alpha `255~255`，0 个透明像素 |
-| **AGC 上传图** `freecad-appgallery-1024.png` | **不允许**含透明像素 | alpha `255~255`，0 个透明像素 |
+| **AGC 上传图** `yuankou-appgallery-1024.png` | **不允许**含透明像素 | alpha `255~255`，0 个透明像素 |
 
 判据是 **alpha 极值**，不是肉眼——"看着像实心"的图常年带着几千个半透明抗锯齿像素而被驳回。
 自查一行搞定：
 
 ```sh
 python3 -c "import sys;sys.path.insert(0,'tools/icon');import pngtool as P;\
-w,h,p=P.read_png('store-assets/icon/freecad-appgallery-1024.png');\
+w,h,p=P.read_png('store-assets/icon/yuankou-appgallery-1024.png');\
 a=sorted(set(p[3::4]));print(f'{w}x{h} alpha {a[0]}~{a[-1]} 透明像素{p[3::4].count(0)}个')"
 ```
 
@@ -650,7 +650,7 @@ AGC 上传图按《素材规范》PC/2in1 档：1 张，**216×216 或 1024×102
 
 | 文件 | 位置 | 说明 |
 | --- | --- | --- |
-| `foreground.png` | `AppScope/resources/base/media/` 与 `entry/src/main/resources/base/media/` | 透明底官方 logo，1024×1024，图形撑满（无内间距） |
+| `foreground.png` | `AppScope/resources/base/media/` 与 `entry/src/main/resources/base/media/` | 透明底自有图形（八段切角环 + 白色「元」），1024×1024，图形撑满（无内间距） |
 | `background.png` | 同上 | 纯色 `#1F2430`，1024×1024，**完全不透明** |
 | `layered_image.json` | 同上 | `{"layered-image":{"background":"$media:background","foreground":"$media:foreground"}}` |
 
@@ -669,18 +669,76 @@ AGC 上传图按《素材规范》PC/2in1 档：1 张，**216×216 或 1024×102
 
 | 文件 | 用途 |
 | --- | --- |
-| `freecad-appgallery-1024.png` | **上传这一张**：1024×1024、15.5 KB、PNG、正方形 |
-| `freecad-appgallery-216.png` | 同一张图的 216×216 版本，备用 |
+| `yuankou-appgallery-1024.png` | **上传这一张**：1024×1024、PNG、正方形、完全不透明 |
+| `yuankou-appgallery-216.png` | 同一张图的 216×216 版本，备用（AGC 也接受 216 上传） |
 | `foreground-1024.png` / `background-1024.png` | 分层素材原样留档，方便以后用 DevEco 的 Image Asset 重新生成 |
 
-**背景色为什么是 `#1F2430`**：官方 logo 由 FreeCAD 红 `#CB333B`、蓝 `#418FDE`、白 `#FEFEFE`
-三色构成，白色 "F" 是主体之一。纯白/浅灰底会让白 F 与背景融为一体（红块视觉上被切成两片），
-红底/蓝底会让同色元素消失，只有深色底能把三个元素全保住；而华为又要求背景**不透明**，
+**背景色为什么是 `#1F2430`**：图标主体用的是 FreeCAD 那一套品牌色（红 `#CB333B`、
+蓝 `#418FDE`、浅红 `#FF585D`）与白色字形。纯白/浅灰底会让白色字形与背景融为一体，
+红底/蓝底会让同色元素消失，只有深色底能把这几个元素全保住；而华为又要求背景**不透明**，
 所以深色实心底是最优解。
 
 > 想换背景色：把 `store-assets/icon/background-1024.png` 与两处 `background.png` 换成同色
-> 重新生成，保持包内包外一致即可。生成脚本 `tools/icon/pngtool.py`——本机没有 Pillow，
-> 也没有任何 SVG 渲染器，PNG 的读/写/缩放是纯 Python 手写的（`zlib` + `struct`）。
+> 重新生成，保持包内包外一致即可。`tools/icon/pngtool.py` 负责 PNG 的读/写/缩放（纯 Python
+> 手写，`zlib` + `struct`——本机没有 Pillow，也没有任何 SVG 渲染器）。
+
+### 图标的造型与生成方式（2026-09-18 · 第二版）
+
+**现用造型**：完整保留官方 logo 中除白色 "F" 之外的全部元素（45° 斜切红边带 `#CB333B` /
+`#FF585D` ＋ 蓝色齿轮 `#418FDE`），把中央那个白色 "F" 换成白色「元」，并把 "F" 挖出的缺口
+用深红补平。
+
+**一个必须先知道的事实（实测得出）**：官方 logo 的 4 个 path 里，白 "F" 那层与红蓝层
+**完全不相交** —— F 字形区域内红蓝图层的覆盖度是 **100% 透明**。也就是说 "F" 不是"盖在"
+红蓝图形上，而是**嵌在**红蓝图形中间的一块。把 "F" 拿掉，图形就缺一个 F 形的洞，
+所以换字之前必须先把那个洞补上（补深红，因为它三面邻接深红）。
+
+**生成器** `tools/icon/make_yuankou_v3.js`：
+
+- **直接解析上游 SVG**（`org.freecad.FreeCAD.svg` 的 path `d`，支持 `1e-6` 这类科学计数法、
+  `M` 之后的隐式 lineto、`S/T` 反射控制点等），不手抄几何 —— 上游一改，重跑即跟随；
+- 光栅化自写：扫描线 ＋ y 方向 12 倍子采样 ＋ x 方向解析积分，支持 `evenodd`（齿轮用它）
+  与 `nonzero`；只扫轮廓实际占据的 y 区间；
+- **图层合成用「按覆盖度加权平均」，不是画家算法的 over**。官方 4 层互不重叠、只在边界
+  背靠背共享边；共享边像素两侧各只有 ~0.5 覆盖度，用 over 会被算成"另外 0.25 是背景"，
+  alpha 只剩 0.75，在深色底上显出一条暗接缝。加权平均给出 0.5+0.5=1.0 的完整覆盖，边界无缝。
+  **但白色「元」是覆盖层，仍必须用标准 over** —— 它压在红底上，加权平均会把白色稀释成
+  红白中间色（实测会冒出 `#E5999D` 这种混合色）；
+- **F 缺口补红**与深红层同色且共享边，合并成同一个 shape 按 `sum` 求并集；
+- **「元」的尺寸由二分搜索自动收敛**到"刚好不越出红蓝轮廓"：字形的全部轮廓点（含加粗偏移）
+  必须落在底图掩膜内，5×5 邻域一起查。实测上限字高 482px（不加粗）—— 卡住它的是**宽度**：
+  汉字是方形字、官方 F 是窄高字（12:16），等比放大后先碰到左右边界；
+- **仿粗体**用多方向平移取并集。方向数是关键：相邻两个方向的平移尖点间距 = `2r·sin(Δθ/2)`，
+  24 方向（15°）、r=16px 时达 **4.2px**，笔画尖端会留下一圈可见毛刺；**48 方向降到 1.0px**；
+- 字形取 `/system/fonts/FZHeiT-SC-Bold.ttf`（**方正黑体 Bold**）。官方 F 的笔画粗达字高的
+  **25%**（4/16 单位），是超 Black 级；实测各字体「元」的笔画/字高：方正黑体 Bold **15.1%**、
+  HarmonyOS Sans SC 10.2%、方正黑体 Regular 9.8%、方正等线 6.9% —— 取最粗的 Bold 再补膨胀。
+
+```sh
+node tools/icon/make_yuankou_v3.js                       # 默认输出 ~/codex-freecad-artifacts/icon-yuankou
+node tools/icon/make_yuankou_v3.js --svg <svg路径> --out <目录>
+```
+
+一次输出：`official-render.png`（官方 4 层原样重渲染）、`diag-keep-only.png`（红蓝无 F）、
+`diag-filled-shape.png`（补红后）、`diag-glyph-on-red-{A,B}.png`（白字落在纯红底上，查笔画是否完整）、
+`foreground-v3{A..D}.png`（透明底，包内用）、`appgallery-{1024,216}-v3{A..D}.png`、
+`background-v3.png`，以及对照图 `review-sheet.png`（官方 / 补红无字 / A~D 共 6 行 × 4 种桌面色）。
+
+**自检**：用同一套渲染器把官方 4 层原样重渲染，主色占比 `#418FDE 31.6% / #FEFEFE 27.1% /
+#CB333B 25.3% / #FF585D 15.5%`，与 git HEAD 里那张官方 `foreground.png`（`31.5 / 27.3 /
+25.3 / 15.6`）逐项吻合 —— 证明"保留的元素"确实与上游一致。
+
+当时装入的是 **B 档**（贴边 100%、字高 457px、加粗 16px、白色占 20.5%）。换档只需把对应的
+`foreground-v3X.png` / `appgallery-*-v3X.png` 覆盖到那几处路径，再跑
+`scripts/build-gui-hap-ohos.sh`。
+
+> ⚠️ **这版造型与 FPA 商标的近似度很高**：配色、构图、45° 斜切与齿轮造型全部照搬，只换了
+> 中央字母。`docs/fpa-brand-permission-request.md` 的 B 路因此更值得发信；
+> 若 B 被拒，A 路的"改名 + 换名号"还需再做一版**真正重画造型**的图标（第一版 v1 方环
+> 仍留在 `tools/icon/make_yuankou_icon.js`，可作起点）。详见 7.6。
+
+> 早期那版**自有造型**（八段切角方环 ＋ 白色「元」，`make_yuankou_icon.js`）保留在仓库里，
+> 它换掉了具体图形、只沿用品格语言，与官方 logo 的近似度低得多，是 B 路失败后的备选。
 
 ## 6. 版本号
 
@@ -1186,7 +1244,7 @@ JS，此项由用户在真机商店实搜完成）。所以驳回里那句"与�
 | --- | --- | --- | --- |
 | 1 | 明确告知用户"本应用基于 FreeCAD，FreeCAD 采用 LGPL" | 《License》页硬性条件 | 介绍文案已有此句，**保留，别删** |
 | 2 | 保持开源、提供源码 | 同上（条件 1/2 做不到就必须整包 LGPL 并公开源码） | 仓库已 public + 根 `LICENSE`，**已满足** |
-| 3 | 不使用 FPA logo 的任何造型与配色 | 商标 + 品牌指南"不得改动 / 不得用于你自己产品" | **必须重画造型**（换色不够） |
+| 3 | 不使用 FPA logo 的任何造型与配色 | 商标 + 品牌指南"不得改动 / 不得用于你自己产品" | ⚠️ **当前不满足**。现用图标（第二版）照搬了官方 logo 的 45° 斜切红边带与蓝齿轮造型、四个品牌色逐色相同，只把中央 "F" 换成「元」（2026-09-18 用户拍板）。若 B 路失败、必须走 A，这条得再做一版**真正重画造型**的图标 —— 第一版 v1 方环（`tools/icon/make_yuankou_icon.js`）即为此留的起点 |
 
 ### 为什么 B（要 FPA 授权书）概率不大
 
@@ -1213,7 +1271,7 @@ JS，此项由用户在真机商店实搜完成）。所以驳回里那句"与�
 | 路 | 做法 | 可行性 | 代价 |
 | --- | --- | --- | --- |
 | **A** | 改名 + 重画图标 | ✅ **上游文档化的正规路径（品牌化）**，不依赖任何外部方；守好上面三条即合规 | 丢掉"FreeCAD"一词的搜索辨识度；占用一次改名额度（1.12：**名称一年只能改 2 次**，图标/分类/标签同样"不得频繁更改"） |
-| **B** | 拿到 FPA 的同意函 / 授权书 | ⚠️ **约 25%（纯邮件）~ 35%（加论坛公开帖）**，依据见上一小节；因冲突对象已确认为 FPA 商标，**这份文件是有效的** | 保留原名（**图标仍必须重画**：AGC 第二条指控与 FPA 指南都要求）。失败要等 2~6 周才被告知，期间压着改名额度 |
+| **B** | 拿到 FPA 的同意函 / 授权书 | ⚠️ **约 25%（纯邮件）~ 35%（加论坛公开帖）**，依据见上一小节；因冲突对象已确认为 FPA 商标，**这份文件是有效的** | 保留原名与**现用图标**（第二版图标保留了官方红蓝造型，与 FPA 商标近似度高，只有拿到授权才站得住）。失败要等 2~6 周才被告知，期间压着改名额度 |
 | C | 申诉（修改建议2 → 50120） | ❌ 走不通 | 50120 是《侵权投诉处理指引》，是**权利人对他人**投诉的通道；我们不是 FreeCAD 商标的权利人，没有申诉的权利基础 |
 | D | 名称加后缀（"FreeCAD 鸿蒙版"之类） | ❌ 别试 | 既仍含商标术语（1.2）、又仍属"相似"（1.3），大概率二驳；还白烧一次改名额度 |
 
@@ -1222,7 +1280,7 @@ JS，此项由用户在真机商店实搜完成）。所以驳回里那句"与�
 | 时间 | 动作 | 理由 |
 | --- | --- | --- |
 | D0 | 发出 `docs/fpa-brand-permission-request.md`（邮件） | 成本≈0；信里的筹码现在有实质内容（非商业、开源、真源码、图标本就要重画） |
-| D0 起 | 照常做 A 的准备工作（重画图标、改写文案、改 `string.json`） | **这些工作无论 B 结果如何都不浪费**——图标本来就必须换，文案本来就必须改成"基于 FreeCAD" |
+| D0 起 | 照常做 A 的准备工作（换图标、改写文案、改 `string.json`） | ✅ 第一轮已完成（2026-09-18）。这些工作无论 B 结果如何都不浪费 —— 图标本来就要换、文案本来就要改成"基于 FreeCAD"；**唯一可能要返工的是图标**：现用这版保留了官方造型，若走 A 得换成真正重画的 |
 | D7 无回复 | 去 `forum.freecad.org` 发一条公开帖问同样的问题 | 邮件容易沉；公开帖通常几天内就有社区或理事回话，**顺带留痕，防止日后被当成仿冒者**。别在 D0 就公开——先给理事会一个私下答复的机会 |
 | D14 止损 | 回信同意 → 用原名提交；无回复 / 被拒 → **立刻用新名提交** | 名称一年只能改 2 次，等不起太久；AGC 那边没有硬 deadline，但也没必要拖成月 |
 
@@ -1236,10 +1294,10 @@ JS，此项由用户在真机商店实搜完成）。所以驳回里那句"与�
 | --- | --- | --- |
 | `AppScope/resources/base/element/string.json` | `app_name = FreeCAD` | 改新名 |
 | `entry/src/main/resources/base/element/string.json` | `app_name = FreeCAD` | 同上 |
-| `AppScope/resources/base/media/{foreground,background}.png` | 官方 logo + 深蓝灰底 | **重画**（改色不够：形状也得换） |
-| `entry/src/main/resources/base/media/{foreground,background}.png` | 同上（与 AppScope 两份 md5 相同） | 同上 |
-| `AppScope/.../media/app_icon.png`、`entry/.../media/icon.png` | 扁平图（`startWindowIcon` 用后者） | 跟着重出 |
-| `store-assets/icon/*.png` | AGC 上传图（含 1024 主图与 216 缩略） | 跟着重出 |
+| `AppScope/resources/base/media/{foreground,background}.png` | 官方 logo + 深蓝灰底 | ✅ **已出第二版**（2026-09-18）：保留红蓝全部元素、"F" 换「元」、F 缺口补深红 |
+| `entry/src/main/resources/base/media/{foreground,background}.png` | 同上（与 AppScope 两份 md5 相同） | ✅ 同上（两处 md5 已核一致） |
+| `AppScope/.../media/app_icon.png`、`entry/.../media/icon.png` | 扁平图（`startWindowIcon` 实际用的是 `transparent_start_window.svg`，这两个只是单层源图） | ✅ 已跟着重出（改成带底的合成图） |
+| `store-assets/icon/*.png` | AGC 上传图（含 1024 主图与 216 缩略） | ✅ 已跟着重出（`yuankou-appgallery-{1024,216}.png`） |
 | `store-assets/appgallery-text-zh-CN.txt` | 名称字段 + 介绍里的自称 | 改名称字段；介绍首句改成"…，基于 FreeCAD 1.1.2（非官方社区移植）" |
 | `store-assets/appgallery-review-notes-zh-CN.txt` | 同上 | 同上 |
 | `PRIVACY.md` / `PRIVACY.en.md` / `README.md` | 自称 FreeCAD | 改成"本应用是 X，基于 FreeCAD" |
@@ -1353,4 +1411,16 @@ JS，此项由用户在真机商店实搜完成）。所以驳回里那句"与�
    信稿（已按"已知品牌化路径 + 只问名称 + 图标必换"重写）：
    `docs/fpa-brand-permission-request.md`。若走 A，连带改动清单、命名约束与三条必守条件见 7.6；
    名称一年只能改 2 次，一次做到位。
+
+   **进展（2026-09-18 第三轮 · 用户已拍板）**：
+   - **名称定为「元构CAD」**。两处 `string.json` 的 `app_name` 已改，已重出 HAP 并确认
+     `resources.index` 里能读到。
+   - **图标已出第二版**：按用户要求"完整保留除白色 F 之外的所有元素，把 F 换成元" ——
+     即保留 45° 斜切红边带与蓝齿轮的全部造型、四个品牌色逐色相同，只换中央字母，
+     并把 F 挖出的缺口补成深红。做法、自检与档位见第 5 节，装入的是 **B 档**。
+   - ⚠️ **这版造型与 FPA 商标的近似度很高**（配色与构图全照搬）。所以：B 路更值得发信；
+     **若 B 失败而必须走 A，还得再出一版真正重画造型的图标**才够得上"品牌化"。
+   - 文案类改动（`PRIVACY*.md` / `README.md` / 两个商店文本 / promo 套图）已同步完成。
+   - **剩余人工动作**：上传 `.app` 提审、按分镜录 60 秒场景视频、备案栏勾「单机 APP」、
+     决定要不要发那封 FPA 信。
 

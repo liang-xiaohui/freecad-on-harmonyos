@@ -1,7 +1,7 @@
 {
   "brand": {
-    "name": "FreeCAD",
-    "tag": "for HarmonyOS PC",
+    "name": "元构CAD",
+    "tag": "FreeCAD 1.1.2 移植版",
     "total": 5
   },
   "card": { "radius": 16, "border": 2 },
@@ -14,7 +14,7 @@
       "accent": "#4A9EFF",
       "accentB": "#1B6FE0",
       "shot": "screenshot_20260915_184421_com.liangxiaohui.freecad.jpg",
-      "out": "freecad-agc-01-parametric-1920x1080.png"
+      "out": "yuankou-agc-01-parametric-1920x1080.png"
     },
     {
       "id": "02",
@@ -24,7 +24,7 @@
       "accent": "#2FD4A8",
       "accentB": "#0E9E88",
       "shot": "screenshot_20260915_184445_com.liangxiaohui.freecad.jpg",
-      "out": "freecad-agc-02-sketcher-1920x1080.png"
+      "out": "yuankou-agc-02-sketcher-1920x1080.png"
     },
     {
       "id": "03",
@@ -34,7 +34,7 @@
       "accent": "#FFB020",
       "accentB": "#F0620A",
       "shot": "screenshot_20260915_184209_com.liangxiaohui.freecad.jpg",
-      "out": "freecad-agc-03-fem-1920x1080.png"
+      "out": "yuankou-agc-03-fem-1920x1080.png"
     },
     {
       "id": "04",
@@ -44,7 +44,7 @@
       "accent": "#A78BFA",
       "accentB": "#6D4AE0",
       "shot": "screenshot_20260915_184356_com.liangxiaohui.freecad.jpg",
-      "out": "freecad-agc-04-bim-1920x1080.png"
+      "out": "yuankou-agc-04-bim-1920x1080.png"
     },
     {
       "id": "05",
@@ -54,7 +54,7 @@
       "accent": "#5AD1F0",
       "accentB": "#0E8FBF",
       "shot": "screenshot_20260915_184505_com.liangxiaohui.freecad.jpg",
-      "out": "freecad-agc-05-techdraw-1920x1080.png"
+      "out": "yuankou-agc-05-techdraw-1920x1080.png"
     }
   ]
 }

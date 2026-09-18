@@ -1,7 +1,7 @@
-# FreeCAD for HarmonyOS 隐私政策
+# 元构CAD 隐私政策
 
-**生效日期**：2026 年 9 月 15 日　**版本**：1.0
-**适用应用**：FreeCAD（HarmonyOS PC / 2in1，应用包名 `com.liangxiaohui.freecad`）
+**生效日期**：2026 年 9 月 15 日（2026 年 9 月 18 日随应用更名为「元构CAD」修订）　**版本**：1.1
+**适用应用**：元构CAD（基于 FreeCAD 1.1.2 的社区移植版；HarmonyOS PC / 2in1，应用包名 `com.liangxiaohui.freecad`）
 
 本应用是一款**完全在本机运行**的三维参数化 CAD 软件。它**不设账号体系，不收集、不上传、不共享你的个人信息**。本政策说明它会做哪些联网动作、申请了哪些权限、你的数据存放在哪里。
 
@@ -11,7 +11,7 @@
 
 - **开发者**：liangxiaohui（个人开发者）
 - **联系方式**：项目仓库 Issues 页面 <https://github.com/liang-xiaohui/freecad-on-harmonyos/issues>；也可通过 AppGallery 本应用详情页公示的开发者信息与我们联系。
-- **政策适用版本**：FreeCAD 1.1.2 移植版（`versionName` 0.1.0 起的所有版本），仅面向 HarmonyOS PC 与 2in1 设备。
+- **政策适用版本**：元构CAD（FreeCAD 1.1.2 移植版，`versionName` 0.1.0 起的所有版本），仅面向 HarmonyOS PC 与 2in1 设备。
 
 ---
 
@@ -112,7 +112,11 @@ FreeCAD AI 内置了若干常见服务商的可选端点（如 OpenAI、Anthropi
 
 ## 十二、与 FreeCAD 官方项目的关系
 
-本应用基于开源项目 [FreeCAD](https://www.freecad.org/) 1.1.2 移植，遵循 GNU 宽通用公共许可证第 2.1 版（LGPL-2.1）分发，是**非官方的社区移植版本**，与 FreeCAD 官方项目及其名称持有人不存在隶属、赞助或授权关系。上游 FreeCAD 的隐私政策见 [FreeCAD/FreeCAD/PRIVACY_POLICY.md](https://github.com/FreeCAD/FreeCAD/blob/main/PRIVACY_POLICY.md)，其中同样声明不收集、不传输、不共享任何个人数据。
+本应用名为「**元构CAD**」，基于开源项目 [FreeCAD](https://www.freecad.org/) 1.1.2 移植，遵循 GNU 宽通用公共许可证第 2.1 版（LGPL-2.1）分发，是**非官方的社区移植版本**，与 FreeCAD 官方项目及其名称持有人不存在隶属、赞助或授权关系。
+
+- **名称与图标**：本应用的名称「元构CAD」与图标均为本项目自有，**没有使用 FreeCAD 项目的名称或其商标图形**（图标为原创造型与自绘配色，不是 FreeCAD 官方 logo 的改绘）。FreeCAD 的名称与 logo 是 FreeCAD Project Association（FPA）持有的商标。
+- **署名义务**：FreeCAD 采用 LGPL-2.1 授权。按该许可的要求，本应用在应用介绍首句、开源声明与「关于」信息中均明确告知用户"本应用基于 FreeCAD、FreeCAD 采用 LGPL"，并提供公开可获取的上游源码地址与本地修改内容。
+- **上游隐私政策**：[FreeCAD/FreeCAD/PRIVACY_POLICY.md](https://github.com/FreeCAD/FreeCAD/blob/main/PRIVACY_POLICY.md)，其中同样声明不收集、不传输、不共享任何个人数据。
 
 ---
 
@@ -121,6 +125,7 @@ FreeCAD AI 内置了若干常见服务商的可选端点（如 OpenAI、Anthropi
 | 版本 | 日期 | 说明 |
 | --- | --- | --- |
 | 1.0 | 2026-09-15 | 首次发布，随上架首版（基于 FreeCAD 1.1.2） |
+| 1.1 | 2026-09-18 | 应用更名为「元构CAD」并更换为自有图标；补充第十二节的名称与图标权属说明。数据收集与权限行为无任何变化 |
 
 ---
 

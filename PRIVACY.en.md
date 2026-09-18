@@ -1,7 +1,7 @@
-# FreeCAD for HarmonyOS Privacy Policy
+# 元构CAD (Yuankou CAD) Privacy Policy
 
-**Effective date**: September 15, 2026 · **Version**: 1.0
-**Applies to**: FreeCAD (HarmonyOS PC / 2in1, bundle name `com.liangxiaohui.freecad`)
+**Effective date**: September 15, 2026 (revised September 18, 2026, when the app was renamed to 元构CAD) · **Version**: 1.1
+**Applies to**: 元构CAD — a community port of FreeCAD 1.1.2 (HarmonyOS PC / 2in1, bundle name `com.liangxiaohui.freecad`)
 
 This app is a fully **local** 3D parametric CAD application. It has **no account system and does not collect, upload or share your personal information**.
 
@@ -110,7 +110,11 @@ Material changes will come with an updated version number and effective date, pu
 
 ## 12. Relation to the upstream FreeCAD project
 
-This app is a port of the open-source [FreeCAD](https://www.freecad.org/) 1.1.2, distributed under the GNU Lesser General Public License v2.1 (LGPL-2.1). It is an **unofficial community port** and is not affiliated with, sponsored by or endorsed by the FreeCAD project or its trademark holder. The upstream privacy policy, which likewise states that no personal data is collected, is at [FreeCAD/FreeCAD/PRIVACY_POLICY.md](https://github.com/FreeCAD/FreeCAD/blob/main/PRIVACY_POLICY.md).
+This app, named **元构CAD**, is a port of the open-source [FreeCAD](https://www.freecad.org/) 1.1.2, distributed under the GNU Lesser General Public License v2.1 (LGPL-2.1). It is an **unofficial community port** and is not affiliated with, sponsored by or endorsed by the FreeCAD project or its trademark holder.
+
+- **Name and icon**: both the app name 元构CAD and its icon are original to this project. The app **does not use the FreeCAD name or any of its trademarked artwork** — the icon is an original design with its own shapes and palette, not a redraw of the FreeCAD logo. The FreeCAD name and logo are trademarks held by the FreeCAD Project Association (FPA).
+- **Attribution**: FreeCAD is licensed under LGPL-2.1. As that licence requires, the app states clearly — in the store description, in its open-source notice and in its About information — that it is based on FreeCAD and that FreeCAD is LGPL, and it provides the public upstream source address together with all local modifications.
+- **Upstream privacy policy**: [FreeCAD/FreeCAD/PRIVACY_POLICY.md](https://github.com/FreeCAD/FreeCAD/blob/main/PRIVACY_POLICY.md), which likewise states that no personal data is collected.
 
 ---
 
@@ -119,6 +123,7 @@ This app is a port of the open-source [FreeCAD](https://www.freecad.org/) 1.1.2,
 | Version | Date | Notes |
 | --- | --- | --- |
 | 1.0 | 2026-09-15 | First release, shipped with the first AppGallery submission (based on FreeCAD 1.1.2) |
+| 1.1 | 2026-09-18 | App renamed to 元构CAD with a new original icon; section 12 expanded with the name/icon ownership statement. No change to data collection or permissions |
 
 ---
 

@@ -129,10 +129,11 @@ function paintBackground(cv, accent) {
 function paintHeader(cv, cfg, idx, accent, logo) {
   const baseline = 84;
   cv.blitRGBA(logo.data, logo.w, logo.h, 72, 46, Math.round((BRAND_LOGO_H * logo.w) / logo.h), BRAND_LOGO_H);
-  const nameW = R.drawText(cv, fonts.latin, COPY.brand.name, {
+  // 品牌名含中文（元构CAD），必须用 SC 字体；HarmonyOS Sans SC 同时覆盖拉丁字母
+  const nameW = R.drawText(cv, fonts.sc, COPY.brand.name, {
     size: 30, x: 126, baseline, color: INK, weight: 0.016, align: 'left',
   });
-  R.drawText(cv, fonts.latin, COPY.brand.tag, {
+  R.drawText(cv, fonts.sc, COPY.brand.tag, {
     size: 19, x: 126 + nameW + 14, baseline: baseline - 1, color: INK_DIM, align: 'left',
   });
 
