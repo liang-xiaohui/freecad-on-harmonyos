@@ -659,7 +659,8 @@ for (let r = 0; r < rows.length; r++) {
     over(sheet, SHEET_W, x, y, small, CELL, CELL);
   }
 }
-label(sheet, '四列：白色桌面 / 中灰 / 近黑 / 应用背景色 #1F2430（圆角是系统遮罩预演，图标本身不含圆角）',
+label(sheet, '四列：白色桌面 / 中灰 / 近黑 / 应用背景色 ' + argOf('--bg', '#1F2430') +
+  '（圆角是系统遮罩预演，图标本身不含圆角）',
   MARGIN, SHEET_H - MARGIN - 10, 18, [0x33, 0x33, 0x33], SHEET_W, SHEET_H);
 writePNG(path.join(outDir, 'review-sheet.png'), SHEET_W, SHEET_H, sheet);
 
