@@ -28,6 +28,9 @@ PATH 首位被注入 `.../cli/vendor/shim/safe-bin`，其中有一个 `rm` 垫�
 - ⇒ **别用同一套 env 同时跑 stage 和 build**：先剥 PATH 目录（`rm` 就会回落到 `/bin/rm`，
   与变量无关），unset 只作用于 build 那一步。
 - 新写的脚本一律自卫：`RM=/bin/rm; [ -x "$RM" ] || RM=rm`。
+- ⚠️ **顺手 `export PATH="/bin:/usr/bin:$PATH"` 也能救 `rm`，但会连带把 `grep`/`sed` 等换成
+  toybox 版** —— 于是同一批命令里的 `grep 'a\|b'` 静默变成 0 命中，见下面第 7 条。
+  要么只剥目录（上面的写法），要么改 `-E`。
 
 ### 2. stage 失败但 build「成功」→ 产出残缺 HAP
 
@@ -75,13 +78,34 @@ PATH 首位被注入 `.../cli/vendor/shim/safe-bin`，其中有一个 `rm` 垫�
 `/data/local/tmp` 下有约 720MB 历史取证截图（**多项目共用**）→ 清理时按文件名**精确 `rm`**，
 不要用通配符。
 
-### 7. 本仓库里 Grep 工具可能静默失效
+### 7. `grep` 会因 PATH 变化在 GNU 与 toybox 之间切换（交替模式静默 0 命中）
 
-对本仓库的部分文件，专用 Grep 工具会返回 `No matches found`（即使内容确实存在）。
-定位行号时改用 Bash 的 `grep -n`：
+本机有**两个** `grep`：
+
+| 解析到的 | 版本 | `\|` 交替 |
+| --- | --- | --- |
+| `/data/service/hnp/bin/grep`（默认 PATH） | **GNU grep 3.12** | 正常 |
+| `/bin/grep` 或 `/usr/bin/grep` | **toybox 0.8.12** | ❌ **不支持**，静默返回 0 命中 |
+
+toybox 的 BRE 不认 `\|`，也不会报错 —— 只是什么都匹配不到。最小复现：
 
 ```bash
-grep -n "^#\{1,4\} " docs/appgallery-release.md | head -60
+printf 'aaa\nbbb\n' > /tmp/probe
+grep -c 'aaa\|bbb' /tmp/probe     # → 0（toybox）；2（GNU）
+grep -cE 'aaa|bbb' /tmp/probe     # → 2，两种都行
+```
+
+**它和上面第 1 条的修法直接冲突**：为了修 `rm` 而 `export PATH="/bin:/usr/bin:$PATH"`，
+会把 toybox 提到 PATH 前面，于是**同一条命令里的 `grep 'a\|b'` 全部变成 0 命中**。
+排查"为什么 grep 什么都找不到"时，先看是不是刚改过 PATH。
+
+- 稳妥写法：**一律用 `grep -E 'a|b'`**（ERE），或写单模式。
+- 需要精确复现 GNU 行为时用绝对路径 `/data/service/hnp/bin/grep`。
+- 早先记的「专用 Grep 工具对本仓库部分文件静默 no matches」就是这个现象的表象
+  （加上 `^#\{1,4\} ` 这类 GNU BRE 扩展），**不是文件本身的问题**。
+
+```bash
+grep -nE "^#{1,4} " docs/appgallery-release.md | head -60
 ```
 
 ---
