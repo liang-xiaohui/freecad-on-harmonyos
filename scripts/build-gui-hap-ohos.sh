@@ -32,6 +32,19 @@ if [ -z "${HVIGOR_JS:-}" ]; then
 fi
 NODE_BIN="${NODE_BIN:-$(command -v node 2>/dev/null || true)}"
 
+# 本机是 HarmonyOS host，没有 JRE，而 hvigor 的打包/签名任务硬编码
+# `java -jar <sdk>/toolchains/lib/<tool>.jar`，缺 java 就以 `spawn java ENOENT` 收场。
+# scripts/toolchain/java 是一个 sh 桥：把这类调用翻译给 SDK 自带的原生 arm64 工具
+# （app_packing_tool / hap-sign-tool），并补上桥壳原本提供的两处行为
+# （packing 工具需要显式的 `pack` 子命令；verify-profile 的 -outFile 要包成
+# {"content": ...}，否则 hvigor 会报假的 bundleName 不匹配 00303074）。
+# 只在 PATH 上找不到真正的 java 时才启用，装了 DevEco / JBR 的机器不受影响。
+if ! command -v java >/dev/null 2>&1 && [ -x "$PROJECT_DIR/scripts/toolchain/java" ]; then
+    PATH="$PROJECT_DIR/scripts/toolchain:$PATH"
+    export PATH
+    echo "提示：PATH 上没有 java，改用 scripts/toolchain/java（原生桥）。"
+fi
+
 [ -n "$HVIGOR_JS" ] && [ -f "$HVIGOR_JS" ] || {
     echo "错误：找不到 Hvigor；请用 HVIGOR_JS 指定 @ohos/hvigor/bin/hvigor.js。" >&2
     exit 2

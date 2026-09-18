@@ -130,3 +130,45 @@ FreeCAD 是 **dlopen 同进程调 main**，其 stdout/stderr **不会接入 hilo
 3. 用 `difflib` 重新生成补丁；
 4. 在临时 git 仓库里 `git apply --check`；
 5. 最后 `diff` 对照活源码树。
+
+## 三、打包期（hvigor）的两个陷阱
+
+### 1. 本机没有 JRE → `Error: spawn java ENOENT`
+
+hvigor 的打包/签名任务把命令**写死**成
+
+```
+java -Dfile.encoding=utf-8 -jar <sdk>/toolchains/lib/<tool>.jar …
+```
+
+HarmonyOS host 上没有 JRE（**只设 `JAVA_HOME` 也救不了**，它走的是 PATH）。而
+`app_packing_tool.jar` / `hap-sign-tool.jar` 只有 1~2 KB，是转发给原生工具的壳，自己跑不起来。
+
+- 仓库自带 `scripts/toolchain/java`（sh 桥）：把这类调用翻译给 SDK 自带的原生 arm64
+  `ohos_packing_tool` / `hap-sign_tool`，并补两处壳行为 —— `app_packing_tool` 需要显式
+  `pack` 子命令；`hap-sign-tool verify-profile -outFile` 的输出要包成 `{"content": …}`
+  （否则 hvigor 会报**假的** `00303074 bundleName does not match`）。
+- `build-gui-hap-ohos.sh` 只在 PATH 上找不到真 `java` 时把它挂到 PATH 前面，所以有 JRE
+  的机器行为不变。
+- 历史上"能通过"只是恰好环境里有 java，不是脚本对了。
+
+### 2. install 前缀带出构建树的绝对 RUNPATH → 审计报假 FAIL
+
+Qt / gl4es 重装后，`install/…` 里的库偶尔会带上**构建树或源码树**的绝对 RUNPATH：
+
+| 库 | 绝对 RUNPATH | 何时带出 |
+| --- | --- | --- |
+| `libQt6OpenGL.so.6` | `…/CPPLib/build/qt/6.8.3-ohos-gui/lib` | 2026-09-16 重装 Qt |
+| `libGL.so` | `…/CPPLib/sources/gl4es/81547d9/lib` | 2026-09-18 重装 gl4es |
+
+这两个库的依赖**不是**同目录兄弟就是系统库（`libQt6OpenGL` 依赖
+`libQt6Gui/Core` + `libGLESv2` + `libEGL` + `libc++_shared`；`libGL` 只依赖 `libc`），
+绝对路径在设备上既指不到也没有任何作用，却会让 `audit-headless-hap.sh` 报
+`FAIL … has absolute RUNPATH` —— 把后面**真正的** RUNPATH 问题埋掉。
+
+- 判据：`grep -c FAIL <stage 日志>`。**历史上这个数是 0**，忽然非 0 就是输入侧被重装了。
+- `stage-gui-hap.sh` 现在会在 stage 后把这些库的 RUNPATH 规范化为 `$ORIGIN`
+  （函数 `normalize_absolute_runpath`，覆盖 `libQt6*.so.6` 与 `libGL.so`）。
+- **只在 ELF 本来就有 RUNPATH 时改写**：patchelf 给没有 RUNPATH 的 OHOS ELF 补动态表会让
+  musl 在 `find_sym2()` 崩（同脚本里绑定模块处的说明）。所以不能用它兜底"一律清干净"。
+- 审计本身是 `|| true`（非致命），**但别拿它当噪音** —— 它的价值全在于"一直是 0"。

@@ -1,0 +1,135 @@
+#!/bin/sh
+# HarmonyOS SDK without a JVM: answer hvigor's `java -jar <tool>.jar` calls with
+# the SDK's own native arm64 tools.
+#
+# Why this exists
+# ---------------
+# hvigor's packaging and signing tasks are built on an "inner java command
+# builder": they always emit
+#
+#     java -Dfile.encoding=utf-8 -jar <sdk>/toolchains/lib/<tool>.jar ...
+#
+# The SDK's `app_packing_tool.jar` / `hap-sign-tool.jar` are 1-2 KB *bridge
+# shells* that forward to the real native executables named by OHOS_PACKING_TOOL
+# and OHOS_HAP_SIGN_TOOL.  A HarmonyOS host has no JRE, so even those shells
+# cannot run and hvigor dies with `spawn java ENOENT`.  This script performs the
+# same translation natively, including the two behaviours the bridge shells add:
+#
+#   1. the packing tool needs an explicit `pack` subcommand (the jar infers the
+#      mode from `--mode <hap|hsp|res|app>` and has no subcommand);
+#   2. `hap-sign-tool verify-profile -outFile <f>` writes a bare profile JSON,
+#      but the jar wraps it as {"content": <json>} -- hvigor reads
+#      content["bundle-info"], so without the wrapper it reports a bogus
+#      "bundleName ... does not match" configuration error (00303074).
+#
+# scripts/build-hap.sh puts this directory on PATH only when no real `java` is
+# available, so a DevEco / JBR environment keeps using its own JVM.
+#
+# Handled invocation: java [-D<prop>=<value> ...] -jar <tool>.jar <args...>
+set -eu
+
+jar=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+		-D*)
+			# JVM system properties have no native equivalent; dropped.
+			shift
+			continue
+			;;
+		-jar)
+			[ $# -ge 2 ] || { echo "java(shim): -jar 缺少参数" >&2; exit 2; }
+			jar=$2
+			shift 2
+			break
+			;;
+		*)
+			echo "java(shim): 这种调用方式没有原生替代：$*" >&2
+			exit 127
+			;;
+	esac
+done
+
+[ -n "$jar" ] || { echo "java(shim): 命令行里没有 -jar" >&2; exit 2; }
+
+jar_dir=$(CDPATH= cd -- "$(dirname -- "$jar")" && pwd)
+jar_name=$(basename -- "$jar")
+
+# The bridge jars locate their native tool through an environment variable;
+# build-hap.sh exports OHOS_PACKING_TOOL / OHOS_HAP_SIGN_TOOL for that reason.
+# Fall back to the jar's own directory, which is where the SDK ships them.
+resolve_native() {
+	override=$1
+	fallback=$2
+	if [ -n "$override" ] && [ -x "$override" ]; then
+		printf '%s\n' "$override"
+		return 0
+	fi
+	[ -x "$fallback" ] || return 1
+	printf '%s\n' "$fallback"
+}
+
+wrap_profile_json() {
+	# Idempotent: an already wrapped file is left alone.
+	node -e '
+const fs = require("fs");
+const target = process.argv[1];
+let text = "";
+try { text = fs.readFileSync(target, "utf8").trim(); } catch (e) { process.exit(0); }
+if (!text) process.exit(0);
+let parsed;
+try { parsed = JSON.parse(text); } catch (e) { process.exit(0); }
+if (parsed !== null && typeof parsed === "object" && "content" in parsed) process.exit(0);
+fs.writeFileSync(target, JSON.stringify({content: parsed}));
+' "$1"
+}
+
+case "$jar_name" in
+	app_packing_tool.jar)
+		native_path=$(resolve_native "${OHOS_PACKING_TOOL:-}" "$jar_dir/ohos_packing_tool") || {
+			echo "java(shim): 找不到原生 ohos_packing_tool（jar 目录：$jar_dir）" >&2
+			exit 127
+		}
+		# Everything after the jar is forwarded unchanged.
+		exec "$native_path" pack "$@"
+		;;
+	hap-sign-tool.jar)
+		native_path=$(resolve_native "${OHOS_HAP_SIGN_TOOL:-}" "$jar_dir/hap-sign-tool") || {
+			echo "java(shim): 找不到原生 hap-sign-tool（jar 目录：$jar_dir）" >&2
+			exit 127
+		}
+		# The native sign tool already uses the jar's `<command> <options>` form
+		# (sign-app, verify-app, ...), so arguments need no rewriting -- except
+		# that verify-profile's -outFile payload must be wrapped.
+		subcommand=""
+		profile_out=""
+		expect_out=""
+		for arg in "$@"; do
+			if [ "$expect_out" = "-outFile" ]; then
+				profile_out=$arg
+				expect_out=""
+				continue
+			fi
+			case "$arg" in
+				-outFile) expect_out="-outFile" ;;
+				-*) ;;
+				*) [ -n "$subcommand" ] || subcommand=$arg ;;
+			esac
+		done
+
+		if [ "$subcommand" = "verify-profile" ] && [ -n "$profile_out" ]; then
+			# `set -e` would abort on a non-zero exit before we could forward it.
+			status=0
+			"$native_path" "$@" || status=$?
+			if [ "$status" -eq 0 ] && [ -f "$profile_out" ]; then
+				wrap_profile_json "$profile_out"
+			fi
+			exit "$status"
+		fi
+
+		exec "$native_path" "$@"
+		;;
+	*)
+		echo "java(shim): $jar_name 没有对应的原生实现" >&2
+		exit 127
+		;;
+esac

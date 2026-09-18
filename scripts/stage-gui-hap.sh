@@ -280,6 +280,32 @@ copy_named_library "$COIN_PREFIX/lib/libCoin.so.4.0.0" libCoin.so.80
 cp -L "$COIN_PREFIX/lib/libCoin.so.4.0.0" "$STAGE/libCoin.so.4.0.0"
 copy_named_library "$GL4ES_DIR/libGL.so" libGL.so
 
+# Qt / gl4es 的 install 前缀偶尔会把构建树（或源码树）的绝对路径带进 RUNPATH：
+# libQt6OpenGL.so.6 曾指 build/qt/6.8.3-ohos-gui/lib（2026-09-16 重装带出），
+# libGL.so 曾指 sources/gl4es/81547d9/lib（2026-09-18 重装带出）。这些库的依赖
+# 要么是同目录兄弟、要么是系统库，绝对路径在设备上既指不到、也没有任何作用，
+# 却会让 audit-headless-hap.sh 报 FAIL，把后面真正的 RUNPATH 问题埋掉。
+# 只在 ELF 本来就有 RUNPATH 时改写 —— patchelf 给没有 RUNPATH 的 OHOS ELF 补动态表
+# 会让 musl 在 find_sym2() 崩（同下方绑定模块处的说明），所以不能用它兜底。
+normalize_absolute_runpath()
+{
+    staged_elf=$1
+    staged_runpath=$("$READELF" -d "$staged_elf" 2>/dev/null |
+        awk '/\(RPATH\)|\(RUNPATH\)/ {sub(/^.*\[/, ""); sub(/\].*$/, ""); print; exit}')
+    printf '%s\n' "$staged_runpath" | tr ':' '\n' | grep -q '^/' || return 0
+    PATCHELF_BIN="${PATCHELF:-$(command -v patchelf 2>/dev/null || true)}"
+    [ -x "$PATCHELF_BIN" ] || PATCHELF_BIN=/data/service/hnp/bin/patchelf
+    [ -x "$PATCHELF_BIN" ] || {
+        echo "错误：$(basename "$staged_elf") 含绝对 RUNPATH，但找不到 patchelf" >&2
+        exit 1
+    }
+    "$PATCHELF_BIN" --set-rpath '$ORIGIN' "$staged_elf"
+    echo "  RUNPATH 规范化为 \$ORIGIN：$(basename "$staged_elf")"
+}
+for staged_elf in "$STAGE"/libQt6*.so.6 "$STAGE/libGL.so"; do
+    [ -f "$staged_elf" ] && normalize_absolute_runpath "$staged_elf"
+done
+
 echo "==> Stage CPython 3.11 runtime"
 for required in \
     "$PYTHON_ROOT/lib/python3.11/lib-dynload/_ssl.cpython-311-aarch64-linux-ohos.so" \
