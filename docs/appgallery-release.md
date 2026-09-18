@@ -1109,6 +1109,96 @@ AGC 勾「您的 APP 为单机 APP」。
 借一个**备案授权码**（别人的 ECS 可生成 5 个）在接入商处新备案鸿蒙包名，周期约 5~25 个工作日
 ——所以这一步的判断越早做越好。
 
+## 7.6 驳回记录：名称与图标被指与「FreeCAD」冲突（2026-09-18 · 待处置）
+
+**驳回原文**（分类：知识产权；共 1 个错误问题）：
+
+> 问题1：应用与"FreeCAD"应用的名称相同、图标相似，但未提供相关授权或商标权属证明，
+> 可能导致用户产生混淆、误认或不适宜的联想。
+>
+> 修改建议1：请删除应用信息中与其它应用相同或相似的内容，或提供相关授权或商标权属证明。
+> 并确保授权方名下未上传名称、图标、外观或内容相似的应用。
+>
+> 修改建议2：如您认为其他应用侵犯了您的合法权益，可按流程对存疑的侵权内容进行申诉。
+
+提交 2026-09-17 18:42（即 Step 6 换 Release SDK 后的那次），报告 2026-09-18 19:55。
+**技术侧已清空**：这一轮没有再提 beta API，Step 6 的修复有效。
+
+### 判得不冤：我们用的是 FPA 的标识本身，而不是"相似"
+
+两层规则同时踩到，一层是平台规则，一层是上游规则：
+
+| 来源 | 内容 |
+| --- | --- |
+| AGC《审核指南》1.2 | 应用名称不得为…包括但不限于使用**商标术语**、热门应用名称或别称 |
+| AGC《审核指南》1.3 | 应用名称不得和其他应用名称相同 |
+| AGC《审核指南》9 知识产权 + 审核 Checklist 第 6 条 | 名称/图标/内容与他人应用相似 ⇒ 需优化差异化设计，杜绝侵权 |
+| FPA《品牌指南》（`fpa.freecad.org/handbook/process/logo.html`） | "Third parties can only use it **to provide credit for FreeCAD or to link to freecad.org**" |
+| 同上「Don'ts」 | logo **不得改动**（颜色/形状/风格/渐变/描边/阴影） |
+| FreeCAD wiki · License / Logo | logo 是 **FPA 持有的商标**（2022-10 注册于 Benelux）；"可以用它来指代 FreeCAD，但**不能用作你自己产品的标识**" |
+
+**实测证据——不是"像"，是"就是"**：包内
+`AppScope/resources/base/media/foreground.png` 的像素配色与上游官方
+`share/icons/hicolor/scalable/apps/org.freecad.FreeCAD.svg` 的四个 `fill` **逐色相同**：
+
+| 颜色 | 我们图标的不透明像素占比 | 官方 SVG |
+| --- | --- | --- |
+| Tufts Blue `#418FDE` | 31.5% | `#418fde` |
+| 白 `#FFFFFF` | 27.3% | `#fefefe` |
+| Dark Red `#CB333B` | 25.3% | `#cb333b` |
+| Light Red `#FF585D` | 15.6% | `#ff585d` |
+
+造型也一致：8×8 降采样后仍是官方 logo 那个"左红条 + 白 F + 右蓝块"的分块graph。
+即 **前景层 = 官方 logo 本体，只是把底换成了深蓝灰 `#1F2430`**（背景层本身是合规的：
+1024²、无透明像素）。两处 `string.json` 的 `app_name` 又都写着 `FreeCAD`。
+
+→ 结论：**"在介绍首句声明非官方社区移植"这种披露式免责不够用**。第 7 节拍板点 2
+当时把它当"低成本做法"，现在被证伪——AGC 要的是**权利文件**，不是声明。
+
+### 四条路，只有两条能走
+
+| 路 | 做法 | 可行性 | 代价 |
+| --- | --- | --- | --- |
+| **A** | 改名 + 重画图标 | ✅ 确定性最高，不依赖任何外部方 | 丢掉"FreeCAD"一词的搜索辨识度；占用一次改名额度（1.12：**名称一年只能改 2 次**，图标/分类/标签同样"不得频繁更改"） |
+| **B** | 拿到 FPA 的授权书 | ⚠️ 理论可行，周期不可控 | 保留原名原图标；FPA 是比利时志愿者协会（理事会 `fpa@freecad.org`），且品牌指南对"用作品牌标识"的口径是**收紧**的，被拒概率不低 |
+| C | 申诉（修改建议2 → 50120） | ❌ 走不通 | 50120 是《侵权投诉处理指引》，是**权利人对他人**投诉的通道；我们不是 FreeCAD 商标的权利人，没有申诉的权利基础 |
+| D | 名称加后缀（"FreeCAD 鸿蒙版"之类） | ❌ 别试 | 既仍含商标术语（1.2）、又仍属"相似"（1.3），大概率二驳；还白烧一次改名额度 |
+
+**取舍建议**：A 立即执行，B 并行发一封信（发信成本近零）。但注意改名额度一年只有 2 次，
+所以**不要把 B 的"万一"写进计划**——按 A 一次做到位。
+
+### A 路的连带改动清单（已盘点）
+
+| 位置 | 现状 | 动作 |
+| --- | --- | --- |
+| `AppScope/resources/base/element/string.json` | `app_name = FreeCAD` | 改新名 |
+| `entry/src/main/resources/base/element/string.json` | `app_name = FreeCAD` | 同上 |
+| `AppScope/resources/base/media/{foreground,background}.png` | 官方 logo + 深蓝灰底 | **重画**（改色不够：形状也得换） |
+| `entry/src/main/resources/base/media/{foreground,background}.png` | 同上（与 AppScope 两份 md5 相同） | 同上 |
+| `AppScope/.../media/app_icon.png`、`entry/.../media/icon.png` | 扁平图（`startWindowIcon` 用后者） | 跟着重出 |
+| `store-assets/icon/*.png` | AGC 上传图（含 1024 主图与 216 缩略） | 跟着重出 |
+| `store-assets/appgallery-text-zh-CN.txt` | 名称字段 + 介绍里的自称 | 改名称字段；介绍首句改成"…，基于 FreeCAD 1.1.2（非官方社区移植）" |
+| `store-assets/appgallery-review-notes-zh-CN.txt` | 同上 | 同上 |
+| `PRIVACY.md` / `PRIVACY.en.md` / `README.md` | 自称 FreeCAD | 改成"本应用是 X，基于 FreeCAD" |
+| 包名 `com.liangxiaohui.freecad` | 含 `freecad` | **不动**（用户看不到；改它要连带动 APP ID 与签名 Profile），但要知道它留在那里 |
+
+生成器都在：`tools/icon/pngtool.py`（纯 Python）、技能目录里的 `make_icon.py`
+（只负责压底出图，**不画造型**——造型 PNG 得重画）。
+
+**应用内标题**：主窗口标题是上游 C++ 硬编码的 `FreeCAD 1.1.2`，改它要动上游代码（一次 rebuild）。
+建议**不改**——保留它属于"指名 FreeCAD"的合规用法（品牌指南明确允许署名），
+必要时在「关于」框加一行"<新名> · 非官方社区移植"即可回答 1.20 的"应用信息需与应用内容一致"。
+
+### 命名约束（AGC 明文）
+
+- ≤15 个汉字或 ≤30 个其他语言字符（1.1）；不得含 `*` `&` `-` `( )` 等特殊符号（1.4）
+- 不得是广义归纳、无辨识度的词（"开源CAD""三维CAD"这类会被 1.2 打回）
+- 不得含他人商标术语 —— **"鸿蒙" / "HarmonyOS" 同理不要放进名称**
+- 一条利好：名称不含 FreeCAD ≠ 不能提 FreeCAD。介绍、标签里写"基于 FreeCAD 1.1.2 移植"
+  是被允许的（FPA 指南允许"用于指明/署名"），用户搜索仍能命中。
+
+候选（待拍板）：**元构CAD** / **造物CAD** / **方寸CAD**。
+
 ## 8. 待办顺序
 
 1. ~~重签调试 Profile（新包名 + ACL）~~ **已完成（2026-09-15）**：AGC 手动新建调试
@@ -1186,4 +1276,9 @@ AGC 勾「您的 APP 为单机 APP」。
    非 Release 直接退 3）、`scripts/toolchain-bridges/`（两个桥接壳的源码，原先只在
    本机 `.ohos-sdk/` 里、仓库无记录），以及 `build-gui-hap-ohos.sh` 里
    「release 撞非 Release SDK 就退 3」的守卫。**剩下只是把新的 `.app` 重新上传提审**（即 ④）。
+10. **处置 AGC 第 2 次驳回：名称/图标与「FreeCAD」冲突**（2026-09-18，详见第 7.6 节）。
+   AGC 要"授权或商标权属证明"，而我们用的就是 FPA 的商标本身（图标四色与官方 SVG 逐色相同）。
+   **待拍板**：走 **A 改名 + 重画图标**（推荐，不依赖外部方）还是 **B 向 `fpa@freecad.org`
+   申请品牌授权**（信稿已备：`docs/fpa-brand-permission-request.md`）。
+   若走 A，连带改动清单与命名约束见 7.6；注意名称一年只能改 2 次，一次做到位。
 
