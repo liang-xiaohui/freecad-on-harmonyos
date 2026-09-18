@@ -17,6 +17,42 @@
 
 正文在下面代码块里，**整块复制**即可。
 
+> ⚠️ **发信前必须知道的一件事：信里已经许下一个承诺。**
+> 正文中 "One thing I will do regardless… I am redrawing the app icon from scratch… the new icon will
+> not reuse any part of its shape or its colour palette" 这一段是**主动承诺**。它让信显得可信、也让
+> 请求降维成"只问名称"（这是提高回复率的关键），但代价是：**发信之后就不能再上架官方造型的图标**。
+> 若还想保留官方红蓝造型，必须按下面「变体 B」改掉那一段（同时把请求扩成"名称 + logo"）。
+>
+> 两条路只能选一条（分析见 `docs/appgallery-release.md` §7.7）：
+>
+> | | 信 | 图标 | 代价 |
+> | --- | --- | --- | --- |
+> | **默认（推荐）** | 原文不动 | **必须自画**，不复用官方造型与配色 | 图标要重画；但 B 路失败也不影响任何事，无失信风险 |
+> | **变体：名称 + logo 一起要** | 改掉那段承诺，改成"若贵会允许，我希望保留符号；否则我重画" | 授权下来可保留官方造型 | 多赌一次；**批不下来照样得重画**，且请求变大 ⇒ 回复率下降 |
+
+## 变体 B：把请求扩成"名称 + logo 一并授权"
+
+只替换下面这一段（其余原文不动）：
+
+```text
+One thing I would like to ask about as well, since it is the same question. I am
+currently redrawing the app icon, because I had assumed from your brand guidelines
+that the symbol may only be used to credit FreeCAD or to link to freecad.org, and
+not as a product identity - and that altering it is not permitted either. If that
+reading is right, I will simply not use the symbol at all, and no answer is needed.
+
+If, however, the FPA is willing for a free and open-source community port to keep
+using the official symbol in its app icon (unaltered, with clear attribution and a
+link to freecad.org in the app and in the store listing), I would gladly do that
+instead. In that case please say so explicitly, so that I can show it to the store
+as the authorization it asks for. I am not asking for a trademark licence
+agreement - a short statement covering both the name and the symbol would be enough.
+```
+
+**注意**：走这条时，正文里原来那段 "One thing I will do regardless…" 必须**整段删掉**，
+否则与变体自相矛盾（前面说"无论如何都重画、绝不复用"，后面又说"希望保留符号"）。
+
+
 ---
 
 ```text
@@ -119,6 +155,8 @@ GitHub: https://github.com/liang-xiaohui
 | --------------- | ------------------------------------------------------------------------------------------------------------------- |
 | 是不是"改名的衍生版"？    | 不是。现在的名称与图标都直接取自上游，没有替换成自有品牌；改名的动因是应用商店的平台规则，不是想把 FreeCAD 变成自己的产品。若 FPA 不便授权，我们走官方《品牌化》页那条路，并保留"基于 FreeCAD"的署名与源码公开 |
 | 图标为什么要换？        | 驳回原文同时指"图标相似"。官方 logo 是 FPA 商标，品牌指南明确不许当作自家产品标识 —— 这一点我们接受并已认领，会重画造型与配色（只换色不算）                                      |
+| 你们现在这个图标不就是官方造型改了个字？ | 是。这是上一版的问题：改 shape 撞指南的「Do nots」，当自家应用标识撞"不得用于你自己产品"。我们不再辩解，新版**完全自画造型、也不复用那三个色值**（`#418FDE`/`#FF585D`/`#CB333B`） |
+| 那"基于 FreeCAD"的署名怎么放？ | 放在**署名位**而不是身份位：应用「关于」页、商店详情、README 里用**官方原图、不改造型**，配一行"本应用基于 FreeCAD 1.1.2（LGPL-2.1+）；FreeCAD 是 FPA 的商标" + 链接 freecad.org。这正是品牌指南允许第三方的两种用法之一，也正好履行 LGPL 的告知义务 |
 | 你们不是已经有开源仓库了吗？  | 有：`github.com/liang-xiaohui/freecad-on-harmonyos`，全部补丁公开。信里已把地址、许可与分发条款写明，便于对方核实                                    |
 | 有没有改动上游？        | 有，但都在 HarmonyOS 集成层（Qt QPA、GLES 渲染、沙箱路径、部分 UI 适配），补丁全公开在仓库 `patches/` 下                                             |
 | 是否收费 / 有没有商业动机？ | 完全免费、无广告、无内购、无遥测；也不自建服务端                                                                                            |
